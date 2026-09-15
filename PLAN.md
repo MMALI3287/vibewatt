@@ -463,3 +463,19 @@ Append here rather than widening a phase.
   `setInterval` re-fetch-and-patch) was not ported — no equivalent exists on
   the FastAPI routes today. Phase 3's React app will need its own polling or
   SSE for live refresh; it should not resurrect the old script.
+- Phase 3 hero omits the plan-vs-API multiple: the API does not expose
+  `plan_usd_per_month`. Add it to `SummaryOut` (or `/api/health`) and render it.
+- Phase 3 omits header search (`/` to focus) and date-range presets. Presets
+  must take "today" from the server's report timezone, not the browser clock
+  (trap 3), so they need a `today` field from the API first.
+- Phase 3 omits live refresh (polling or SSE); see the Phase 2 note above.
+- Trap 3 still lives in pre-existing code: `date.today()` in
+  `aggregate.py:161,177`, `terminal.py:62`, `ui.py:77`, `doctor.py:45`. Report
+  a failing test, then pass the report timezone's date. Ruff now reports 21
+  pre-existing errors in total.
+- `ccburn serve` still serves the legacy HTML page at `/`. Serving the React
+  build from `ccburn/static` with an SPA fallback is Phase 7.
+- Filtered reports skip the history rollup (fixed in Phase 3, see
+  `build_report`), so a filtered view cannot include days whose logs retention
+  deleted. The UI says so. Storing history per source/project/model would lift
+  this.
