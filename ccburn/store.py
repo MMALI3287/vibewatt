@@ -19,7 +19,7 @@ from pathlib import Path
 
 from .config import data_dir
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -82,11 +82,38 @@ CREATE TABLE IF NOT EXISTS prompts (
   text      TEXT NOT NULL,
   PRIMARY KEY (session, text)
 );
+
+-- Tracks file-level metadata for re-syncs so unchanged JSONL files are skipped.
+CREATE TABLE IF NOT EXISTS files (
+  path        TEXT PRIMARY KEY,
+  mtime       REAL NOT NULL,
+  size        INTEGER NOT NULL,
+  parsed_at   TEXT NOT NULL,
+  turn_count  INTEGER NOT NULL DEFAULT 0
+);
+
+-- One sample per quota read, enough to detect burn/spike trends over time.
+CREATE TABLE IF NOT EXISTS quota_samples (
+  ts          TEXT NOT NULL,
+  label       TEXT NOT NULL,
+  utilization REAL NOT NULL,
+  resets_at   TEXT
+);
 """
 
 
 def db_path() -> Path:
     return data_dir() / "ccburn.db"
+
+
+def _migrate_schema(conn):
+    current = conn.execute("SELECT value FROM meta WHERE key = 'schema'").fetchone()
+    current_version = int((current[0] if current else "0")) if current else 0
+    if current_version >= SCHEMA_VERSION:
+        return
+    if current_version < 2:
+        conn.executescript(SCHEMA)
+        conn.execute("INSERT OR REPLACE INTO meta VALUES ('schema', ?)", (str(SCHEMA_VERSION),))
 
 
 @contextmanager
@@ -99,6 +126,7 @@ def connect(path: Path | None = None):
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.executescript(SCHEMA)
+        _migrate_schema(conn)
         conn.execute("INSERT OR REPLACE INTO meta VALUES ('schema', ?)", (str(SCHEMA_VERSION),))
         yield conn
         conn.commit()
@@ -122,6 +150,58 @@ def upsert_turns(conn, turns, tz, cost_of) -> int:
     conn.executemany(
         "INSERT OR REPLACE INTO turns VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
     return len(rows)
+
+
+def upsert_quota_samples(conn, quota) -> int:
+    """Persist quota samples so a single reading is not mistaken for a trend."""
+    if quota is None or not getattr(quota, "windows", None):
+        return 0
+    rows = []
+    ts = quota.fetched_at.isoformat() if getattr(quota, "fetched_at", None) else datetime.now(timezone.utc).isoformat()
+    for window in quota.windows:
+        rows.append((
+            ts,
+            window.label,
+            float(window.utilization),
+            window.resets_at.isoformat() if window.resets_at else None,
+        ))
+    if not rows:
+        return 0
+    conn.executemany(
+        "INSERT INTO quota_samples (ts, label, utilization, resets_at) VALUES (?, ?, ?, ?)", rows)
+    return len(rows)
+
+
+def sync_directory(conn, files, tz, cost_of=None) -> int:
+    """Read only changed JSONL files and record file metadata for future skips."""
+    from .sources import load
+
+    if cost_of is None:
+        from .aggregate import cost_of as _cost_of
+        cost_of = _cost_of
+
+    new_turns = 0
+    seen = {row[0]: row for row in conn.execute("SELECT path, mtime, size, turn_count FROM files").fetchall()}
+    for source, path in files:
+        try:
+            stat = path.stat()
+        except OSError:
+            continue
+        key = str(path)
+        mtime = stat.st_mtime
+        size = stat.st_size
+        if key in seen and float(seen[key]["mtime"]) == mtime and int(seen[key]["size"]) == size:
+            continue
+        turns, _ = load([(source, path)])
+        if turns:
+            new_turns += upsert_turns(conn, turns, tz, cost_of)
+        conn.execute(
+            "INSERT INTO files (path, mtime, size, parsed_at, turn_count) VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(path) DO UPDATE SET mtime = excluded.mtime, size = excluded.size, "
+            "parsed_at = excluded.parsed_at, turn_count = excluded.turn_count",
+            (key, mtime, size, datetime.now(timezone.utc).isoformat(), len(turns)),
+        )
+    return new_turns
 
 
 def upsert_prompts(conn, prompts) -> int:
