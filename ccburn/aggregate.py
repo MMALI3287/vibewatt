@@ -137,10 +137,14 @@ class Report:
     by_project: dict = field(default_factory=lambda: defaultdict(Bucket))
     by_day_model: dict = field(default_factory=lambda: defaultdict(Bucket))
     by_hour: dict = field(default_factory=lambda: defaultdict(Bucket))   # 0-23
+    # (day, source, project, model) -> Bucket. The grain the UI filters over.
+    by_cell: dict = field(default_factory=lambda: defaultdict(Bucket))
     sessions: set = field(default_factory=set)
     unknown_models: set = field(default_factory=set)
     restored_days: set = field(default_factory=set)
     blocks: list = field(default_factory=list)
+    today: date | None = None          # today in the REPORT's timezone
+    subagent: Bucket = field(default_factory=Bucket)   # sidechain turns, tracked apart
 
     @property
     def days(self) -> list[date]:
@@ -154,7 +158,7 @@ class Report:
         return None
 
     def month_to_date(self, today: date | None = None) -> Bucket:
-        today = today or date.today()
+        today = today or self.today or date.today()
         out = Bucket()
         for day, bucket in self.by_day.items():
             if day.year == today.year and day.month == today.month:
@@ -170,7 +174,7 @@ class Report:
         for prev, cur in zip(days, days[1:]):
             run = run + 1 if cur - prev == timedelta(days=1) else 1
             longest = max(longest, run)
-        today = date.today()
+        today = self.today or date.today()
         current = 0
         if days[-1] in (today, today - timedelta(days=1)):
             current = 1
@@ -195,10 +199,16 @@ def build(
     session_hours: int = 5,
 ) -> Report:
     report = Report()
+    report.today = datetime.now(tz).date()
     kept: list[Turn] = []
     for turn in turns:
-        if turn.sidechain and not include_sidechains:
-            continue
+        if turn.sidechain:
+            # Subagent spend is real but belongs beside the parent's own figure,
+            # not silently folded into it: a few parallel subagents can be most
+            # of a session's tokens.
+            report.subagent.add(turn, cost_of(turn, overrides))
+            if not include_sidechains:
+                continue
         kept.append(turn)
         cost = cost_of(turn, overrides)
         if cost is None:
@@ -212,6 +222,34 @@ def build(
         report.by_project[turn.project].add(turn, cost)
         report.by_day_model[(day, turn.model)].add(turn, cost)
         report.by_hour[local.hour].add(turn, cost)
+        report.by_cell[(day, turn.source, turn.project, turn.model)].add(turn, cost)
         report.sessions.add(turn.session)
     report.blocks = build_blocks(kept, hours=session_hours, overrides=overrides)
     return report
+
+
+def plan_comparison(report: "Report", plan_usd: float | None) -> dict | None:
+    """What the subscription saved against pay-as-you-go API rates.
+
+    A large API-equivalent figure is the point of a subscription, not a warning.
+    Shown without this comparison it reads like a bill, which it is not.
+    """
+    if not plan_usd:
+        return None
+    mtd = report.month_to_date().cost
+    if mtd <= 0:
+        return None
+    return {
+        "plan_usd": plan_usd,
+        "api_equivalent_usd": mtd,
+        "saved_usd": mtd - plan_usd,
+        "multiple": mtd / plan_usd,
+    }
+
+
+METRICS = {
+    "cost": ("cost", lambda b: b.cost),
+    "total": ("total tokens", lambda b: b.total_tokens),
+    "output": ("output tokens", lambda b: b.output),
+    "responses": ("responses", lambda b: b.turns),
+}

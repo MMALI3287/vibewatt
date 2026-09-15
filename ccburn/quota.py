@@ -149,7 +149,7 @@ def _windows_from(payload: dict) -> list[Window]:
             pct = float(raw)
         except (TypeError, ValueError):
             continue
-        label = _LABELS.get(key, key.replace("_", " "))
+        label = _LABELS.get(key, key.replace("_", " ").strip().title())
         windows.append(Window(label, pct, _parse_reset(entry.get("resets_at"))))
     order = {v: i for i, v in enumerate(_LABELS.values())}
     windows.sort(key=lambda w: order.get(w.label, 99))

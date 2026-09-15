@@ -17,6 +17,27 @@ library, zero dependencies, no compiler and no native wheels.
 
 ---
 
+## Read this first: Claude Code is deleting your history
+
+Claude Code runs a cleanup **at every startup** and deletes session transcripts
+older than `cleanupPeriodDays`, which defaults to **30**. Anything older is
+already gone, and no tool can recover it.
+
+```jsonc
+// ~/.claude/settings.json   (%USERPROFILE%\.claude\settings.json on Windows)
+{ "cleanupPeriodDays": 3650 }
+```
+
+**Do not set it to `0`.** The same field gates the write path, so zero means no
+transcripts are written at all rather than "keep forever"
+([claude-code#23710](https://github.com/anthropics/claude-code/issues/23710)).
+
+`ccburn doctor` tells you what your current setting is and what it is costing you.
+ccburn's own stored history preserves days from its first run onward, but it
+cannot reach back before you installed it.
+
+---
+
 ## What it covers, honestly
 
 | Surface | Token-level history | Counted in plan utilization |
@@ -105,16 +126,47 @@ envelope is enough to price both together.
 ```
 ccburn report        terminal report (default)
 ccburn serve         live dashboard        --host --port --refresh --no-browser
-ccburn html          standalone HTML       --out
+ccburn doctor        what ccburn can and cannot see, and why
+ccburn html          standalone interactive report  --out
 ccburn json          full data as JSON     --out
 ccburn csv           per day per model     --out
 ccburn blocks        recent rate-limit windows
 ccburn statusline    one compact line
 ```
 
+### Filters
+
+`ccburn html` and `ccburn serve` produce an interactive page. Everything derived
+from local logs filters live in the browser, with no round trip:
+
+- date range: 7d / 30d / 90d / 1y / all
+- source: Claude Code or Cowork
+- project, and model
+- metric: cost, total tokens, output tokens or responses — the heatmap recolours
+- sortable tables on every column
+
+Plan utilization deliberately does **not** filter. It is an account-wide number
+that cannot be sliced by project or source, and the panel says so on its face.
+
+### Why your numbers may look wrong
+
+| Symptom | Cause |
+|---|---|
+| Streak is 0 but you use Claude daily | Web, Cowork remote and claude.ai chat write no local logs. Only plan utilization counts them. |
+| Fewer projects than you worked on | Logs older than `cleanupPeriodDays` were deleted. |
+| Cost looks enormous | It is the API-equivalent, not your bill. Pass `--plan 20` to see the multiple your subscription saves. |
+| Heatmap looks flat | Total tokens is dominated by cache reads. Switch the metric to cost or output. |
+
+Run `ccburn doctor` — it prints the last day found, today in your timezone, your
+retention setting and per-source coverage, so the cause is visible rather than
+guessed at.
+
 Shared flags: `--source {claude-code,cowork,all}`, `--since YYYY-MM-DD`, `--days N`,
-`--tz Asia/Tokyo`, `--weeks N`, `--session-hours N`, `--no-sidechains`, `--by-project`,
-`--mask-projects`, `--no-quota`, `--no-history`, `--offline`, `--no-color`.
+`--tz Asia/Tokyo`, `--weeks N`, `--session-hours N`, `--plan 20`, `--no-sidechains`,
+`--by-project`, `--mask-projects`, `--no-quota`, `--no-history`, `--offline`, `--no-color`.
+
+See [FEATURES.md](FEATURES.md) for an honest matrix of what is implemented against
+the four reference tools, including the 28 features that are not.
 
 ## Configuration
 
@@ -128,6 +180,8 @@ per project. Point `CCBURN_CONFIG` at a file to override.
   "timezone": "Asia/Tokyo",
   "session_length_hours": 5,
   "monthly_budget_usd": 200,
+  "plan_usd_per_month": 20,
+  "heatmap_metric": "cost",
   "mask_projects": false,
   "statusline_cache_path": "~/.claude/rate-limits.json",
   "project_aliases": { "-home-user-api": "API" },

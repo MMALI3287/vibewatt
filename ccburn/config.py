@@ -27,6 +27,8 @@ DEFAULTS: dict[str, Any] = {
     "include_sidechains": True,
     "offline": False,               # skip the pricing refresh
     "monthly_budget_usd": None,
+    "plan_usd_per_month": None,     # e.g. 20 for Pro, 100/200 for Max
+    "heatmap_metric": "cost",       # cost | total | output | responses
     "mask_projects": False,
     "pricing_overrides": {},        # {"model-id": {"input": 1.0, "output": 5.0, ...}}
     "project_aliases": {},          # {"-home-user-api": "API"}

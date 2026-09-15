@@ -1,6 +1,6 @@
 [project]
 name = "ccburn"
-version = "0.2.0"
+version = "0.3.0"
 description = "Token usage, cost and plan utilization for Claude Code and Cowork, from local data"
 readme = "README.md"
 requires-python = ">=3.10"
