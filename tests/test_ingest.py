@@ -1,63 +1,47 @@
 from __future__ import annotations
 
-import json
-from pathlib import Path
+import inspect
 
-from ccburn.ingest import discover, parse_file
-from ccburn.sources import load
-
-
-def test_ingest_discover_finds_local_logs(tmp_path, monkeypatch):
-    claude_dir = tmp_path / ".claude" / "projects" / "demo"
-    claude_dir.mkdir(parents=True)
-    claude_file = claude_dir / "session.jsonl"
-    claude_file.write_text('{"type":"assistant","timestamp":"2026-09-15T01:00:00Z","requestId":"r1","sessionId":"s1","cwd":"/tmp/demo","message":{"id":"m1","model":"claude-opus-5","usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":5,"output_tokens_details":{"thinking_tokens":1},"server_tool_use":{"web_search_requests":0},"speed":"standard","inference_geo":"global"}}}\n', encoding="utf-8")
-
-    cowork_root = tmp_path / "Claude" / "local-agent-mode-sessions" / "acct" / "space"
-    cowork_root.mkdir(parents=True)
-    cowork_file = cowork_root / "audit.jsonl"
-    cowork_file.write_text('{"type":"assistant","timestamp":"2026-09-15T02:00:00Z","requestId":"r2","session_id":"s2","message":{"id":"m2","model":"claude-opus-5","usage":{"input_tokens":20,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":10,"output_tokens_details":{"thinking_tokens":2},"server_tool_use":{"web_search_requests":0},"speed":"standard","inference_geo":"global"}}}\n', encoding="utf-8")
-
-    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / ".claude"))
-    monkeypatch.setenv("APPDATA", str(tmp_path))
-
-    found = discover()
-    values = {(source, str(path)) for source, path in found}
-    assert ("claude-code", str(claude_file)) in values
-    assert ("cowork", str(cowork_file)) in values
+from ccburn import ingest
+from ccburn.ingest import cloud
+from ccburn.sources import CLAUDE_CODE, COWORK
 
 
-def test_parse_file_and_dedupe(tmp_path):
-    path = tmp_path / "file.jsonl"
-    payload = {
-        "type": "assistant",
-        "timestamp": "2026-09-15T01:00:00Z",
-        "requestId": "req-1",
-        "sessionId": "s1",
-        "cwd": "/tmp/demo",
-        "message": {
-            "id": "msg-1",
-            "model": "claude-opus-5",
-            "usage": {
-                "input_tokens": 11,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-                "output_tokens": 7,
-                "output_tokens_details": {"thinking_tokens": 2},
-                "server_tool_use": {"web_search_requests": 0},
-                "speed": "standard",
-                "inference_geo": "global",
-            },
-        },
-    }
-    path.write_text(json.dumps(payload) + "\n" + json.dumps(payload) + "\n", encoding="utf-8")
+def test_discover_finds_every_local_source(logs):
+    found = set(ingest.discover())
+    assert (CLAUDE_CODE, logs["claude-code"]) in found
+    assert (COWORK, logs["cowork"]) in found
 
-    turns, duplicates = load([("claude-code", path)])
-    assert len(turns) == 1
-    assert duplicates == 1
-    assert turns[0].session == "s1"
-    assert turns[0].input == 11
 
-    parsed = parse_file("claude-code", path)
-    assert len(parsed) == 1
-    assert parsed[0].key == ("msg-1", "req-1")
+def test_discover_ignores_files_outside_source_roots(tmp_path, logs):
+    stray = tmp_path / "claude" / "not-projects" / "x.jsonl"
+    stray.parent.mkdir(parents=True)
+    stray.write_text("{}\n", encoding="utf-8")
+    assert stray not in {p for _, p in ingest.discover()}
+
+
+def test_every_file_source_has_the_same_interface():
+    for mod in ingest.SOURCES.values():
+        assert list(inspect.signature(mod.discover).parameters) == ["cfg"]
+        assert list(inspect.signature(mod.parse).parameters) == ["path"]
+
+
+def test_parse_does_not_dedup_within_a_file(logs):
+    # Dedup belongs to the sync, across files. A parser that deduped per file
+    # would hide the repeats the sync has to collapse and count.
+    turns = list(ingest.parse(CLAUDE_CODE, logs["claude-code"]))
+    assert [t.key for t in turns] == [("m1", "r1"), ("m1", "r1"), ("m2", "r2")]
+
+
+def test_cowork_envelope_is_normalised(logs):
+    (turn,) = ingest.parse(COWORK, logs["cowork"])
+    assert turn.session == "c1"
+    assert turn.source == COWORK
+    assert turn.input == 30
+
+
+def test_cloud_parse_accepts_both_listing_shapes():
+    rows = [{"id": "a"}, "junk"]
+    assert cloud.parse(rows) == [{"id": "a"}]
+    assert cloud.parse({"data": rows}) == [{"id": "a"}]
+    assert cloud.parse({"nope": 1}) == []

@@ -18,7 +18,8 @@ from pathlib import Path
 
 from . import quota
 from .config import data_dir, user_config_dir
-from .sources import CLAUDE_CODE, COWORK, claude_code_roots, discover, load
+from .ingest import claude_code, discover
+from .sources import CLAUDE_CODE, COWORK, load
 
 
 def _claude_settings() -> tuple[Path | None, dict]:
@@ -73,7 +74,7 @@ def run(cfg: dict, tz) -> int:
     by_source = defaultdict(list)
     for source, fp in files:
         by_source[source].append(fp)
-    for label, roots in (("claude-code", claude_code_roots()),):
+    for label, roots in (("claude-code", claude_code.roots()),):
         say(f"    {label:<12} looked in: {', '.join(str(r) for r in roots)}")
     say(f"    {'cowork':<12} looked in: desktop data dir (override CCBURN_COWORK_DIR)")
     for source in (CLAUDE_CODE, COWORK):
