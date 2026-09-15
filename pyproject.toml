@@ -23,6 +23,11 @@ Homepage = "https://github.com/MMALI3287/ccburn"
 [project.scripts]
 ccburn = "ccburn.cli:main"
 
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
