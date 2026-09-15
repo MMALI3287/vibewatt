@@ -156,7 +156,11 @@ def build_report(cfg, tz, *, source="all", date_from=None, date_to=None,
         session_hours=cfg.get("session_length_hours", 5),
     )
 
-    if cfg.get("history", True) and not (date_from or date_to):
+    # History is one rollup across every source and project: restoring it into a
+    # filtered report re-adds the rows the filter removed, and merging a filtered
+    # report would overwrite the rollup with a partial view.
+    unfiltered = source == "all" and not (date_from or date_to or project or model)
+    if cfg.get("history", True) and unfiltered:
         history.merge(report)
         history.restore(report)
 
