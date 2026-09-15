@@ -128,6 +128,46 @@ def statusline(report, q) -> str:
     return "  |  ".join(parts)
 
 
+def build_report(cfg, tz, *, source="all", date_from=None, date_to=None,
+                  project=None, model=None):
+    """The discover -> load -> aggregate -> history -> quota pipeline.
+
+    Shared by the CLI and the API so filtering logic lives in exactly one
+    place. `date_from`/`date_to` are inclusive `date` objects; `project` and
+    `model` match a turn's exact project/model string.
+    """
+    files = discover(cfg)
+    if source != "all":
+        files = [(s, p) for s, p in files if s == source]
+    turns, duplicates = load(files)
+    if date_from:
+        turns = [t for t in turns if t.ts.astimezone(tz).date() >= date_from]
+    if date_to:
+        turns = [t for t in turns if t.ts.astimezone(tz).date() <= date_to]
+    if project:
+        turns = [t for t in turns if t.project == project]
+    if model:
+        turns = [t for t in turns if t.model == model]
+
+    report = build(
+        turns, tz=tz,
+        include_sidechains=cfg.get("include_sidechains", True),
+        overrides=cfg.get("pricing_overrides"),
+        session_hours=cfg.get("session_length_hours", 5),
+    )
+
+    if cfg.get("history", True) and not (date_from or date_to):
+        history.merge(report)
+        history.restore(report)
+
+    apply_aliases(report, cfg.get("project_aliases") or {})
+    if cfg.get("mask_projects"):
+        mask_projects(report)
+
+    q, quota_note = quota.read(cfg)
+    return report, q, quota_note, duplicates, files
+
+
 def harvest(args, cfg, tz) -> int:
     """Ingest a cloud session listing so web and Cowork remote usage is counted.
 
@@ -192,27 +232,7 @@ def sessions_report(args, cfg, tz) -> int:
     from . import store
 
     with store.connect() as conn:
-        local = conn.execute(
-            "SELECT session id, MIN(ts) started, MAX(ts) ended, project,"
-            "  GROUP_CONCAT(DISTINCT model) model, COUNT(*) n, SUM(cost) cost,"
-            "  SUM(input+cache_5m+cache_1h+cache_read+output) tokens, source surface"
-            " FROM turns GROUP BY session ORDER BY started DESC LIMIT 40").fetchall()
-        cloud = conn.execute(
-            "SELECT id, title, started, ended, project, model, surface,"
-            "  cost, input+cache_write+cache_read+output tokens"
-            " FROM sessions WHERE harvested=1 ORDER BY started DESC LIMIT 40").fetchall()
-        titles = {r["session"]: r["text"] for r in
-                  conn.execute("SELECT session, text FROM prompts")}
-
-    rows = []
-    for r in cloud:
-        rows.append((r["started"] or "", r["surface"], r["title"] or r["id"][:24],
-                     r["project"] or "-", r["tokens"], r["cost"]))
-    for r in local:
-        title = titles.get(r["id"], "")[:58] or r["id"][:24]
-        rows.append((r["started"] or "", r["surface"], title,
-                     r["project"] or "-", r["tokens"], r["cost"] or 0))
-    rows.sort(reverse=True)
+        rows = store.sessions(conn, limit=40)
 
     if not rows:
         print("  no sessions yet - run 'ccburn sync' and 'ccburn harvest' first")
@@ -220,10 +240,10 @@ def sessions_report(args, cfg, tz) -> int:
     print(f"\n  {'when':<11} {'surface':<12} {'what you worked on':<58} "
           f"{'tokens':>9} {'cost':>9}")
     print("  " + "-" * 103)
-    for started, surface, title, project, tokens, cost in rows[:40]:
-        when = (started or "")[:10]
-        print(f"  {when:<11} {surface:<12} {title[:58]:<58} "
-              f"{terminal.human(tokens or 0):>9} {terminal.money(cost or 0):>9}")
+    for r in rows:
+        when = (r["started"] or "")[:10]
+        print(f"  {when:<11} {r['surface']:<12} {r['title'][:58]:<58} "
+              f"{terminal.human(r['tokens']):>9} {terminal.money(r['cost']):>9}")
     print()
     return 0
 
@@ -286,11 +306,24 @@ def main(argv: list[str] | None = None) -> int:
         cfg["plan_usd_per_month"] = args.plan
 
     if args.command == "serve":
-        from .dashboard import serve
+        import threading
+        import webbrowser
 
-        pricing.refresh(offline=cfg.get("offline", False))
-        serve(cfg, host=args.host, port=args.port,
-              refresh_seconds=args.refresh, open_browser=not args.no_browser)
+        import uvicorn
+
+        from .api import create_app
+
+        app = create_app(cfg)
+        shown = args.host if args.host != "0.0.0.0" else "127.0.0.1"
+        url = f"http://{shown}:{args.port}/"
+        print(f"  ccburn dashboard on {url}")
+        print(f"  JSON at {url}api/usage")
+        if args.host == "0.0.0.0":
+            print("  bound to all interfaces - anyone who can reach this port sees your usage")
+        print("  ctrl-c to stop")
+        if not args.no_browser:
+            threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+        uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
         return 0
 
     tz = resolve_tz(cfg.get("timezone"))
@@ -311,12 +344,6 @@ def main(argv: list[str] | None = None) -> int:
 
     pricing.refresh(offline=cfg.get("offline", False))
 
-    files = discover(cfg)
-    if args.source != "all":
-        files = [(s, p) for s, p in files if s == args.source]
-
-    turns, duplicates = load(files)
-
     cutoff = None
     if args.days:
         cutoff = (datetime.now(tz) - timedelta(days=args.days)).date()
@@ -325,25 +352,9 @@ def main(argv: list[str] | None = None) -> int:
             cutoff = datetime.strptime(args.since, "%Y-%m-%d").date()
         except ValueError:
             raise SystemExit(f"--since expects YYYY-MM-DD, got {args.since!r}")
-    if cutoff:
-        turns = [t for t in turns if t.ts.astimezone(tz).date() >= cutoff]
 
-    report = build(
-        turns, tz=tz,
-        include_sidechains=cfg.get("include_sidechains", True),
-        overrides=cfg.get("pricing_overrides"),
-        session_hours=cfg.get("session_length_hours", 5),
-    )
-
-    if cfg.get("history", True) and not cutoff:
-        history.merge(report)
-        history.restore(report)
-
-    apply_aliases(report, cfg.get("project_aliases") or {})
-    if cfg.get("mask_projects"):
-        mask_projects(report)
-
-    q, quota_note = quota.read(cfg)
+    report, q, quota_note, duplicates, files = build_report(
+        cfg, tz, source=args.source, date_from=cutoff)
 
     if args.command == "json":
         payload = serialize(report)
