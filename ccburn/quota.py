@@ -217,10 +217,16 @@ def read(config: dict) -> tuple[Quota | None, str]:
     if cached:
         quota = from_statusline(cached)
         if quota is not None:
+            from . import store
+            with store.connect() as conn:
+                store.upsert_quota_samples(conn, quota)
             return quota, ""
     if not read_token():
         return None, "not signed in (no Claude Code OAuth token found)"
     quota = fetch()
     if quota is None:
         return None, "endpoint unreachable or returned nothing"
+    from . import store
+    with store.connect() as conn:
+        store.upsert_quota_samples(conn, quota)
     return quota, ""
