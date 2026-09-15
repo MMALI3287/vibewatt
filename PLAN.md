@@ -435,3 +435,18 @@ Append here rather than widening a phase.
 - PNG export of the dashboard.
 - Webhooks and desktop notifications.
 - Localization.
+- Stored `turns.cost` is computed at sync time. Incremental sync skips unchanged
+  files, so a pricing-table or `pricing_overrides` change does not reprice old
+  rows. Needs a `ccburn sync --full` or a reprice pass keyed on the pricing version.
+- `findings` is listed under "new in phase 1" in section 4 but only Phase 5 uses
+  it. Create it in that phase's migration.
+- Pre-existing lint debt outside the Phase 1 diff: 23 `ruff check` errors
+  (cli.py, doctor.py, dashboard.py, quota.py, sources.py), and `store.py` was
+  already unformatted before Phase 1.
+- Bug, predates Phase 1 (reproduced on 2ac5456): `ccburn sessions` with stdout
+  redirected on Windows exits 1 with `UnicodeEncodeError: 'charmap' codec` when a
+  prompt title has characters outside cp1252. Needs a failing test, then
+  `sys.stdout.reconfigure(errors="replace")` or UTF-8 output in the CLI.
+- Predates Phase 1: `resolve_tz("local")` in `cli.py` returns today's fixed
+  offset and applies it to all history, so in DST zones last season's turns near
+  midnight land on the neighbouring day. Resolve local to an IANA zone instead.

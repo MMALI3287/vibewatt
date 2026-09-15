@@ -1,4 +1,4 @@
-"""Discovery and normalization of local session logs.
+"""Normalization of local session logs. Discovery lives in ccburn.ingest.
 
 Two producers write the same broad JSONL shape in different places:
 
@@ -12,8 +12,6 @@ the message/usage payload identical, so normalizing the envelope is enough.
 from __future__ import annotations
 
 import json
-import os
-import platform
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,57 +19,6 @@ from typing import Iterator
 
 CLAUDE_CODE = "claude-code"
 COWORK = "cowork"
-
-_COWORK_DIRS = ("local-agent-mode-sessions", "claude-code-sessions")
-
-
-def _desktop_data_dirs() -> list[Path]:
-    system = platform.system()
-    home = Path.home()
-    if system == "Darwin":
-        roots = [home / "Library" / "Application Support" / "Claude"]
-    elif system == "Windows":
-        appdata = os.environ.get("APPDATA")
-        roots = [Path(appdata) / "Claude"] if appdata else []
-    else:
-        cfg = os.environ.get("XDG_CONFIG_HOME") or (home / ".config")
-        roots = [Path(cfg) / "Claude"]
-    extra = os.environ.get("CCBURN_COWORK_DIR")
-    if extra:
-        roots = [Path(p).expanduser() for p in extra.split(os.pathsep)] + roots
-    return roots
-
-
-def claude_code_roots() -> list[Path]:
-    """Honour CLAUDE_CONFIG_DIR, which may hold several colon-separated paths."""
-    configured = os.environ.get("CLAUDE_CONFIG_DIR")
-    roots = (
-        [Path(p).expanduser() for p in configured.split(os.pathsep) if p]
-        if configured
-        else [Path.home() / ".claude"]
-    )
-    return [r / "projects" for r in roots]
-
-
-def discover(cfg: dict | None = None) -> list[tuple[str, Path]]:
-    """Return (source, file) pairs for every session log found on this machine.
-
-    Claude Code on the web and Cowork remote sessions are deliberately absent:
-    they run in throwaway cloud containers and never write to this disk. See
-    ccburn.quota for the account-level figures that do include them.
-    """
-    cfg = cfg or {}
-    found: list[tuple[str, Path]] = []
-    for root in claude_code_roots():
-        if root.is_dir():
-            found += [(CLAUDE_CODE, p) for p in sorted(root.rglob("*.jsonl"))]
-    for base in _desktop_data_dirs():
-        for name in _COWORK_DIRS:
-            root = base / name
-            if root.is_dir():
-                found += [(COWORK, p) for p in sorted(root.rglob("audit.jsonl"))]
-    return found
-
 
 @dataclass(frozen=True)
 class Turn:

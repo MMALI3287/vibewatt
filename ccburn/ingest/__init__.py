@@ -1,30 +1,37 @@
+"""Local log ingestion.
+
+Every file-backed source is a module exposing the same two functions:
+
+  discover(cfg) -> list[Path]      files this source owns on this machine
+  parse(path)   -> Iterator[Turn]  billable responses in one file, not deduped
+
+Dedup happens across files, not inside a parser, because the same response is
+replayed into several files. Cloud sessions have no local file and live in
+``ingest.cloud`` with a payload-shaped interface instead.
+"""
+
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
+from types import ModuleType
 
-from .claude_code import discover as discover_claude_code
-from .cowork import discover as discover_cowork
-from ccburn.sources import read_file
+from ccburn.sources import CLAUDE_CODE, COWORK, Turn
+
+from . import claude_code, cowork
+
+SOURCES: dict[str, ModuleType] = {CLAUDE_CODE: claude_code, COWORK: cowork}
 
 
 def discover(cfg: dict | None = None) -> list[tuple[str, Path]]:
-    """Return all local log files for Claude Code and Cowork."""
-    found: list[tuple[str, Path]] = []
-    for path in discover_claude_code(cfg):
-        found.append(("claude-code", path))
-    for path in discover_cowork(cfg):
-        found.append(("cowork", path))
-    return found
+    """Return (source, file) pairs for every session log found on this machine.
+
+    Claude Code on the web and Cowork remote sessions are deliberately absent:
+    they run in throwaway cloud containers and never write to this disk. See
+    ccburn.quota for the account-level figures that do include them.
+    """
+    return [(name, path) for name, mod in SOURCES.items() for path in mod.discover(cfg)]
 
 
-def parse_file(source: str, path: Path):
-    """Parse a single local log file and return the normalized turns, deduped."""
-    seen: set[tuple[str, str]] = set()
-    turns = []
-    for turn in read_file(source, path):
-        if turn.key != ("", "") and turn.key in seen:
-            continue
-        if turn.key != ("", ""):
-            seen.add(turn.key)
-        turns.append(turn)
-    return turns
+def parse(source: str, path: Path) -> Iterator[Turn]:
+    return SOURCES[source].parse(path)
