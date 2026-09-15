@@ -133,8 +133,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Token usage, cost and plan utilization for Claude Code and Cowork.",
     )
     p.add_argument("command", nargs="?", default="report",
-                   choices=["report", "serve", "blocks", "statusline", "json", "csv", "html"],
-                   help="report (default), serve, blocks, statusline, json, csv, html")
+                   choices=["report", "serve", "blocks", "statusline", "json", "csv",
+                            "html", "doctor"],
+                   help="report (default), serve, doctor, blocks, statusline, json, csv, html")
     p.add_argument("--source", choices=[CLAUDE_CODE, COWORK, "all"], default="all")
     p.add_argument("--since", metavar="YYYY-MM-DD")
     p.add_argument("--days", type=int, metavar="N")
@@ -153,6 +154,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--refresh", type=int, default=30, help="serve: refresh seconds (0 disables)")
     p.add_argument("--no-browser", action="store_true", help="serve: do not open a browser")
     p.add_argument("--no-color", action="store_true")
+    p.add_argument("--plan", type=float, metavar="USD",
+                   help="your monthly plan price, to show API-equivalent savings")
     return p
 
 
@@ -175,6 +178,8 @@ def main(argv: list[str] | None = None) -> int:
         cfg["offline"] = True
     if args.mask_projects:
         cfg["mask_projects"] = True
+    if args.plan:
+        cfg["plan_usd_per_month"] = args.plan
 
     if args.command == "serve":
         from .dashboard import serve
@@ -185,6 +190,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     tz = resolve_tz(cfg.get("timezone"))
+
+    if args.command == "doctor":
+        from .doctor import run as doctor_run
+
+        return doctor_run(cfg, tz)
+
     pricing.refresh(offline=cfg.get("offline", False))
 
     files = discover(cfg)
@@ -241,10 +252,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "html":
-        from .htmlreport import write_html
+        from .ui import build_dataset, write
 
         target = args.out or "ccburn-report.html"
-        write_html(report, target, weeks=cfg.get("weeks", 53), quota=q)
+        write(build_dataset(report, cfg, quota=q, duplicates=duplicates), target)
         print(f"wrote {target}")
         return 0
 

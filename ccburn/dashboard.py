@@ -79,7 +79,7 @@ def _snapshot(cfg: dict):
 
 
 def _handler_class(cfg: dict, refresh_seconds: int):
-    from .htmlreport import build_html
+    from .ui import build_dataset, build_page
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -118,11 +118,14 @@ def _handler_class(cfg: dict, refresh_seconds: int):
                     self._send(json.dumps(payload, indent=2).encode(), "application/json")
                     return
                 if path in ("/", "/index.html"):
-                    report, q, _ = _snapshot(cfg)
-                    html = build_html(report, weeks=cfg.get("weeks", 53), quota=q)
-                    if "partial=1" not in self.path:
-                        html = html.replace("</body>", REFRESH_SCRIPT % refresh_seconds + "</body>")
+                    report, q, dupes = _snapshot(cfg)
+                    html = build_page(build_dataset(report, cfg, quota=q, duplicates=dupes))
                     self._send(html.encode("utf-8"), "text/html; charset=utf-8")
+                    return
+                if path == "/api/dataset":
+                    report, q, dupes = _snapshot(cfg)
+                    body = json.dumps(build_dataset(report, cfg, quota=q, duplicates=dupes))
+                    self._send(body.encode(), "application/json")
                     return
                 self._send(b"not found", "text/plain", 404)
             except BrokenPipeError:
