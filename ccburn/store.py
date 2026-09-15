@@ -362,6 +362,123 @@ def upsert_cloud_sessions(conn, payload) -> tuple[int, int]:
     return written, skipped
 
 
+def sessions(
+    conn, limit: int = 40, *, cursor: str | None = None,
+    source: str | None = None, project: str | None = None, model: str | None = None,
+) -> list[dict]:
+    """Sessions across every surface, local and harvested, newest first.
+
+    Shared by the CLI's `sessions` command and the API's `/api/sessions`, so
+    the two never drift on what a "session" row looks like. `cursor` is the
+    `started` timestamp of the last row from a previous page; only sessions
+    strictly older than it are returned. `source` matches local `turns.source`
+    (harvested rows use `surface` the same way, since they share one column).
+    """
+    local_clauses = ["1=1"]
+    local_args: list = []
+    if source:
+        local_clauses.append("source = ?")
+        local_args.append(source)
+    if project:
+        local_clauses.append("project = ?")
+        local_args.append(project)
+    if model:
+        local_clauses.append("model = ?")
+        local_args.append(model)
+    local = conn.execute(
+        "SELECT session id, MIN(ts) started, MAX(ts) ended, project,"
+        "  GROUP_CONCAT(DISTINCT model) model, COUNT(*) n, SUM(cost) cost,"
+        "  SUM(input+cache_5m+cache_1h+cache_read+output) tokens, source surface"
+        f" FROM turns WHERE {' AND '.join(local_clauses)}"
+        " GROUP BY session ORDER BY started DESC", local_args).fetchall()
+
+    cloud_clauses = ["harvested = 1"]
+    cloud_args: list = []
+    if source:
+        cloud_clauses.append("surface = ?")
+        cloud_args.append(source)
+    if project:
+        cloud_clauses.append("project = ?")
+        cloud_args.append(project)
+    if model:
+        cloud_clauses.append("model = ?")
+        cloud_args.append(model)
+    cloud = conn.execute(
+        "SELECT id, title, started, ended, project, model, surface,"
+        "  cost, input+cache_write+cache_read+output tokens"
+        f" FROM sessions WHERE {' AND '.join(cloud_clauses)}"
+        " ORDER BY started DESC", cloud_args).fetchall()
+
+    titles = {r["session"]: r["text"] for r in
+              conn.execute("SELECT session, text FROM prompts")}
+
+    rows = []
+    for r in cloud:
+        rows.append({
+            "id": r["id"], "title": r["title"] or r["id"][:24], "surface": r["surface"],
+            "project": r["project"] or "-", "model": r["model"], "started": r["started"],
+            "ended": r["ended"], "tokens": r["tokens"] or 0, "cost": r["cost"] or 0.0,
+            "harvested": True,
+        })
+    for r in local:
+        title = titles.get(r["id"], "")[:58] or r["id"][:24]
+        rows.append({
+            "id": r["id"], "title": title, "surface": r["surface"],
+            "project": r["project"] or "-", "model": r["model"], "started": r["started"],
+            "ended": r["ended"], "tokens": r["tokens"] or 0, "cost": r["cost"] or 0.0,
+            "harvested": False,
+        })
+    rows.sort(key=lambda r: r["started"] or "", reverse=True)
+    if cursor:
+        rows = [r for r in rows if (r["started"] or "") < cursor]
+    return rows[:limit]
+
+
+def session_detail(conn, session_id: str) -> dict | None:
+    """One session's metadata plus its turns. None if the id is unknown.
+
+    Shape is the same whether the session is local (has turns) or harvested
+    (totals only, from the session API) so a caller does not need to branch.
+    """
+    turns = conn.execute(
+        "SELECT msg_id, request_id, ts, day, source, project, model, input,"
+        "  cache_5m, cache_1h, cache_read, output, thinking, web_search,"
+        "  sidechain, fast, geo, cost FROM turns WHERE session = ? ORDER BY ts",
+        (session_id,)).fetchall()
+    if turns:
+        title = conn.execute(
+            "SELECT text FROM prompts WHERE session = ? ORDER BY ts DESC LIMIT 1",
+            (session_id,)).fetchone()
+        first, last = turns[0], turns[-1]
+        tokens = sum(t["input"] + t["cache_5m"] + t["cache_1h"] + t["cache_read"] + t["output"]
+                     for t in turns)
+        cost = sum(t["cost"] or 0 for t in turns)
+        models = sorted({t["model"] for t in turns})
+        return {
+            "id": session_id, "harvested": False,
+            "title": (title["text"] if title else None) or session_id[:24],
+            "surface": first["source"], "project": first["project"],
+            "model": ",".join(models), "started": first["ts"], "ended": last["ts"],
+            "tokens": tokens, "cost": cost,
+            "turns": [dict(t) for t in turns],
+        }
+    cloud = conn.execute(
+        "SELECT * FROM sessions WHERE id = ? AND harvested = 1", (session_id,)).fetchone()
+    if cloud is None:
+        return None
+    row = dict(cloud)
+    return {
+        "id": row["id"], "harvested": True,
+        "title": row["title"] or row["id"][:24], "surface": row["surface"],
+        "project": row["project"], "model": row["model"],
+        "started": row["started"], "ended": row["ended"],
+        "tokens": (row["input"] or 0) + (row["cache_write"] or 0)
+                  + (row["cache_read"] or 0) + (row["output"] or 0),
+        "cost": row["cost"] or 0.0,
+        "turns": [],
+    }
+
+
 def summary(conn) -> dict:
     def one(sql, *args):
         row = conn.execute(sql, args).fetchone()

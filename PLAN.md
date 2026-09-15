@@ -450,3 +450,16 @@ Append here rather than widening a phase.
 - Predates Phase 1: `resolve_tz("local")` in `cli.py` returns today's fixed
   offset and applies it to all history, so in DST zones last season's turns near
   midnight land on the neighbouring day. Resolve local to an IANA zone instead.
+- `cli.build_report()` always calls `quota.read(cfg)`, even for API endpoints
+  that never use the quota result (`/api/daily`, `/api/breakdown/*`, etc.).
+  Pre-existing behavior from the CLI, not a phase 2 regression, but a frontend
+  hitting several of these per filter change will trigger the account-wide
+  quota fetch repeatedly. Worth splitting quota out of `build_report` or
+  caching it once the frontend exists to actually feel this.
+- Phase 2 removed `ccburn/dashboard.py` (the stdlib `http.server` dashboard).
+  Reason: it duplicated the report pipeline FastAPI now serves under `/`,
+  `/api/dataset` and `/api/usage` from `ccburn/api/app.py`, and PLAN.md already
+  marked it "to be replaced by FastAPI." Its `--refresh` live-reload script (a
+  `setInterval` re-fetch-and-patch) was not ported — no equivalent exists on
+  the FastAPI routes today. Phase 3's React app will need its own polling or
+  SSE for live refresh; it should not resurrect the old script.
