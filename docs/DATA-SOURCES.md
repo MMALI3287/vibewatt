@@ -41,7 +41,12 @@ what was tried, what worked and what did not, so nobody re-derives it.
   `tags` filter that would list Cowork sessions is rejected for in-session callers
   and documented as OAuth-only.
   **Current workaround:** `ccburn harvest --file sessions.json` ingests a saved
-  listing. Re-spike this in phase 2.
+  listing.
+  **Re-spiked in phase 2:** the `claude-code-remote` MCP tool (`list_sessions`)
+  is not present in a plain Claude Code session — it's only reachable from
+  specific hosted contexts, not a general HTTP endpoint this codebase can call.
+  No new direct endpoint found. `--file` harvest stays the only ingestion path;
+  revisit if Anthropic documents the per-session listing endpoint.
 
 ## Retention
 
