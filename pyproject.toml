@@ -1,0 +1,31 @@
+[project]
+name = "ccburn"
+version = "0.2.0"
+description = "Token usage, cost and plan utilization for Claude Code and Cowork, from local data"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "MD Musaddique Ali Erfan" }]
+keywords = ["claude", "claude-code", "cowork", "usage", "tokens", "cost"]
+classifiers = [
+  "Environment :: Console",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: MacOS",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/MMALI3287/ccburn"
+
+[project.scripts]
+ccburn = "ccburn.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ccburn"]
