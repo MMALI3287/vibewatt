@@ -8,3 +8,4 @@ ccburn/static/
 web/openapi.json
 web/test-results/
 web/playwright-report/
+*.tsbuildinfo
