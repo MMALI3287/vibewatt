@@ -50,7 +50,8 @@ def _snapshot(cfg: dict):
 
     from . import history, quota
     from .aggregate import build
-    from .sources import discover, load
+    from .ingest import discover
+    from .sources import load
 
     name = cfg.get("timezone", "local")
     if name == "utc":

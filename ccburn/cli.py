@@ -12,7 +12,8 @@ from datetime import datetime, timedelta, timezone
 from . import config as configmod
 from . import history, pricing, quota, terminal
 from .aggregate import build
-from .sources import CLAUDE_CODE, COWORK, discover, load
+from .ingest import discover
+from .sources import CLAUDE_CODE, COWORK, load
 
 
 def resolve_tz(name: str | None):
@@ -165,21 +166,20 @@ def harvest(args, cfg, tz) -> int:
 
 
 def sync(args, cfg, tz) -> int:
-    """Parse local logs into the store so later queries do not re-read them."""
+    """Parse changed local logs into the store so later queries do not re-read them."""
     from . import store
     from .aggregate import cost_of
-    from .sources import read_prompts
 
     files = discover(cfg)
-    turns, duplicates = load(files)
     overrides = cfg.get("pricing_overrides")
     with store.connect() as conn:
-        n = store.upsert_turns(conn, turns, tz, lambda t: cost_of(t, overrides))
-        p = store.upsert_prompts(conn, read_prompts(files))
+        result = store.sync_files(conn, files, tz, lambda t: cost_of(t, overrides))
         info = store.summary(conn)
-    print(f"  synced {n} response(s) from {len(files)} file(s), "
-          f"{duplicates} content-block repeats collapsed")
-    print(f"  recovered {p} prompt title(s)")
+    print(f"  parsed {result.parsed} changed file(s), skipped {result.skipped} unchanged, "
+          f"{len(files)} total")
+    print(f"  synced {result.turns} response(s), "
+          f"{result.duplicates} content-block repeats collapsed")
+    print(f"  recovered {result.prompts} prompt title(s)")
     t = info["turns"]
     print(f"  store now holds {t['n']:,} response(s)  {t['lo']} .. {t['hi']}  "
           f"${t['cost'] or 0:,.2f}")

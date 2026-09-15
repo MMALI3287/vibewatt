@@ -173,7 +173,14 @@ def from_statusline(path: str | Path) -> Quota | None:
     windows = _windows_from(limits)
     if not windows:
         return None
-    captured = _parse_reset(blob.get("captured_at")) or datetime.now(timezone.utc)
+    # Without captured_at, the file's mtime is the reading's time. now() would
+    # turn one stale dump into a new sample on every read.
+    captured = _parse_reset(blob.get("captured_at"))
+    if captured is None:
+        try:
+            captured = datetime.fromtimestamp(Path(path).expanduser().stat().st_mtime, timezone.utc)
+        except OSError:
+            captured = datetime.now(timezone.utc)
     # A stale dump can describe a window that has since rolled over.
     now = datetime.now(timezone.utc)
     for w in windows:
@@ -209,6 +216,19 @@ def fetch(token: str | None = None, timeout: float = 10.0) -> Quota | None:
     return Quota(windows, "endpoint", datetime.now(timezone.utc))
 
 
+def _record(quota: Quota) -> None:
+    """Append to the sample series. A store failure must never cost the reading."""
+    import sqlite3
+
+    from . import store
+
+    try:
+        with store.connect() as conn:
+            store.upsert_quota_samples(conn, quota)
+    except (sqlite3.Error, OSError):
+        pass
+
+
 def read(config: dict) -> tuple[Quota | None, str]:
     """Best available quota reading, plus a human explanation when there is none."""
     if not config.get("quota", True):
@@ -217,16 +237,12 @@ def read(config: dict) -> tuple[Quota | None, str]:
     if cached:
         quota = from_statusline(cached)
         if quota is not None:
-            from . import store
-            with store.connect() as conn:
-                store.upsert_quota_samples(conn, quota)
+            _record(quota)
             return quota, ""
     if not read_token():
         return None, "not signed in (no Claude Code OAuth token found)"
     quota = fetch()
     if quota is None:
         return None, "endpoint unreachable or returned nothing"
-    from . import store
-    with store.connect() as conn:
-        store.upsert_quota_samples(conn, quota)
+    _record(quota)
     return quota, ""

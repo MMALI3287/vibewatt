@@ -26,6 +26,7 @@ ccburn = "ccburn.cli:main"
 [dependency-groups]
 dev = [
   "pytest>=8.0",
+  "ruff>=0.16.7",
 ]
 
 [build-system]
