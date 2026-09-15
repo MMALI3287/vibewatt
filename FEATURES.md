@@ -25,7 +25,11 @@ Sources: [ccusage](https://github.com/ccusage/ccusage) (MIT),
 | macOS Keychain token lookup | widget | **partial** | coded, untested (no macOS here) |
 | Codex / Gemini / 15 other CLIs | ccusage, usage | **no** | out of scope; this is Claude-only |
 | Cursor `state.vscdb` | aitrack | **no** | |
-| Claude Code web / Cowork remote logs | none | **n/a** | impossible: ephemeral containers, no local file |
+| **Claude Code web per-session usage** | none | **done** | `ccburn harvest` — via the session API, not the container |
+| **Cowork remote per-session usage** | none | **partial** | same path; tag filter needs an OAuth caller |
+| Session titles ("what you worked on") | usage | **done** | from `last-prompt` records, no API call |
+| SQLite store | none | **done** | `ccburn sync`, idempotent upserts |
+| Session-grouped report | ccusage | **done** | `ccburn sessions`, local + cloud merged |
 
 ## Accuracy
 
@@ -61,8 +65,8 @@ Sources: [ccusage](https://github.com/ccusage/ccusage) (MIT),
 | Month-to-date spend | widget | **done** | |
 | Plan vs API-equivalent savings | usage, widget | **done** | `--plan 20` shows the multiple |
 | Weekly / monthly report commands | ccusage | **no** | filter by range instead |
-| Session-grouped report | ccusage | **no** | sessions counted, not itemised |
-| "What you worked on" titles | usage | **no** | would need to read prompt text |
+| Session-grouped report | ccusage | **done** | `ccburn sessions` |
+| "What you worked on" titles | usage | **done** | `last-prompt` records carry it |
 | Wrapped / Year in Review | usage | **no** | |
 
 ## Output and integration

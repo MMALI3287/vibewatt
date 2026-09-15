@@ -44,13 +44,17 @@ cannot reach back before you installed it.
 |---|---|---|
 | Claude Code (local) | yes, from `~/.claude/projects` | yes |
 | Cowork (local) | yes, from the desktop data dir | yes |
-| Claude Code on the web | **no** | yes |
-| Cowork remote sessions | **no** | yes |
-| claude.ai chat | **no** | yes |
+| Claude Code on the web | **yes, via `ccburn harvest`** | yes |
+| Cowork remote sessions | **yes, via `ccburn harvest`** | yes |
+| claude.ai chat | no | yes |
 
-Web and remote sessions run in throwaway cloud containers. Their logs are created
-inside that container and destroyed with it, so no local tool can read them — ccburn
-included, and every other tool in this space likewise.
+Web and remote sessions run in throwaway cloud containers, so their *logs* never
+reach your disk. Their **usage totals** are a different matter: the Claude Code
+session API reports per-session tokens, cost, title, model and repository for every
+cloud session. `ccburn harvest` ingests that, which no other tool does.
+
+On one real account, five cloud sessions carried **$120 of web usage that appears in
+no local log at all**.
 
 What *does* account for them is **plan utilization**: your 5-hour and 7-day allowance
 is charged account-wide, whichever surface spent it. ccburn reads that from the same
@@ -127,6 +131,9 @@ envelope is enough to price both together.
 ccburn report        terminal report (default)
 ccburn serve         live dashboard        --host --port --refresh --no-browser
 ccburn doctor        what ccburn can and cannot see, and why
+ccburn sync          parse local logs into the SQLite store
+ccburn harvest       ingest cloud session usage   --file sessions.json
+ccburn sessions      every session, local and cloud, with titles
 ccburn html          standalone interactive report  --out
 ccburn json          full data as JSON     --out
 ccburn csv           per day per model     --out

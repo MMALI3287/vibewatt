@@ -127,6 +127,107 @@ def statusline(report, q) -> str:
     return "  |  ".join(parts)
 
 
+def harvest(args, cfg, tz) -> int:
+    """Ingest a cloud session listing so web and Cowork remote usage is counted.
+
+    Those sessions run in containers that are destroyed with the session, so no
+    local file will ever hold them. The session API does report their totals,
+    and this brings them in.
+    """
+    from . import store
+
+    if not args.file:
+        print(
+            "ccburn harvest --file sessions.json\n\n"
+            "Cloud sessions (Claude Code on the web, Cowork remote) write no local\n"
+            "logs, but the session API reports their usage. To produce the file, ask\n"
+            "any Claude session:\n\n"
+            "    List my Claude Code sessions with list_sessions (mine: true, limit 100,\n"
+            "    paginating with after_id) and write the raw JSON to sessions.json\n\n"
+            "Then run this command against it. Re-harvesting is idempotent.",
+            file=sys.stderr)
+        return 2
+    try:
+        with open(args.file, "r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"cannot read {args.file}: {exc}")
+    # Accept the tool's envelope or a bare list.
+    if isinstance(payload, dict) and "ccr" in payload:
+        payload = payload["ccr"]
+    with store.connect() as conn:
+        written, skipped = store.upsert_cloud_sessions(conn, payload)
+        info = store.summary(conn)
+    print(f"  harvested {written} session(s), skipped {skipped} with no usage block")
+    for row in info["cloud_by_surface"]:
+        print(f"    {row['surface']:<12} {row['n']:>4} session(s)   ${row['cost'] or 0:,.2f}")
+    return 0
+
+
+def sync(args, cfg, tz) -> int:
+    """Parse local logs into the store so later queries do not re-read them."""
+    from . import store
+    from .aggregate import cost_of
+    from .sources import read_prompts
+
+    files = discover(cfg)
+    turns, duplicates = load(files)
+    overrides = cfg.get("pricing_overrides")
+    with store.connect() as conn:
+        n = store.upsert_turns(conn, turns, tz, lambda t: cost_of(t, overrides))
+        p = store.upsert_prompts(conn, read_prompts(files))
+        info = store.summary(conn)
+    print(f"  synced {n} response(s) from {len(files)} file(s), "
+          f"{duplicates} content-block repeats collapsed")
+    print(f"  recovered {p} prompt title(s)")
+    t = info["turns"]
+    print(f"  store now holds {t['n']:,} response(s)  {t['lo']} .. {t['hi']}  "
+          f"${t['cost'] or 0:,.2f}")
+    print(f"  database: {store.db_path()}")
+    return 0
+
+
+def sessions_report(args, cfg, tz) -> int:
+    """Sessions across every surface, local and harvested, newest first."""
+    from . import store
+
+    with store.connect() as conn:
+        local = conn.execute(
+            "SELECT session id, MIN(ts) started, MAX(ts) ended, project,"
+            "  GROUP_CONCAT(DISTINCT model) model, COUNT(*) n, SUM(cost) cost,"
+            "  SUM(input+cache_5m+cache_1h+cache_read+output) tokens, source surface"
+            " FROM turns GROUP BY session ORDER BY started DESC LIMIT 40").fetchall()
+        cloud = conn.execute(
+            "SELECT id, title, started, ended, project, model, surface,"
+            "  cost, input+cache_write+cache_read+output tokens"
+            " FROM sessions WHERE harvested=1 ORDER BY started DESC LIMIT 40").fetchall()
+        titles = {r["session"]: r["text"] for r in
+                  conn.execute("SELECT session, text FROM prompts")}
+
+    rows = []
+    for r in cloud:
+        rows.append((r["started"] or "", r["surface"], r["title"] or r["id"][:24],
+                     r["project"] or "-", r["tokens"], r["cost"]))
+    for r in local:
+        title = titles.get(r["id"], "")[:58] or r["id"][:24]
+        rows.append((r["started"] or "", r["surface"], title,
+                     r["project"] or "-", r["tokens"], r["cost"] or 0))
+    rows.sort(reverse=True)
+
+    if not rows:
+        print("  no sessions yet - run 'ccburn sync' and 'ccburn harvest' first")
+        return 1
+    print(f"\n  {'when':<11} {'surface':<12} {'what you worked on':<58} "
+          f"{'tokens':>9} {'cost':>9}")
+    print("  " + "-" * 103)
+    for started, surface, title, project, tokens, cost in rows[:40]:
+        when = (started or "")[:10]
+        print(f"  {when:<11} {surface:<12} {title[:58]:<58} "
+              f"{terminal.human(tokens or 0):>9} {terminal.money(cost or 0):>9}")
+    print()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="ccburn",
@@ -134,8 +235,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("command", nargs="?", default="report",
                    choices=["report", "serve", "blocks", "statusline", "json", "csv",
-                            "html", "doctor"],
-                   help="report (default), serve, doctor, blocks, statusline, json, csv, html")
+                            "html", "doctor", "harvest", "sync", "sessions"],
+                   help="report (default), serve, doctor, harvest, sync, sessions, "
+                        "blocks, statusline, json, csv, html")
     p.add_argument("--source", choices=[CLAUDE_CODE, COWORK, "all"], default="all")
     p.add_argument("--since", metavar="YYYY-MM-DD")
     p.add_argument("--days", type=int, metavar="N")
@@ -156,6 +258,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-color", action="store_true")
     p.add_argument("--plan", type=float, metavar="USD",
                    help="your monthly plan price, to show API-equivalent savings")
+    p.add_argument("--file", metavar="PATH",
+                   help="harvest: a session listing JSON to ingest")
     return p
 
 
@@ -195,6 +299,15 @@ def main(argv: list[str] | None = None) -> int:
         from .doctor import run as doctor_run
 
         return doctor_run(cfg, tz)
+
+    if args.command == "harvest":
+        return harvest(args, cfg, tz)
+
+    if args.command == "sync":
+        return sync(args, cfg, tz)
+
+    if args.command == "sessions":
+        return sessions_report(args, cfg, tz)
 
     pricing.refresh(offline=cfg.get("offline", False))
 

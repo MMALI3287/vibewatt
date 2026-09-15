@@ -193,3 +193,54 @@ def load(files: list[tuple[str, Path]]) -> tuple[list[Turn], int]:
                 seen.add(turn.key)
             turns.append(turn)
     return turns, duplicates
+
+
+def read_prompts(files: list[tuple[str, Path]]) -> list[dict]:
+    """Recover the prompt text Claude Code records per session.
+
+    Claude Code writes a `last-prompt` record carrying the user's prompt. That
+    is the honest source for "what you worked on": it needs no API call, no
+    OAuth and no model, and it is already on disk. Falls back to the session's
+    first user message when no such record exists.
+    """
+    found: list[dict] = []
+    for source, path in files:
+        first_user: dict | None = None
+        try:
+            handle = path.open("r", encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        with handle:
+            for line in handle:
+                line = line.strip()
+                if not line or '"last-prompt"' not in line and '"user"' not in line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                kind = rec.get("type")
+                session = str(rec.get("sessionId") or rec.get("session_id") or path.stem)
+                if kind == "last-prompt":
+                    text = (rec.get("lastPrompt") or "").strip()
+                    if text:
+                        found.append({"session": session, "ts": rec.get("timestamp"),
+                                      "text": text[:500]})
+                elif kind == "user" and first_user is None:
+                    msg = rec.get("message") or {}
+                    content = msg.get("content")
+                    text = ""
+                    if isinstance(content, str):
+                        text = content
+                    elif isinstance(content, list):
+                        for blk in content:
+                            if isinstance(blk, dict) and blk.get("type") == "text":
+                                text = blk.get("text", "")
+                                break
+                    text = text.strip()
+                    if text and not text.startswith("<"):
+                        first_user = {"session": session,
+                                      "ts": rec.get("timestamp"), "text": text[:500]}
+        if first_user and not any(f["session"] == first_user["session"] for f in found):
+            found.append(first_user)
+    return found
