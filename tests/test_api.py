@@ -50,6 +50,20 @@ def test_hourly_breakdown_returns_hour_keys(logs):
         assert key.isdigit()
 
 
+def test_source_filter_is_not_undone_by_history_restore(logs):
+    client = _client()
+    unfiltered = client.get("/api/summary").json()  # writes the history rollup
+    assert len(unfiltered["by_source"]) == 2
+
+    for source, bucket in unfiltered["by_source"].items():
+        filtered = client.get("/api/summary", params={"source": source}).json()
+        assert filtered["total"]["responses"] == bucket["responses"]
+        assert list(filtered["by_source"]) == [source]
+
+    again = client.get("/api/summary").json()
+    assert again["total"] == unfiltered["total"]
+
+
 def test_breakdown_by_model(logs):
     client = _client()
     summary = client.get("/api/summary").json()
