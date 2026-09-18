@@ -17,7 +17,7 @@ import sqlite3
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone, tzinfo
 from pathlib import Path
 
 from .config import data_dir
@@ -365,14 +365,16 @@ def upsert_cloud_sessions(conn, payload) -> tuple[int, int]:
 def sessions(
     conn, limit: int = 40, *, cursor: str | None = None,
     source: str | None = None, project: str | None = None, model: str | None = None,
+    date_from: date | None = None, date_to: date | None = None,
+    tz: tzinfo = timezone.utc, search: str | None = None,
 ) -> list[dict]:
     """Sessions across every surface, local and harvested, newest first.
 
     Shared by the CLI's `sessions` command and the API's `/api/sessions`, so
-    the two never drift on what a "session" row looks like. `cursor` is the
-    `started` timestamp of the last row from a previous page; only sessions
-    strictly older than it are returned. `source` matches local `turns.source`
-    (harvested rows use `surface` the same way, since they share one column).
+    the two never drift on what a "session" row looks like. New cursors include
+    timestamp and ID to preserve ties; legacy timestamp cursors remain valid.
+    Local totals include matching turns. Cloud totals cannot be split by day
+    and are selected by their start date in the report timezone.
     """
     local_clauses = ["1=1"]
     local_args: list = []
@@ -385,9 +387,15 @@ def sessions(
     if model:
         local_clauses.append("model = ?")
         local_args.append(model)
+    for day, op, offset in ((date_from, ">=", 0), (date_to, "<", 1)):
+        if day:
+            boundary = datetime.combine(day, time.min, tz) + timedelta(days=offset)
+            local_clauses.append(f"ts {op} ?")
+            local_args.append(boundary.astimezone(timezone.utc).isoformat())
     local = conn.execute(
         "SELECT session id, MIN(ts) started, MAX(ts) ended, project,"
         "  GROUP_CONCAT(DISTINCT model) model, COUNT(*) n, SUM(cost) cost,"
+        "  SUM(cost IS NULL) unpriced_turns,"
         "  SUM(input+cache_5m+cache_1h+cache_read+output) tokens, source surface"
         f" FROM turns WHERE {' AND '.join(local_clauses)}"
         " GROUP BY session ORDER BY started DESC", local_args).fetchall()
@@ -404,33 +412,68 @@ def sessions(
         cloud_clauses.append("model = ?")
         cloud_args.append(model)
     cloud = conn.execute(
-        "SELECT id, title, started, ended, project, model, surface,"
+        "SELECT id, title, started, ended, project, model, surface, context_used, context_max,"
         "  cost, input+cache_write+cache_read+output tokens"
         f" FROM sessions WHERE {' AND '.join(cloud_clauses)}"
         " ORDER BY started DESC", cloud_args).fetchall()
 
     titles = {r["session"]: r["text"] for r in
-              conn.execute("SELECT session, text FROM prompts")}
+              conn.execute("SELECT session, text FROM prompts ORDER BY ts, text")}
 
     rows = []
+    local_ids = {r[0] for r in conn.execute("SELECT DISTINCT session FROM turns")}
     for r in cloud:
+        if r["id"] in local_ids:
+            continue
+        if date_from or date_to:
+            try:
+                stamp = datetime.fromisoformat((r["started"] or "").replace("Z", "+00:00"))
+                if stamp.tzinfo is None:
+                    stamp = stamp.replace(tzinfo=timezone.utc)
+                day = stamp.astimezone(tz).date()
+            except (ValueError, TypeError):
+                continue
+            if (date_from and day < date_from) or (date_to and day > date_to):
+                continue
         rows.append({
             "id": r["id"], "title": r["title"] or r["id"][:24], "surface": r["surface"],
             "project": r["project"] or "-", "model": r["model"], "started": r["started"],
             "ended": r["ended"], "tokens": r["tokens"] or 0, "cost": r["cost"] or 0.0,
             "harvested": True,
+            "unpriced_turns": 0,
+            "context_used": r["context_used"], "context_max": r["context_max"],
         })
     for r in local:
-        title = titles.get(r["id"], "")[:58] or r["id"][:24]
+        title = titles.get(r["id"], "") or r["id"][:24]
         rows.append({
             "id": r["id"], "title": title, "surface": r["surface"],
             "project": r["project"] or "-", "model": r["model"], "started": r["started"],
             "ended": r["ended"], "tokens": r["tokens"] or 0, "cost": r["cost"] or 0.0,
             "harvested": False,
+            "unpriced_turns": r["unpriced_turns"],
         })
-    rows.sort(key=lambda r: r["started"] or "", reverse=True)
+    def sort_key(row):
+        return (row["started"] or "", row["id"])
+
+    rows.sort(key=sort_key, reverse=True)
+    if search:
+        needle = search.casefold()
+        rows = [r for r in rows if any(
+            needle in str(r.get(key) or "").casefold()
+            for key in ("title", "project", "model")
+        )]
     if cursor:
-        rows = [r for r in rows if (r["started"] or "") < cursor]
+        if cursor.startswith("["):
+            boundary = json.loads(cursor)
+            if not isinstance(boundary, list) or len(boundary) != 2 or not all(
+                isinstance(v, str) for v in boundary
+            ):
+                raise ValueError("invalid session cursor")
+            rows = [r for r in rows if sort_key(r) < tuple(boundary)]
+        else:
+            rows = [r for r in rows if (r["started"] or "") < cursor]
+    for row in rows[:limit]:
+        row["cursor"] = json.dumps(sort_key(row), separators=(",", ":"))
     return rows[:limit]
 
 
@@ -460,6 +503,7 @@ def session_detail(conn, session_id: str) -> dict | None:
             "surface": first["source"], "project": first["project"],
             "model": ",".join(models), "started": first["ts"], "ended": last["ts"],
             "tokens": tokens, "cost": cost,
+            "unpriced_turns": sum(t["cost"] is None for t in turns),
             "turns": [dict(t) for t in turns],
         }
     cloud = conn.execute(
@@ -475,6 +519,7 @@ def session_detail(conn, session_id: str) -> dict | None:
         "tokens": (row["input"] or 0) + (row["cache_write"] or 0)
                   + (row["cache_read"] or 0) + (row["output"] or 0),
         "cost": row["cost"] or 0.0,
+        "context_used": row["context_used"], "context_max": row["context_max"],
         "turns": [],
     }
 

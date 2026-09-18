@@ -106,6 +106,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/session-facets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Session Facets */
+        get: operations["session_facets_api_session_facets_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/blocks": {
         parameters: {
             query?: never;
@@ -401,10 +418,28 @@ export interface components {
             cost: number;
             /** Harvested */
             harvested: boolean;
+            /** Cursor */
+            cursor?: string | null;
+            /**
+             * Unpriced Turns
+             * @default 0
+             */
+            unpriced_turns: number;
+            /** Context Used */
+            context_used?: number | null;
+            /** Context Max */
+            context_max?: number | null;
             /** Turns */
-            turns: {
-                [key: string]: unknown;
-            }[];
+            turns: components["schemas"]["TurnOut"][];
+        };
+        /** SessionFacetsOut */
+        SessionFacetsOut: {
+            /** Sources */
+            sources: string[];
+            /** Projects */
+            projects: string[];
+            /** Models */
+            models: string[];
         };
         /** SessionOut */
         SessionOut: {
@@ -428,6 +463,17 @@ export interface components {
             cost: number;
             /** Harvested */
             harvested: boolean;
+            /** Cursor */
+            cursor?: string | null;
+            /**
+             * Unpriced Turns
+             * @default 0
+             */
+            unpriced_turns: number;
+            /** Context Used */
+            context_used?: number | null;
+            /** Context Max */
+            context_max?: number | null;
         };
         /** SummaryOut */
         SummaryOut: {
@@ -478,6 +524,45 @@ export interface components {
             duplicates: number;
             /** Prompts */
             prompts: number;
+        };
+        /** TurnOut */
+        TurnOut: {
+            /** Msg Id */
+            msg_id: string;
+            /** Request Id */
+            request_id: string;
+            /** Ts */
+            ts: string;
+            /** Day */
+            day: string;
+            /** Source */
+            source: string;
+            /** Project */
+            project: string;
+            /** Model */
+            model: string;
+            /** Input */
+            input: number;
+            /** Cache 5M */
+            cache_5m: number;
+            /** Cache 1H */
+            cache_1h: number;
+            /** Cache Read */
+            cache_read: number;
+            /** Output */
+            output: number;
+            /** Thinking */
+            thinking: number;
+            /** Web Search */
+            web_search: number;
+            /** Sidechain */
+            sidechain: number;
+            /** Fast */
+            fast: number;
+            /** Geo */
+            geo: string | null;
+            /** Cost */
+            cost: number | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -667,6 +752,7 @@ export interface operations {
             query?: {
                 limit?: number;
                 cursor?: string | null;
+                q?: string | null;
                 from?: string | null;
                 to?: string | null;
                 source?: string;
@@ -727,6 +813,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    session_facets_api_session_facets_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionFacetsOut"];
                 };
             };
         };

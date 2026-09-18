@@ -73,14 +73,20 @@ def breakdown(dim: str, request: Request, filters: Filters = Depends(get_filters
 
 
 @router.get("/sessions", response_model=list[schemas.SessionOut])
-def sessions_list(limit: int = Query(40, ge=1, le=500), cursor: str | None = None,
+def sessions_list(request: Request, limit: int = Query(40, ge=1, le=500), cursor: str | None = None,
+                   q: str | None = Query(None, max_length=500),
                    filters: Filters = Depends(get_filters)):
     source = None if filters.source == "all" else filters.source
     with store.connect() as conn:
-        return store.sessions(
-            conn, limit=limit, cursor=cursor,
-            source=source, project=filters.project, model=filters.model,
-        )
+        try:
+            return store.sessions(
+                conn, limit=limit, cursor=cursor,
+                source=source, project=filters.project, model=filters.model,
+                date_from=filters.date_from, date_to=filters.date_to,
+                tz=request.app.state.tz, search=q,
+            )
+        except ValueError as exc:
+            raise HTTPException(400, "invalid session cursor") from exc
 
 
 @router.get("/sessions/{session_id}", response_model=schemas.SessionDetailOut)
@@ -90,6 +96,23 @@ def session_detail(session_id: str):
     if row is None:
         raise HTTPException(404, f"no session {session_id!r}")
     return row
+
+
+@router.get("/session-facets", response_model=schemas.SessionFacetsOut)
+def session_facets():
+    with store.connect() as conn:
+        def values(local_column: str, cloud_column: str) -> list[str]:
+            rows = conn.execute(
+                f"SELECT DISTINCT {local_column} AS value FROM turns "
+                f"UNION SELECT DISTINCT {cloud_column} FROM sessions WHERE harvested = 1"
+            )
+            return sorted(row["value"] for row in rows if row["value"])
+
+        return schemas.SessionFacetsOut(
+            sources=values("source", "surface"),
+            projects=values("project", "project"),
+            models=values("model", "model"),
+        )
 
 
 @router.get("/blocks", response_model=list[schemas.BlockOut])

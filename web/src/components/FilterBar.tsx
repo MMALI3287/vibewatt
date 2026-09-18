@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getSummary } from "../api/client";
+import { getSessionFacets, getSummary } from "../api/client";
 import { DEFAULT_FILTERS, useFilters, type Metric } from "../lib/filters";
 
 // Options come from the unfiltered summary so picking one value never hides the others.
@@ -10,9 +10,11 @@ export function FilterBar() {
     queryFn: () => getSummary(DEFAULT_FILTERS),
   });
   const keys = (o?: Record<string, unknown>) => Object.keys(o ?? {}).sort();
-  const sources = keys(options.data?.by_source);
-  const projects = keys(options.data?.by_project);
-  const models = keys(options.data?.by_model);
+  const facets = useQuery({ queryKey: ["session-facets"], queryFn: getSessionFacets });
+  const merge = (local: string[], stored?: string[]) => [...new Set([...local, ...(stored ?? [])])].sort();
+  const sources = merge(keys(options.data?.by_source), facets.data?.sources);
+  const projects = merge(keys(options.data?.by_project), facets.data?.projects);
+  const models = merge(keys(options.data?.by_model), facets.data?.models);
 
   return (
     <form className="filters" aria-label="Filters" onSubmit={(e) => e.preventDefault()}>
@@ -89,6 +91,7 @@ export function FilterBar() {
       <button type="button" onClick={() => update(DEFAULT_FILTERS)}>
         Reset
       </button>
+      {facets.isError && <span role="alert">Stored filter choices unavailable. <button type="button" onClick={() => facets.refetch()}>Retry choices</button></span>}
     </form>
   );
 }

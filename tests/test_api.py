@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from datetime import timedelta, timezone
+
 from fastapi.testclient import TestClient
 
 from ccburn import cli as climod
 from ccburn import config as configmod
+from ccburn import store
 from ccburn.api import create_app
 
 
@@ -127,6 +130,88 @@ def test_session_detail_missing_id_is_404(logs):
     client.post("/api/sync")
     resp = client.get("/api/sessions/does-not-exist")
     assert resp.status_code == 404
+
+
+def test_sessions_obey_dates_and_search(logs):
+    client = _client()
+    client.post("/api/sync")
+    assert client.get("/api/sessions?from=2030-01-01").json() == []
+    assert client.get("/api/sessions?to=2020-01-01").json() == []
+    rows = client.get("/api/sessions?q=FIX THE SYNC").json()
+    assert [r["id"] for r in rows] == ["s1"]
+    assert client.get("/api/sessions?q=no-such-title").json() == []
+
+
+def test_sessions_cursor_keeps_equal_timestamps(tmp_path):
+    client = _client()
+    client.post("/api/harvest", json=[{
+        "id": f"cloud-{i}", "created_at": "2026-09-15T00:00:00Z",
+        "external_metadata": {"usage": {"cost_usd": 1.23}},
+    } for i in range(3)])
+    seen = []
+    cursor = None
+    for _ in range(3):
+        params = {"limit": 1}
+        if cursor:
+            params["cursor"] = cursor
+        row = client.get("/api/sessions", params=params).json()[0]
+        seen.append(row["id"])
+        cursor = row["cursor"]
+    assert len(set(seen)) == 3
+
+
+def test_session_dates_use_report_timezone_for_local_and_cloud(logs):
+    app, _ = _app()
+    app.state.tz = timezone(timedelta(hours=9))
+    client = TestClient(app)
+    client.post("/api/sync")
+    client.post("/api/harvest", json=[{
+        "id": "cloud-boundary", "created_at": "2026-09-15T20:00:00Z",
+        "external_metadata": {"usage": {"cost_usd": 9.87}},
+    }])
+    rows = client.get("/api/sessions?from=2026-09-16&to=2026-09-16").json()
+    assert {r["id"] for r in rows} == {"s1", "cloud-boundary"}
+    assert next(r for r in rows if r["id"] == "s1")["tokens"] == 40
+    assert next(r for r in rows if r["id"] == "cloud-boundary")["cost"] == 9.87
+    assert {r["id"] for r in client.get("/api/sessions?to=2026-09-15").json()} == {"c1"}
+
+
+def test_sessions_preserve_unpriced_turns_and_full_search_titles(logs):
+    client = _client()
+    client.post("/api/sync")
+    title = "A long title " * 10 + "searchable ending"
+    with store.connect() as conn:
+        conn.execute("UPDATE turns SET cost = NULL WHERE session = 's1'")
+        conn.execute("UPDATE prompts SET text = ? WHERE session = 's1'", (title,))
+    row = client.get("/api/sessions?q=searchable ending").json()[0]
+    assert row["title"] == title
+    assert row["unpriced_turns"] == 2
+    detail = client.get("/api/sessions/s1").json()
+    assert detail["unpriced_turns"] == 2
+    assert all(t["cost"] is None for t in detail["turns"])
+
+
+def test_invalid_composite_cursor_is_400(logs):
+    client = _client()
+    assert client.get("/api/sessions", params={"cursor": "[123]"}).status_code == 400
+
+
+def test_session_facets_include_cloud_only_values(logs):
+    client = _client()
+    client.post("/api/sync")
+    client.post("/api/harvest", json=[{
+        "id": "cloud-facet", "origin": "web_claude_ai",
+        "session_context": {
+            "model": "cloud-only-model",
+            "sources": [{"git_repository": {"url": "https://github.com/example/cloud-project"}}],
+        },
+        "external_metadata": {"usage": {"cost_usd": 1.23}},
+    }])
+    facets = client.get("/api/session-facets").json()
+    assert set(facets["sources"]) == {"claude-code", "cowork", "web"}
+    assert "cloud-project" in facets["projects"]
+    assert "demo" in facets["projects"]
+    assert "cloud-only-model" in facets["models"]
 
 
 def test_harvest_ingests_a_cloud_session(tmp_path):

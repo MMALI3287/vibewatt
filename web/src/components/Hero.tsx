@@ -12,7 +12,7 @@ export function Hero({ summary, filters }: { summary: Summary; filters: Filters 
   return (
     <section className="hero" aria-label="Headline">
       <div className="hero-main">
-        <p className="hero-label">API-equivalent {filters.metric === "tokens" ? "volume" : "cost"} · local logs + harvested sessions</p>
+        <p className="hero-label">API-equivalent {filters.metric === "tokens" ? "volume" : "cost"} · local logs</p>
         <p className="hero-number" data-testid="hero-number">
           {headline}
         </p>
