@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getSummary, type Bucket, type Summary } from "../api/client";
 import { Hero } from "../components/Hero";
+import { UsageCharts } from "../components/UsageCharts";
 import { DEFAULT_FILTERS, serializeFilters, useFilters, type Metric } from "../lib/filters";
 import { bucketTokens, fmtCompact, fmtInt, fmtPct, fmtUsd } from "../lib/format";
 
@@ -66,11 +67,12 @@ export function Overview() {
       <Kpis s={s} />
       <DailyChart s={s} metric={filters.metric} />
       <ModelTable s={s} metric={filters.metric} />
+      <UsageCharts summary={s} filters={filters} />
     </>
   );
 }
 
-function Kpis({ s }: { s: Summary }) {
+export function Kpis({ s }: { s: Summary }) {
   const items = [
     { label: "Cost", value: fmtUsd(s.total.cost_usd) },
     { label: "Tokens", value: fmtCompact(bucketTokens(s.total)) },

@@ -40,3 +40,27 @@ export async function getHealth(): Promise<Health> {
 export async function postSync() {
   return unwrap(await api.POST("/api/sync"));
 }
+
+export type Session = components["schemas"]["SessionOut"];
+export type SessionDetail = components["schemas"]["SessionDetailOut"];
+export type Block = components["schemas"]["BlockOut"];
+
+export const SESSION_PAGE_SIZE = 40;
+
+export async function getSessions(f: Filters, q: string, cursor?: string) {
+  return unwrap(await api.GET("/api/sessions", {
+    params: { query: { ...toQuery(f), q: q || undefined, cursor, limit: SESSION_PAGE_SIZE } },
+  }));
+}
+
+export async function getSession(id: string) {
+  return unwrap(await api.GET("/api/sessions/{session_id}", { params: { path: { session_id: id } } }));
+}
+
+export async function getBlocks(f: Filters) {
+  return unwrap(await api.GET("/api/blocks", { params: { query: toQuery(f) } }));
+}
+
+export async function getSessionFacets() {
+  return unwrap(await api.GET("/api/session-facets"));
+}

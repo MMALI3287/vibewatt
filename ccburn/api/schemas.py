@@ -67,10 +67,41 @@ class SessionOut(BaseModel):
     tokens: int
     cost: float
     harvested: bool
+    cursor: str | None = None
+    unpriced_turns: int = 0
+    context_used: int | None = None
+    context_max: int | None = None
+
+
+class SessionFacetsOut(BaseModel):
+    sources: list[str]
+    projects: list[str]
+    models: list[str]
+
+
+class TurnOut(BaseModel):
+    msg_id: str
+    request_id: str
+    ts: str
+    day: str
+    source: str
+    project: str
+    model: str
+    input: int
+    cache_5m: int
+    cache_1h: int
+    cache_read: int
+    output: int
+    thinking: int
+    web_search: int
+    sidechain: int
+    fast: int
+    geo: str | None
+    cost: float | None
 
 
 class SessionDetailOut(SessionOut):
-    turns: list[dict]
+    turns: list[TurnOut]
 
 
 class BlockOut(BaseModel):

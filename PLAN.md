@@ -381,6 +381,8 @@ Each phase is one session, one PR, one Gate.
 **Gate:** `cd web && npm run build && npm run test` passes; Playwright check asserts zero horizontal overflow at 1440/1024/768/390px and that reloading a filtered URL restores the same view.
 
 ### Phase 4 — Core views
+**Status:** implemented and verified on 2026-09-19. Independent review found no
+remaining correctness gaps. See `docs/PHASE-4.md` for validation and replacements.
 **Do:** Sessions (infinite scroll, search, detail modal at `/sessions/:id`), Projects (drill-down + breadcrumbs), Models, heatmap with metric switch, hour-of-day, blocks.
 **Gate:** Playwright drives filter changes and asserts the KPI row recomputes; session detail deep-links and the back button closes the modal.
 
@@ -479,3 +481,6 @@ Append here rather than widening a phase.
   `build_report`), so a filtered view cannot include days whose logs retention
   deleted. The UI says so. Storing history per source/project/model would lift
   this.
+- Phase 4's Recharts/TanStack Table build exceeds Vite's 500 kB chunk warning.
+  Split route/chart bundles during Phase 7 packaging and polish. npm also reports
+  7 audit findings; dependency upgrades need a separate compatibility check.

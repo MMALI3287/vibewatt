@@ -66,8 +66,12 @@ export function useFilters(): [Filters, (patch: Partial<Filters>) => void] {
   const [params, setParams] = useSearchParams();
   const filters = useMemo(() => parseFilters(params), [params]);
   const update = useCallback(
-    (patch: Partial<Filters>) => setParams(serializeFilters({ ...filters, ...patch })),
-    [filters, setParams],
+    (patch: Partial<Filters>) => {
+      const next = serializeFilters({ ...filters, ...patch });
+      if (params.get("q")) next.set("q", params.get("q")!);
+      setParams(next);
+    },
+    [filters, params, setParams],
   );
   return [filters, update];
 }
