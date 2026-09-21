@@ -4,6 +4,57 @@
  */
 
 export interface paths {
+    "/api/analysis": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Findings */
+        post: operations["findings_api_analysis_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Findings */
+        get: operations["findings_api_findings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/findings/{finding_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dismiss Finding */
+        post: operations["dismiss_finding_api_findings__finding_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/summary": {
         parameters: {
             query?: never;
@@ -314,6 +365,15 @@ export interface components {
             /** Projected Cost Usd */
             projected_cost_usd: number;
         };
+        /** AnalysisOut */
+        AnalysisOut: {
+            /** Findings */
+            findings: components["schemas"]["FindingOut"][];
+            /** Notes */
+            notes: string[];
+            /** Analyzed At */
+            analyzed_at: string;
+        };
         /** BlockOut */
         BlockOut: {
             /** Start */
@@ -351,6 +411,60 @@ export interface components {
             web_searches: number;
             /** Cost Usd */
             cost_usd: number;
+        };
+        /** DismissFindingIn */
+        DismissFindingIn: {
+            /**
+             * Dismissed
+             * @default true
+             */
+            dismissed: boolean;
+        };
+        /** DismissFindingOut */
+        DismissFindingOut: {
+            /** Id */
+            id: string;
+            /** Dismissed */
+            dismissed: boolean;
+        };
+        /** FindingOut */
+        FindingOut: {
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "anomaly" | "cache" | "tip" | "waste" | "peak" | "context";
+            /** Rule */
+            rule: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "info" | "warning" | "urgent";
+            /** Subject */
+            subject: string;
+            /** Day */
+            day: string | null;
+            /** Title */
+            title: string;
+            /** Detail */
+            detail: string;
+            /** Coverage */
+            coverage: string;
+            /** Session Id */
+            session_id: string | null;
+            /** Savings Usd */
+            savings_usd: number | null;
+            /** Metrics */
+            metrics: {
+                [key: string]: number | string | null;
+            };
+            /** Dismissed */
+            dismissed: boolean;
+            /** Created At */
+            created_at: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -595,6 +709,119 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    findings_api_analysis_post: {
+        parameters: {
+            query?: {
+                kind?: ("anomaly" | "cache" | "tip" | "waste" | "peak" | "context") | null;
+                severity?: ("info" | "warning" | "urgent") | null;
+                include_dismissed?: boolean;
+                from?: string | null;
+                to?: string | null;
+                source?: string;
+                project?: string | null;
+                model?: string | null;
+                metric?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    findings_api_findings_get: {
+        parameters: {
+            query?: {
+                kind?: ("anomaly" | "cache" | "tip" | "waste" | "peak" | "context") | null;
+                severity?: ("info" | "warning" | "urgent") | null;
+                include_dismissed?: boolean;
+                from?: string | null;
+                to?: string | null;
+                source?: string;
+                project?: string | null;
+                model?: string | null;
+                metric?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_finding_api_findings__finding_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                finding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DismissFindingIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DismissFindingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     summary_api_summary_get: {
         parameters: {
             query?: {

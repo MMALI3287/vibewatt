@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
+from ..analysis.models import Kind, Severity
+
 
 class BucketOut(BaseModel):
     responses: int
@@ -134,3 +136,35 @@ class SyncResultOut(BaseModel):
 class HarvestResultOut(BaseModel):
     written: int
     skipped: int
+
+
+class FindingOut(BaseModel):
+    id: str
+    kind: Kind
+    rule: str
+    severity: Severity
+    subject: str
+    day: str | None
+    title: str
+    detail: str
+    coverage: str
+    session_id: str | None
+    savings_usd: float | None
+    metrics: dict[str, float | str | None]
+    dismissed: bool
+    created_at: str
+
+
+class AnalysisOut(BaseModel):
+    findings: list[FindingOut]
+    notes: list[str]
+    analyzed_at: str
+
+
+class DismissFindingIn(BaseModel):
+    dismissed: bool = True
+
+
+class DismissFindingOut(BaseModel):
+    id: str
+    dismissed: bool

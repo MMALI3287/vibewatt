@@ -22,7 +22,7 @@ from pathlib import Path
 
 from .config import data_dir
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -146,10 +146,31 @@ def _v3_key_quota_samples_and_resync(conn) -> None:
     conn.executescript("\n".join(steps))
 
 
+def _v4_analysis(conn) -> None:
+    conn.executescript("""
+    CREATE TABLE IF NOT EXISTS findings (
+      id TEXT PRIMARY KEY, scope TEXT NOT NULL, kind TEXT NOT NULL,
+      severity TEXT NOT NULL, day TEXT, subject TEXT NOT NULL,
+      detail_json TEXT NOT NULL, created_at TEXT NOT NULL,
+      dismissed INTEGER NOT NULL DEFAULT 0, active INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE INDEX IF NOT EXISTS findings_scope ON findings(scope, active);
+    CREATE TABLE IF NOT EXISTS tool_reads (
+      session TEXT NOT NULL, tool_id TEXT NOT NULL, ts TEXT NOT NULL,
+      source TEXT NOT NULL, project TEXT NOT NULL, model TEXT NOT NULL,
+      path_hash TEXT NOT NULL, PRIMARY KEY(session, tool_id)
+    );
+    CREATE TABLE IF NOT EXISTS tool_read_files (
+      path TEXT PRIMARY KEY, mtime REAL NOT NULL, size INTEGER NOT NULL
+    );
+    """)
+
+
 # Forward-only. Append a step and bump SCHEMA_VERSION; never drop a user's table.
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _v2_files_and_quota_samples,
     3: _v3_key_quota_samples_and_resync,
+    4: _v4_analysis,
 }
 assert max(MIGRATIONS) == SCHEMA_VERSION
 
@@ -252,12 +273,29 @@ def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of) -> SyncResult:
         conn.execute("INSERT OR REPLACE INTO meta VALUES ('sync_tz', ?)", (tz_id,))
     known = {r["path"]: (r["mtime"], r["size"])
              for r in conn.execute("SELECT path, mtime, size FROM files")}
+    # Separate checkpoints backfill metadata once without deleting usage history
+    # or invalidating the existing incremental usage cache.
+    from .ingest.tool_reads import read_tools
+
+    reads_known = {r["path"]: (r["mtime"], r["size"])
+                   for r in conn.execute("SELECT * FROM tool_read_files")}
     changed: list[tuple[str, Path, os.stat_result]] = []
     for source, path in files:
         try:
             st = path.stat()
         except OSError:
             continue
+        if reads_known.get(str(path)) != (st.st_mtime, st.st_size):
+            try:
+                reads = list(read_tools(source, path))
+            except OSError:
+                pass
+            else:
+                conn.executemany(
+                    "INSERT OR IGNORE INTO tool_reads VALUES "
+                    "(:session, :tool_id, :ts, :source, :project, :model, :path_hash)", reads)
+                conn.execute("INSERT OR REPLACE INTO tool_read_files VALUES (?,?,?)",
+                             (str(path), st.st_mtime, st.st_size))
         if known.get(str(path)) == (st.st_mtime, st.st_size):
             result.skipped += 1
         else:
@@ -538,3 +576,25 @@ def summary(conn) -> dict:
     last = one("SELECT value FROM meta WHERE key='last_harvest'")
     return {"turns": turns, "cloud": cloud, "cloud_by_surface": by_surface,
             "prompts": prompts, "last_harvest": last.get("value")}
+
+
+def save_findings(conn: sqlite3.Connection, scope: str, findings: list[dict]) -> list[dict]:
+    """Replace the active snapshot while keeping history and user dismissals."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute("UPDATE findings SET active = 0 WHERE scope = ?", (scope,))
+    for finding in findings:
+        conn.execute(
+            "INSERT INTO findings (id, scope, kind, severity, day, subject, detail_json, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+            "severity=excluded.severity, day=excluded.day, detail_json=excluded.detail_json, active=1",
+            (finding["id"], scope, finding["kind"], finding["severity"], finding["day"],
+             finding["subject"], json.dumps(finding), now),
+        )
+    rows = conn.execute("SELECT * FROM findings WHERE scope = ? AND active = 1", (scope,))
+    return [dict(json.loads(r["detail_json"]), dismissed=bool(r["dismissed"]), created_at=r["created_at"])
+            for r in rows]
+
+
+def dismiss_finding(conn: sqlite3.Connection, finding_id: str, dismissed: bool) -> bool:
+    result = conn.execute("UPDATE findings SET dismissed = ? WHERE id = ?", (int(dismissed), finding_id))
+    return result.rowcount > 0
