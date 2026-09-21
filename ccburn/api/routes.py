@@ -1,5 +1,4 @@
-"""Every endpoint in PLAN.md section 5, minus /api/findings and /api/wrapped
-(deferred to the phases that build the analysis engine and Wrapped)."""
+"""API endpoints; Wrapped remains deferred to Phase 6."""
 
 from __future__ import annotations
 
@@ -10,10 +9,42 @@ from fastapi.responses import PlainTextResponse
 
 from .. import cli as climod
 from .. import store
+from ..analysis import analyze
+from ..analysis.models import Kind, Severity
 from . import schemas
 from .dependencies import Filters, get_filters
 
 router = APIRouter(prefix="/api")
+
+
+@router.get("/findings", response_model=schemas.AnalysisOut)
+@router.post("/analysis", response_model=schemas.AnalysisOut)
+def findings(
+    request: Request, filters: Filters = Depends(get_filters),
+    kind: Kind | None = None, severity: Severity | None = None,
+    include_dismissed: bool = False,
+):
+    if filters.date_from and filters.date_to and filters.date_from > filters.date_to:
+        raise HTTPException(400, "from must not be after to")
+    with store.connect() as conn:
+        result = analyze(
+            conn, request.app.state.tz, date_from=filters.date_from, date_to=filters.date_to,
+            source=filters.source, project=filters.project, model=filters.model,
+            overrides=request.app.state.cfg.get("pricing_overrides"),
+        )
+    result["findings"] = [f for f in result["findings"]
+                          if (include_dismissed or not f["dismissed"])
+                          and (not kind or f["kind"] == kind)
+                          and (not severity or f["severity"] == severity)]
+    return result
+
+
+@router.post("/findings/{finding_id}/dismiss", response_model=schemas.DismissFindingOut)
+def dismiss_finding(finding_id: str, body: schemas.DismissFindingIn):
+    with store.connect() as conn:
+        if not store.dismiss_finding(conn, finding_id, body.dismissed):
+            raise HTTPException(404, "finding not found")
+    return schemas.DismissFindingOut(id=finding_id, dismissed=body.dismissed)
 
 
 def _report(request: Request, filters: Filters):

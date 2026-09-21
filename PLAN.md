@@ -387,6 +387,10 @@ remaining correctness gaps. See `docs/PHASE-4.md` for validation and replacement
 **Gate:** Playwright drives filter changes and asserts the KPI row recomputes; session detail deep-links and the back button closes the modal.
 
 ### Phase 5 — Analysis engine
+**Status:** implemented and verified on 2026-09-21. Phase Gate: 40 passing
+tests. Independent review found no remaining correctness gaps.
+**Implementation notes:** see `docs/PHASE-5.md` for rule thresholds, metadata
+backfill and the approved local-context limitation.
 **Do:** `ccburn/analysis/` implementing 7.4, 7.6, 7.7, 7.9, 7.10, 7.11. Write to `findings`. Analysis page with accordions per kind, severity badges, dismiss.
 **Out of scope:** the AI summary and service status.
 **Gate:** `uv run pytest -q tests/test_analysis.py` — every rule has a triggering and a non-triggering fixture.
@@ -440,8 +444,9 @@ Append here rather than widening a phase.
 - Stored `turns.cost` is computed at sync time. Incremental sync skips unchanged
   files, so a pricing-table or `pricing_overrides` change does not reprice old
   rows. Needs a `ccburn sync --full` or a reprice pass keyed on the pricing version.
-- `findings` is listed under "new in phase 1" in section 4 but only Phase 5 uses
-  it. Create it in that phase's migration.
+- Resolved in Phase 5: `findings` (listed under "new in phase 1" in section 4)
+  is created by the schema v4 migration. This replaces the earlier deferral
+  because the analysis engine now persists findings.
 - Pre-existing lint debt outside the Phase 1 diff: 23 `ruff check` errors
   (cli.py, doctor.py, dashboard.py, quota.py, sources.py), and `store.py` was
   already unformatted before Phase 1.
@@ -484,3 +489,6 @@ Append here rather than widening a phase.
 - Phase 4's Recharts/TanStack Table build exceeds Vite's 500 kB chunk warning.
   Split route/chart bundles during Phase 7 packaging and polish. npm also reports
   7 audit findings; dependency upgrades need a separate compatibility check.
+- Phase 5: local context percentages need a trustworthy per-session context
+  snapshot and maximum. Rate-limit blocks cannot supply that denominator;
+  local context is explicitly unavailable while harvested nudges are supported.
