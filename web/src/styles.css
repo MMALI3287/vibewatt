@@ -134,3 +134,22 @@ h1 { margin: 0; font-size: 24px; }
 .finding-metrics > div { min-width: 0; }
 .finding-metrics dt { font-size: 0.8rem; text-transform: capitalize; }
 .finding-metrics dd { margin: 0.25rem 0; font-variant-numeric: tabular-nums; }
+
+/* Phase 6: independent panels and year review use the shared theme tokens. */
+.wrapped-page, .phase6-panels { display: grid; gap: 16px; min-width: 0; }
+.wrapped-heading, .phase6-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.wrapped-heading { justify-content: space-between; }
+.wrapped-heading label { display: flex; align-items: center; gap: 8px; }
+.wrapped-heading input { width: 7em; }
+.wrapped-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 16px; }
+.wrapped-grid > *, .phase6-panels > * { min-width: 0; }
+.wrapped-page p, .phase6-panels p, .phase6-panels h3 { overflow-wrap: anywhere; }
+.wrapped-facts { display: grid; gap: 12px; }
+.wrapped-facts div { min-width: 0; }
+.wrapped-facts dt { color: var(--ts); }
+.wrapped-facts dd { margin: 4px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.phase6-panels textarea { display: block; width: 100%; min-height: 180px; resize: vertical; margin: 12px 0; border: 1px solid var(--bd); border-radius: 6px; background: var(--s1); color: var(--tp); padding: 10px; font: inherit; }
+.phase6-copy { white-space: pre-wrap; overflow-wrap: anywhere; }
+.phase6-panel summary { font-weight: 600; }
+.phase6-panel h3 { font-size: 14px; }
+.phase6-status { font-size: 13px; }

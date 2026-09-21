@@ -396,6 +396,9 @@ backfill and the approved local-context limitation.
 **Gate:** `uv run pytest -q tests/test_analysis.py` — every rule has a triggering and a non-triggering fixture.
 
 ### Phase 6 — Wrapped, alerts, AI summary, status
+**Status:** implemented and verified on 2026-09-21. Phase Gate: 25 passing
+tests plus 30 passing browser checks. Independent review found no remaining
+correctness gaps. See `docs/PHASE-6.md` for coverage, bounds and validation.
 **Do:** 7.3, 7.5, 7.8, 7.12, 7.13.
 **Gate:** Wrapped snapshot test; alert fires once not per sample; AI summary makes no network call when disabled; dashboard renders with the status fetch stubbed to fail.
 
