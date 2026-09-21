@@ -168,3 +168,85 @@ class DismissFindingIn(BaseModel):
 class DismissFindingOut(BaseModel):
     id: str
     dismissed: bool
+
+
+class WrappedProjectOut(BaseModel):
+    name: str
+    cost_usd: float
+    tokens: int
+
+
+class WrappedModelMonthOut(BaseModel):
+    month: str
+    model: str
+    cost_usd: float
+    tokens: int
+
+
+class WrappedSessionOut(BaseModel):
+    id: str
+    title: str
+    cost_usd: float
+    tokens: int
+    harvested: bool
+
+
+class WrappedOut(BaseModel):
+    year: int
+    timezone: str
+    local_summary: SummaryOut
+    stored_cost_usd: float
+    harvested_cost_usd: float
+    stored_tokens: int
+    stored_sessions: int
+    unpriced_turns: int
+    annual_plan_usd: float | None
+    api_equivalent_multiple: float | None
+    busiest_day: str | None
+    busiest_hour: int | None
+    longest_streak: int
+    top_projects: list[WrappedProjectOut]
+    model_months: list[WrappedModelMonthOut]
+    biggest_session: WrappedSessionOut | None
+    cache_savings_usd: float | None
+    notes: list[str]
+
+
+class AlertOut(BaseModel):
+    id: str
+    kind: str
+    title: str
+    detail: str
+    created_at: str
+
+
+class AlertBlockOut(BaseModel):
+    tokens_per_minute: float
+    cost_per_minute: float
+
+
+class AlertsOut(BaseModel):
+    alerts: list[AlertOut]
+    new_count: int
+    active_block: AlertBlockOut | None
+    notes: list[str]
+
+
+class WeeklySummaryOut(BaseModel):
+    status: str
+    text: str | None
+    detail: str
+    start: str | None
+    end: str | None
+
+
+class ServiceStatusOut(BaseModel):
+    indicator: str
+    description: str
+    url: str
+
+
+class ConciergeOut(BaseModel):
+    project: str
+    text: str
+    notes: list[str]

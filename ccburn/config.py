@@ -34,6 +34,12 @@ DEFAULTS: dict[str, Any] = {
     "project_aliases": {},          # {"-home-user-api": "API"}
     "quota": True,                  # read account-level plan utilization
     "history": True,                # persist rollups so pruning cannot erase them
+    "ai_summary": {
+        "enabled": False,
+        "model": "claude-haiku-4-5",
+        "include_project_names": False,
+    },
+    "project_paths": {},
 }
 
 

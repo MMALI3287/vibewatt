@@ -69,6 +69,7 @@ export function useFilters(): [Filters, (patch: Partial<Filters>) => void] {
     (patch: Partial<Filters>) => {
       const next = serializeFilters({ ...filters, ...patch });
       if (params.get("q")) next.set("q", params.get("q")!);
+      if (params.get("year")) next.set("year", params.get("year")!);
       setParams(next);
     },
     [filters, params, setParams],
