@@ -1,8 +1,9 @@
-"""API endpoints; Wrapped remains deferred to Phase 6."""
+"""Typed API endpoints shared by the dashboard."""
 
 from __future__ import annotations
 
 import json as jsonlib
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
@@ -15,6 +16,51 @@ from . import schemas
 from .dependencies import Filters, get_filters
 
 router = APIRouter(prefix="/api")
+
+
+@router.get("/wrapped", response_model=schemas.WrappedOut)
+def wrapped(request: Request, year: int | None = Query(None, ge=1, le=9998),
+            filters: Filters = Depends(get_filters)):
+    from ..analysis.wrapped import build
+
+    with store.connect() as conn:
+        return build(conn, request.app.state.cfg, request.app.state.tz,
+                     year or datetime.now(request.app.state.tz).year,
+                     source=filters.source, project=filters.project, model=filters.model)
+
+
+@router.get("/alerts", response_model=schemas.AlertsOut)
+def alerts(request: Request):
+    from ..analysis.alerts import evaluate
+
+    cfg = request.app.state.cfg
+    with store.connect() as conn:
+        return evaluate(conn, request.app.state.tz, overrides=cfg.get("pricing_overrides"),
+                        session_hours=cfg.get("session_length_hours", 5))
+
+
+@router.get("/status", response_model=schemas.ServiceStatusOut | None)
+def service_status(request: Request):
+    from ..service_status import read
+
+    if request.app.state.cfg.get("offline"):
+        return None
+    return read()
+
+
+@router.post("/weekly-summary", response_model=schemas.WeeklySummaryOut)
+def weekly_summary(request: Request):
+    from ..weekly import generate
+
+    return generate(request.app.state.cfg, request.app.state.tz)
+
+
+@router.get("/concierge", response_model=schemas.ConciergeOut)
+def concierge(request: Request, project: str = Query(..., min_length=1, max_length=500)):
+    from ..concierge import build
+
+    with store.connect() as conn:
+        return build(conn, request.app.state.cfg, project)
 
 
 @router.get("/findings", response_model=schemas.AnalysisOut)

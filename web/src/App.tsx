@@ -7,6 +7,8 @@ import { Placeholder } from "./pages/Placeholder";
 import { Sessions, SessionModal } from "./pages/Sessions";
 import { Breakdown } from "./pages/Breakdown";
 import { Analysis } from "./pages/Analysis";
+import { Wrapped } from "./pages/Wrapped";
+import { Phase6Panels } from "./components/Phase6Panels";
 
 export function App() {
   const location = useLocation();
@@ -24,13 +26,14 @@ export function App() {
           <Route path="/projects" element={<Breakdown dimension="project" />} />
           <Route path="/models" element={<Breakdown dimension="model" />} />
           <Route path="/analysis" element={<Analysis />} />
-          <Route path="/wrapped" element={<Placeholder title="Wrapped" />} />
+          <Route path="/wrapped" element={<Wrapped />} />
           <Route path="*" element={<Placeholder title="Not found" />} />
         </Routes>
         <Routes>
           <Route path="/sessions/:id" element={<SessionModal hasBackground={Boolean(background)} />} />
           <Route path="*" element={null} />
         </Routes>
+        <Phase6Panels />
       </main>
       <Footer />
     </div>

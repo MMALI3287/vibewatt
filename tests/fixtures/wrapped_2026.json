@@ -1,0 +1,193 @@
+{
+  "year": 2026,
+  "timezone": "UTC",
+  "local_summary": {
+    "total": {
+      "responses": 3,
+      "input": 60,
+      "cache_write_5m": 0,
+      "cache_write_1h": 0,
+      "cache_read": 0,
+      "output": 15,
+      "thinking": 0,
+      "web_searches": 0,
+      "cost_usd": 0.000675
+    },
+    "by_day": {
+      "2026-09-15": {
+        "responses": 3,
+        "input": 60,
+        "cache_write_5m": 0,
+        "cache_write_1h": 0,
+        "cache_read": 0,
+        "output": 15,
+        "thinking": 0,
+        "web_searches": 0,
+        "cost_usd": 0.000675
+      }
+    },
+    "by_model": {
+      "claude-opus-5": {
+        "responses": 3,
+        "input": 60,
+        "cache_write_5m": 0,
+        "cache_write_1h": 0,
+        "cache_read": 0,
+        "output": 15,
+        "thinking": 0,
+        "web_searches": 0,
+        "cost_usd": 0.000675
+      }
+    },
+    "by_source": {
+      "claude-code": {
+        "responses": 2,
+        "input": 30,
+        "cache_write_5m": 0,
+        "cache_write_1h": 0,
+        "cache_read": 0,
+        "output": 10,
+        "thinking": 0,
+        "web_searches": 0,
+        "cost_usd": 0.0004
+      },
+      "cowork": {
+        "responses": 1,
+        "input": 30,
+        "cache_write_5m": 0,
+        "cache_write_1h": 0,
+        "cache_read": 0,
+        "output": 5,
+        "thinking": 0,
+        "web_searches": 0,
+        "cost_usd": 0.000275
+      }
+    },
+    "by_project": {
+      "demo": {
+        "responses": 2,
+        "input": 30,
+        "cache_write_5m": 0,
+        "cache_write_1h": 0,
+        "cache_read": 0,
+        "output": 10,
+        "thinking": 0,
+        "web_searches": 0,
+        "cost_usd": 0.0004
+      },
+      "space": {
+        "responses": 1,
+        "input": 30,
+        "cache_write_5m": 0,
+        "cache_write_1h": 0,
+        "cache_read": 0,
+        "output": 5,
+        "thinking": 0,
+        "web_searches": 0,
+        "cost_usd": 0.000275
+      }
+    },
+    "by_day_model": {
+      "2026-09-15|claude-opus-5": {
+        "responses": 3,
+        "input": 60,
+        "cache_write_5m": 0,
+        "cache_write_1h": 0,
+        "cache_read": 0,
+        "output": 15,
+        "thinking": 0,
+        "web_searches": 0,
+        "cost_usd": 0.000675
+      }
+    },
+    "by_hour": {
+      "2": {
+        "responses": 1,
+        "input": 30,
+        "cache_write_5m": 0,
+        "cache_write_1h": 0,
+        "cache_read": 0,
+        "output": 5,
+        "thinking": 0,
+        "web_searches": 0,
+        "cost_usd": 0.000275
+      },
+      "20": {
+        "responses": 1,
+        "input": 10,
+        "cache_write_5m": 0,
+        "cache_write_1h": 0,
+        "cache_read": 0,
+        "output": 5,
+        "thinking": 0,
+        "web_searches": 0,
+        "cost_usd": 0.000175
+      },
+      "21": {
+        "responses": 1,
+        "input": 20,
+        "cache_write_5m": 0,
+        "cache_write_1h": 0,
+        "cache_read": 0,
+        "output": 5,
+        "thinking": 0,
+        "web_searches": 0,
+        "cost_usd": 0.000225
+      }
+    },
+    "sessions": 2,
+    "unknown_models": [],
+    "restored_days": [],
+    "cache_hit_rate": 0.0
+  },
+  "stored_cost_usd": 12.346353,
+  "harvested_cost_usd": 12.345678,
+  "stored_tokens": 225,
+  "stored_sessions": 3,
+  "unpriced_turns": 0,
+  "annual_plan_usd": 240.0,
+  "api_equivalent_multiple": 0.05144313749999999,
+  "busiest_day": "2026-09-16",
+  "busiest_hour": 2,
+  "longest_streak": 2,
+  "top_projects": [
+    {
+      "name": "-",
+      "cost_usd": 12.345678,
+      "tokens": 150
+    },
+    {
+      "name": "demo",
+      "cost_usd": 0.00039999999999999996,
+      "tokens": 40
+    },
+    {
+      "name": "space",
+      "cost_usd": 0.000275,
+      "tokens": 35
+    }
+  ],
+  "model_months": [
+    {
+      "month": "2026-09",
+      "model": "claude-opus-5",
+      "cost_usd": 12.346352999999999,
+      "tokens": 225
+    }
+  ],
+  "biggest_session": {
+    "id": "cloud-year",
+    "title": "Cloud review",
+    "cost_usd": 12.345678,
+    "tokens": 150,
+    "harvested": true
+  },
+  "cache_savings_usd": 0.0,
+  "notes": [
+    "Live-log totals match /api/summary for this calendar year. Retained-store totals are separate and require Sync.",
+    "Stored totals include retained local turns and non-overlapping harvested sessions. They are not account-wide.",
+    "Busiest and biggest mean most tokens. Hour and cache savings cover local turns only; cloud usage is attributed to its start day.",
+    "Cloud API costs are unchanged. Unknown local costs are excluded, not priced at zero.",
+    "The API-equivalent multiple uses 12 months at the configured monthly plan price, not actual subscription payments."
+  ]
+}

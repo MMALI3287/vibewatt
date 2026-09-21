@@ -4,6 +4,91 @@
  */
 
 export interface paths {
+    "/api/wrapped": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Wrapped */
+        get: operations["wrapped_api_wrapped_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Alerts */
+        get: operations["alerts_api_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Service Status */
+        get: operations["service_status_api_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/weekly-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Weekly Summary */
+        post: operations["weekly_summary_api_weekly_summary_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/concierge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Concierge */
+        get: operations["concierge_api_concierge_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/analysis": {
         parameters: {
             query?: never;
@@ -365,6 +450,36 @@ export interface components {
             /** Projected Cost Usd */
             projected_cost_usd: number;
         };
+        /** AlertBlockOut */
+        AlertBlockOut: {
+            /** Tokens Per Minute */
+            tokens_per_minute: number;
+            /** Cost Per Minute */
+            cost_per_minute: number;
+        };
+        /** AlertOut */
+        AlertOut: {
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Title */
+            title: string;
+            /** Detail */
+            detail: string;
+            /** Created At */
+            created_at: string;
+        };
+        /** AlertsOut */
+        AlertsOut: {
+            /** Alerts */
+            alerts: components["schemas"]["AlertOut"][];
+            /** New Count */
+            new_count: number;
+            active_block: components["schemas"]["AlertBlockOut"] | null;
+            /** Notes */
+            notes: string[];
+        };
         /** AnalysisOut */
         AnalysisOut: {
             /** Findings */
@@ -411,6 +526,15 @@ export interface components {
             web_searches: number;
             /** Cost Usd */
             cost_usd: number;
+        };
+        /** ConciergeOut */
+        ConciergeOut: {
+            /** Project */
+            project: string;
+            /** Text */
+            text: string;
+            /** Notes */
+            notes: string[];
         };
         /** DismissFindingIn */
         DismissFindingIn: {
@@ -509,6 +633,15 @@ export interface components {
             fetched_at: string;
             /** Windows */
             windows: components["schemas"]["WindowOut"][];
+        };
+        /** ServiceStatusOut */
+        ServiceStatusOut: {
+            /** Indicator */
+            indicator: string;
+            /** Description */
+            description: string;
+            /** Url */
+            url: string;
         };
         /** SessionDetailOut */
         SessionDetailOut: {
@@ -691,6 +824,19 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** WeeklySummaryOut */
+        WeeklySummaryOut: {
+            /** Status */
+            status: string;
+            /** Text */
+            text: string | null;
+            /** Detail */
+            detail: string;
+            /** Start */
+            start: string | null;
+            /** End */
+            end: string | null;
+        };
         /** WindowOut */
         WindowOut: {
             /** Label */
@@ -699,6 +845,76 @@ export interface components {
             utilization: number;
             /** Resets At */
             resets_at: string | null;
+        };
+        /** WrappedModelMonthOut */
+        WrappedModelMonthOut: {
+            /** Month */
+            month: string;
+            /** Model */
+            model: string;
+            /** Cost Usd */
+            cost_usd: number;
+            /** Tokens */
+            tokens: number;
+        };
+        /** WrappedOut */
+        WrappedOut: {
+            /** Year */
+            year: number;
+            /** Timezone */
+            timezone: string;
+            local_summary: components["schemas"]["SummaryOut"];
+            /** Stored Cost Usd */
+            stored_cost_usd: number;
+            /** Harvested Cost Usd */
+            harvested_cost_usd: number;
+            /** Stored Tokens */
+            stored_tokens: number;
+            /** Stored Sessions */
+            stored_sessions: number;
+            /** Unpriced Turns */
+            unpriced_turns: number;
+            /** Annual Plan Usd */
+            annual_plan_usd: number | null;
+            /** Api Equivalent Multiple */
+            api_equivalent_multiple: number | null;
+            /** Busiest Day */
+            busiest_day: string | null;
+            /** Busiest Hour */
+            busiest_hour: number | null;
+            /** Longest Streak */
+            longest_streak: number;
+            /** Top Projects */
+            top_projects: components["schemas"]["WrappedProjectOut"][];
+            /** Model Months */
+            model_months: components["schemas"]["WrappedModelMonthOut"][];
+            biggest_session: components["schemas"]["WrappedSessionOut"] | null;
+            /** Cache Savings Usd */
+            cache_savings_usd: number | null;
+            /** Notes */
+            notes: string[];
+        };
+        /** WrappedProjectOut */
+        WrappedProjectOut: {
+            /** Name */
+            name: string;
+            /** Cost Usd */
+            cost_usd: number;
+            /** Tokens */
+            tokens: number;
+        };
+        /** WrappedSessionOut */
+        WrappedSessionOut: {
+            /** Id */
+            id: string;
+            /** Title */
+            title: string;
+            /** Cost Usd */
+            cost_usd: number;
+            /** Tokens */
+            tokens: number;
+            /** Harvested */
+            harvested: boolean;
         };
     };
     responses: never;
@@ -709,6 +925,134 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    wrapped_api_wrapped_get: {
+        parameters: {
+            query?: {
+                year?: number | null;
+                from?: string | null;
+                to?: string | null;
+                source?: string;
+                project?: string | null;
+                model?: string | null;
+                metric?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WrappedOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    alerts_api_alerts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertsOut"];
+                };
+            };
+        };
+    };
+    service_status_api_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceStatusOut"] | null;
+                };
+            };
+        };
+    };
+    weekly_summary_api_weekly_summary_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeeklySummaryOut"];
+                };
+            };
+        };
+    };
+    concierge_api_concierge_get: {
+        parameters: {
+            query: {
+                project: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConciergeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     findings_api_analysis_post: {
         parameters: {
             query?: {

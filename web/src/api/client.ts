@@ -78,3 +78,29 @@ export async function dismissFinding(id: string, dismissed: boolean) {
     params: { path: { finding_id: id } }, body: { dismissed },
   }));
 }
+
+export type WrappedReport = components["schemas"]["WrappedOut"];
+
+export async function getWrapped(year: number | undefined, f: Filters) {
+  return unwrap(await api.GET("/api/wrapped", {
+    params: { query: { year, source: f.source, project: f.project ?? undefined, model: f.model ?? undefined } },
+  }));
+}
+
+export async function getAlerts() {
+  return unwrap(await api.GET("/api/alerts"));
+}
+
+export async function getServiceStatus() {
+  const res = await api.GET("/api/status");
+  if (!res.response.ok) throw new ApiError(`${res.response.status} ${res.response.statusText}`);
+  return res.data ?? null;
+}
+
+export async function generateWeeklySummary() {
+  return unwrap(await api.POST("/api/weekly-summary"));
+}
+
+export async function getConcierge(project: string) {
+  return unwrap(await api.GET("/api/concierge", { params: { query: { project } } }));
+}
