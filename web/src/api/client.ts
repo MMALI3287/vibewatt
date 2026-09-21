@@ -64,3 +64,17 @@ export async function getBlocks(f: Filters) {
 export async function getSessionFacets() {
   return unwrap(await api.GET("/api/session-facets"));
 }
+
+export type Finding = components["schemas"]["FindingOut"];
+
+export async function getFindings(f: Filters, includeDismissed: boolean) {
+  return unwrap(await api.GET("/api/findings", {
+    params: { query: { ...toQuery(f), include_dismissed: includeDismissed } },
+  }));
+}
+
+export async function dismissFinding(id: string, dismissed: boolean) {
+  return unwrap(await api.POST("/api/findings/{finding_id}/dismiss", {
+    params: { path: { finding_id: id } }, body: { dismissed },
+  }));
+}

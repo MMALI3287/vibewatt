@@ -24,8 +24,18 @@ def test_fresh_store_is_at_current_schema(tmp_path):
             r[0]
             for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
-        assert store.schema_version(conn) == store.SCHEMA_VERSION == 3
-    assert {"meta", "turns", "sessions", "prompts", "files", "quota_samples"} <= tables
+        assert store.schema_version(conn) == store.SCHEMA_VERSION == 4
+    assert {
+        "meta",
+        "turns",
+        "sessions",
+        "prompts",
+        "files",
+        "quota_samples",
+        "findings",
+        "tool_reads",
+        "tool_read_files",
+    } <= tables
 
 
 def test_v1_store_migrates_forward_without_losing_rows(tmp_path):

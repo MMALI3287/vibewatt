@@ -40,12 +40,17 @@ def main() -> None:
     from ccburn.aggregate import cost_of
     from ccburn.api import create_app
     from ccburn.ingest import discover
+    from ccburn.ingest.tool_reads import read_tools
 
     cfg = configmod.load()
     cfg["offline"] = True
     cfg["quota"] = False
     with store.connect() as conn:
         store.sync_files(conn, discover(cfg), timezone.utc, cost_of)
+        reads = [dict(r, session="s1", project="demo") for r in
+                 read_tools("claude-code", FIXTURES / "repeated_reads.jsonl")]
+        conn.executemany("INSERT OR IGNORE INTO tool_reads VALUES "
+                         "(:session,:tool_id,:ts,:source,:project,:model,:path_hash)", reads)
         store.upsert_cloud_sessions(conn, [{
             "id": f"cloud-{index:02d}", "title": f"Cloud session {index:02d}",
             "created_at": "2026-09-16T00:00:00Z",
@@ -57,7 +62,7 @@ def main() -> None:
             },
             "external_metadata": {
                 "usage": {"input_tokens": 100, "output_tokens": 50, "cost_usd": 1.23},
-                "context_usage": {"used_tokens": 451019, "max_tokens": 1000000},
+                "context_usage": {"used_tokens": 900000 if index == 1 else 451019, "max_tokens": 1000000},
             },
         } for index in range(45)])
     app = create_app(cfg)

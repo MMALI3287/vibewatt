@@ -6,6 +6,7 @@ import { Overview } from "./pages/Overview";
 import { Placeholder } from "./pages/Placeholder";
 import { Sessions, SessionModal } from "./pages/Sessions";
 import { Breakdown } from "./pages/Breakdown";
+import { Analysis } from "./pages/Analysis";
 
 export function App() {
   const location = useLocation();
@@ -22,7 +23,7 @@ export function App() {
           <Route path="/sessions/:id" element={<Sessions />} />
           <Route path="/projects" element={<Breakdown dimension="project" />} />
           <Route path="/models" element={<Breakdown dimension="model" />} />
-          <Route path="/analysis" element={<Placeholder title="Analysis" />} />
+          <Route path="/analysis" element={<Analysis />} />
           <Route path="/wrapped" element={<Placeholder title="Wrapped" />} />
           <Route path="*" element={<Placeholder title="Not found" />} />
         </Routes>
