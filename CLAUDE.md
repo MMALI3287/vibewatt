@@ -26,9 +26,18 @@ cd web && npm run test           # vitest
 
 These are the rules that produce wrong numbers when broken. Each one cost a real bug.
 
-- **Dedup every response on `(message.id, requestId)`.** Claude Code writes one
+- **Dedup every response, keeping the per-field maximum.** Claude Code writes one
   JSONL line per content block and repeats the whole-response `usage` on each.
-  Summing lines inflates totals ~2-3x.
+  Summing lines inflates input/output ~2.8x; keeping the first line undercounts
+  output 7.6-24%. Key on `(message.id, requestId)` (Cowork spells it `request_id`) and keep the
+  per-field maximum: the first line of a streamed response carries placeholder
+  `output_tokens`. Drop a sidechain line whose `message.id` is on a main-thread
+  line. Without a `requestId`, key on `(session, message.id, timestamp)`. The
+  result must not depend on file order. Code: `sources.dedupe()` and
+  `store.upsert_turns()`.
+- **Report numbers come from the store only.** Endpoints and CLI reports read the
+  `rollup` table; only `sync` reads logs. Never add a request path that parses
+  JSONL.
 - **Price cache writes per TTL.** `cache_creation.ephemeral_1h_input_tokens` bills
   at 2x base input; `ephemeral_5m_input_tokens` at 1.25x. Never apply one flat
   multiplier to `cache_creation_input_tokens`.

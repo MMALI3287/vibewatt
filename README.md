@@ -102,8 +102,10 @@ These are the differences that move the number, all measured on real session dat
 **1. Content-block rows are collapsed.** Claude Code writes one JSONL line per content
 block of a response, and every one of those lines repeats the same whole-response
 `usage` object. Summing the lines multiplies your token count by however many blocks
-the response had. On a real session that was a **2.8x** inflation. vibewatt keys each
-response on `(message.id, requestId)` and counts it once.
+the response had. On a real session that was a **2.8x** inflation of input and output.
+vibewatt keys each response on `(message.id, requestId)` and counts it once, keeping
+the largest value seen for each field: the first line of a streamed response carries a
+placeholder output count; keeping it undercounted output by 24% on real data.
 
 **2. Cache writes are split by TTL.** A 1-hour cache write costs 2x base input; a
 5-minute write costs 1.25x. The log reports both separately under `cache_creation`.

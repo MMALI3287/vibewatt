@@ -14,7 +14,8 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from collections.abc import Callable
+from collections import defaultdict
+from collections.abc import Callable, Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone, tzinfo
@@ -22,7 +23,7 @@ from pathlib import Path
 
 from .config import copy_sqlite, data_dir
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -171,11 +172,61 @@ def _v4_analysis(conn) -> None:
     """)
 
 
+ROLLUP_COLUMNS = """
+      hr TEXT NOT NULL, day TEXT NOT NULL, hour INTEGER,
+      source TEXT NOT NULL, project TEXT NOT NULL, model TEXT NOT NULL,
+      session TEXT NOT NULL, sidechain INTEGER NOT NULL,
+      responses INTEGER NOT NULL, input INTEGER NOT NULL, cache_5m INTEGER NOT NULL,
+      cache_1h INTEGER NOT NULL, cache_read INTEGER NOT NULL, output INTEGER NOT NULL,
+      thinking INTEGER NOT NULL, web_search INTEGER NOT NULL,
+      cost REAL, unpriced INTEGER NOT NULL, first_ts TEXT NOT NULL, last_ts TEXT NOT NULL
+"""
+
+
+def _v5_dedup_and_rollup(conn) -> None:
+    # Phase 6.5b: the per-field-maximum dedup rule, the store as the only source
+    # of report numbers plus the one-time import of the retired history.json.
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(turns)")}
+    if "version" not in cols:
+        conn.execute("ALTER TABLE turns ADD COLUMN version TEXT")
+    if "hour" not in cols:
+        conn.execute("ALTER TABLE turns ADD COLUMN hour INTEGER")
+    conn.executescript(f"""
+    CREATE INDEX IF NOT EXISTS turns_hr ON turns(substr(ts, 1, 13));
+
+    -- Every report endpoint reads this, never the logs. One row per UTC hour,
+    -- local day and hour plus (source, project, model, session, sidechain).
+    -- Blocks can be rebuilt exactly from it: a block ends on an hour boundary
+    -- and a 5 h gap cannot fall inside one hour.
+    CREATE TABLE IF NOT EXISTS rollup ({ROLLUP_COLUMNS});
+    CREATE INDEX IF NOT EXISTS rollup_day ON rollup(day);
+    CREATE INDEX IF NOT EXISTS rollup_hr ON rollup(hr);
+
+    -- Raw rows of the retired history.json. Reports add only the part by which
+    -- a day exceeds what the store holds, so an import can never double count.
+    CREATE TABLE IF NOT EXISTS history_days (
+      day TEXT NOT NULL, model TEXT NOT NULL,
+      responses INTEGER NOT NULL DEFAULT 0, input INTEGER NOT NULL DEFAULT 0,
+      cache_5m INTEGER NOT NULL DEFAULT 0, cache_1h INTEGER NOT NULL DEFAULT 0,
+      cache_read INTEGER NOT NULL DEFAULT 0, output INTEGER NOT NULL DEFAULT 0,
+      thinking INTEGER NOT NULL DEFAULT 0, web_search INTEGER NOT NULL DEFAULT 0,
+      cost REAL,
+      PRIMARY KEY (day, model)
+    );
+
+    -- Re-read every file under the new dedup rule. A changed sync_tz forces the
+    -- rebucket that fills turns.hour and a full rollup rebuild.
+    DELETE FROM files;
+    INSERT OR REPLACE INTO meta VALUES ('sync_tz', 'schema-5');
+    """)
+
+
 # Forward-only. Append a step and bump SCHEMA_VERSION; never drop a user's table.
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _v2_files_and_quota_samples,
     3: _v3_key_quota_samples_and_resync,
     4: _v4_analysis,
+    5: _v5_dedup_and_rollup,
 }
 assert max(MIGRATIONS) == SCHEMA_VERSION
 
@@ -209,21 +260,149 @@ def connect(path: Path | None = None):
         conn.close()
 
 
-def upsert_turns(conn, turns, tz, cost_of) -> int:
-    """Write parsed turns. Re-running over the same files changes nothing."""
-    rows = []
-    for t in turns:
-        rows.append((
-            t.key[0] or f"{t.session}:{t.ts.isoformat()}", t.key[1] or "",
-            t.ts.astimezone(timezone.utc).isoformat(),
-            t.ts.astimezone(tz).date().isoformat(),
-            t.source, t.project, t.session, t.model,
-            t.input, t.cache_5m, t.cache_1h, t.cache_read, t.output,
-            t.thinking, t.web_searches, int(t.sidechain), int(t.fast), t.geo,
-            cost_of(t),
+TURN_COLUMNS = (
+    "msg_id, request_id, ts, day, source, project, session, model, input, cache_5m,"
+    " cache_1h, cache_read, output, thinking, web_search, sidechain, fast, geo, cost,"
+    " version, hour"
+)
+
+
+def _row_turn(row):
+    from .sources import Turn
+
+    return Turn(
+        source=row["source"], ts=datetime.fromisoformat(row["ts"]), model=row["model"],
+        input=row["input"], cache_5m=row["cache_5m"], cache_1h=row["cache_1h"],
+        cache_read=row["cache_read"], output=row["output"], thinking=row["thinking"],
+        web_searches=row["web_search"], fast=bool(row["fast"]), geo=row["geo"],
+        sidechain=bool(row["sidechain"]), project=row["project"], session=row["session"],
+        key=(row["msg_id"], row["request_id"]), version=row["version"],
+    )
+
+
+def _hr(ts: datetime | str) -> str:
+    text = ts if isinstance(ts, str) else ts.astimezone(timezone.utc).isoformat()
+    return text[:13]
+
+
+def upsert_turns(conn, turns, tz, cost_of) -> set[str]:
+    """Merge deduped turns into the store. Returns the UTC hours touched.
+
+    Merging is order independent: a response already stored takes the
+    per-field maximum with the incoming line, a main-thread row evicts a
+    sidechain replay of the same message. A sidechain replay of a stored
+    main-thread message is ignored. A pre-6.5b row keyed without its request id
+    is absorbed by the keyed row that replaces it.
+    """
+    from .sources import merge
+
+    turns = list(turns)
+    if not turns:
+        return set()
+    conn.execute("CREATE TEMP TABLE IF NOT EXISTS incoming (msg_id TEXT PRIMARY KEY)")
+    conn.execute("DELETE FROM incoming")
+    conn.executemany("INSERT OR IGNORE INTO incoming VALUES (?)", [(t.key[0],) for t in turns])
+    stored: dict[str, list] = defaultdict(list)
+    for row in conn.execute(
+        f"SELECT {TURN_COLUMNS} FROM turns WHERE msg_id IN (SELECT msg_id FROM incoming)"
+    ):
+        stored[row["msg_id"]].append(row)
+
+    hours: set[str] = set()
+    deletes: set[tuple[str, str]] = set()
+    writes = []
+    for turn in turns:
+        merged, skip = turn, False
+        for row in stored[turn.key[0]]:
+            key = (row["msg_id"], row["request_id"])
+            if key == turn.key or (row["request_id"] == "" and turn.key[1]):
+                merged = merge(merged, _row_turn(row))
+                if key != turn.key:
+                    deletes.add(key)
+                hours.add(_hr(row["ts"]))
+            elif turn.sidechain and not row["sidechain"]:
+                skip = True
+            elif row["sidechain"] and not turn.sidechain:
+                deletes.add(key)
+                hours.add(_hr(row["ts"]))
+        if skip:
+            continue
+        local = merged.ts.astimezone(tz)
+        hours.add(_hr(merged.ts))
+        writes.append((
+            merged.key[0], merged.key[1], merged.ts.astimezone(timezone.utc).isoformat(),
+            local.date().isoformat(), merged.source, merged.project, merged.session,
+            merged.model, merged.input, merged.cache_5m, merged.cache_1h, merged.cache_read,
+            merged.output, merged.thinking, merged.web_searches, int(merged.sidechain),
+            int(merged.fast), merged.geo, cost_of(merged), merged.version, local.hour,
         ))
+    conn.executemany("DELETE FROM turns WHERE msg_id = ? AND request_id = ?", sorted(deletes))
     conn.executemany(
-        "INSERT OR REPLACE INTO turns VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+        f"INSERT OR REPLACE INTO turns ({TURN_COLUMNS}) VALUES "
+        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", writes)
+    return hours
+
+
+_ROLLUP_SELECT = """
+    SELECT substr(ts, 1, 13), day, hour, source, project, model, session, sidechain,
+      COUNT(*), SUM(input), SUM(cache_5m), SUM(cache_1h), SUM(cache_read), SUM(output),
+      SUM(thinking), SUM(web_search), SUM(cost), SUM(cost IS NULL), MIN(ts), MAX(ts)
+    FROM turns {where}
+    GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+"""
+
+
+def rebuild_rollup(conn, hours: Iterable[str] | None = None) -> None:
+    """Recompute rollup rows for the given UTC hours, or all of them."""
+    if hours is None:
+        conn.execute("DELETE FROM rollup")
+        conn.execute("INSERT INTO rollup " + _ROLLUP_SELECT.format(where=""))
+        return
+    ordered = sorted(set(hours))
+    for i in range(0, len(ordered), 500):
+        chunk = ordered[i:i + 500]
+        marks = ",".join("?" * len(chunk))
+        conn.execute(f"DELETE FROM rollup WHERE hr IN ({marks})", chunk)
+        conn.execute(
+            "INSERT INTO rollup "
+            + _ROLLUP_SELECT.format(where=f"WHERE substr(ts, 1, 13) IN ({marks})"),
+            chunk,
+        )
+
+
+def generation(conn) -> int:
+    row = conn.execute("SELECT value FROM meta WHERE key = 'generation'").fetchone()
+    return int(row[0]) if row else 0
+
+
+def import_history(conn) -> int:
+    """Copy the retired history.json into history_days, once. Returns rows read."""
+    if conn.execute("SELECT 1 FROM meta WHERE key = 'history_imported'").fetchone():
+        return 0
+    rows = []
+    try:
+        with (data_dir() / "history.json").open("r", encoding="utf-8") as fh:
+            blob = json.load(fh)
+        days = blob.get("days") if isinstance(blob, dict) else None
+    except (OSError, json.JSONDecodeError):
+        days = None
+    for key, row in (days if isinstance(days, dict) else {}).items():
+        try:
+            day, model = key.split("|", 1)
+            date.fromisoformat(day)
+            rows.append((
+                day, model, int(row.get("responses", 0)), int(row.get("input", 0)),
+                int(row.get("cache_5m", 0)), int(row.get("cache_1h", 0)),
+                int(row.get("cache_read", 0)), int(row.get("output", 0)),
+                int(row.get("thinking", 0)), int(row.get("web_searches", 0)),
+                float(row.get("cost", 0.0)),
+            ))
+        except (AttributeError, TypeError, ValueError):
+            continue
+    conn.executemany(
+        "INSERT OR REPLACE INTO history_days VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows)
+    conn.execute("INSERT OR REPLACE INTO meta VALUES ('history_imported', ?)",
+                 (datetime.now(timezone.utc).isoformat(),))
     return len(rows)
 
 
@@ -250,30 +429,39 @@ class SyncResult:
     prompts: int = 0
 
 
-def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of) -> SyncResult:
+def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of, *,
+               progress: Callable[[int, int], None] | None = None,
+               batch_files: int = 200) -> SyncResult:
     """Ingest only files whose (mtime, size) changed since the last sync.
 
     Turns from a file that later disappears stay in the store on purpose: that
-    is how history survives Claude Code pruning old transcripts.
+    is how history survives Claude Code pruning old transcripts. Files are
+    read in batches so a first sync of a large tree keeps memory bounded, and
+    `progress(done, total)` is called after each batch.
     """
     from .ingest import parse
-    from .sources import read_prompts
+    from .sources import dedupe, read_prompts
 
     result = SyncResult()
-    # turns.day is bucketed in the sync's timezone. On a change, every stored
-    # turn is re-bucketed from its UTC ts, including turns whose transcript has
-    # since been pruned, and files are forgotten so prompts are re-read too. The
-    # offset is part of the identity because zone names like "CST" are ambiguous.
+    # turns.day and turns.hour are bucketed in the sync's timezone. On a change,
+    # every stored turn is re-bucketed from its UTC ts, including turns whose
+    # transcript has since been pruned, and files are forgotten so prompts are
+    # re-read too. The offset is part of the identity because zone names like
+    # "CST" are ambiguous.
     now = datetime.now(tz)
     tz_id = f"{getattr(tz, 'key', None) or now.tzname() or tz}|{now.utcoffset()}"
     row = conn.execute("SELECT value FROM meta WHERE key = 'sync_tz'").fetchone()
-    if row is None or row[0] != tz_id:
+    full_rebuild = row is None or row[0] != tz_id
+    if full_rebuild:
         if row is not None:
+            updates = []
+            for r in conn.execute("SELECT msg_id, request_id, ts FROM turns"):
+                local = datetime.fromisoformat(r["ts"]).astimezone(tz)
+                updates.append(
+                    (local.date().isoformat(), local.hour, r["msg_id"], r["request_id"]))
             conn.executemany(
-                "UPDATE turns SET day = ? WHERE msg_id = ? AND request_id = ?",
-                [(datetime.fromisoformat(r["ts"]).astimezone(tz).date().isoformat(),
-                  r["msg_id"], r["request_id"])
-                 for r in conn.execute("SELECT msg_id, request_id, ts FROM turns")])
+                "UPDATE turns SET day = ?, hour = ? WHERE msg_id = ? AND request_id = ?",
+                updates)
         conn.execute("DELETE FROM files")
         conn.execute("INSERT OR REPLACE INTO meta VALUES ('sync_tz', ?)", (tz_id,))
     known = {r["path"]: (r["mtime"], r["size"])
@@ -305,33 +493,40 @@ def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of) -> SyncResult:
             result.skipped += 1
         else:
             changed.append((source, path, st))
-    if not changed:
-        return result
 
-    # Dedup across every changed file in one pass: the same response is
-    # replayed into several files and must only be counted once.
-    seen: set[tuple[str, str]] = set()
-    turns = []
-    per_file: list[tuple[str, float, int, int]] = []
-    for source, path, st in changed:
-        n = 0
-        for turn in parse(source, path):
-            n += 1
-            if turn.key != ("", ""):
-                if turn.key in seen:
-                    result.duplicates += 1
-                    continue
-                seen.add(turn.key)
-            turns.append(turn)
-        per_file.append((str(path), st.st_mtime, st.st_size, n))
+    hours: set[str] = set()
+    for i in range(0, len(changed), batch_files):
+        batch = changed[i:i + batch_files]
+        lines = []
+        per_file: list[tuple[str, float, int, int]] = []
+        for source, path, st in batch:
+            file_lines = list(parse(source, path))
+            lines.extend(file_lines)
+            # turn_count is responses, not lines: one response spans several lines.
+            per_file.append((str(path), st.st_mtime, st.st_size, len(dedupe(file_lines)[0])))
+        turns, dropped = dedupe(lines)
+        result.duplicates += dropped
+        result.turns += len(turns)
+        hours |= upsert_turns(conn, turns, tz, cost_of)
+        result.prompts += upsert_prompts(conn, read_prompts([(s_, p_) for s_, p_, _ in batch]))
+        stamp = datetime.now(timezone.utc).isoformat()
+        conn.executemany(
+            "INSERT OR REPLACE INTO files VALUES (?,?,?,?,?)",
+            [(path, mtime, size, stamp, n) for path, mtime, size, n in per_file])
+        result.parsed += len(batch)
+        if progress:
+            progress(result.parsed, len(changed))
 
-    result.turns = upsert_turns(conn, turns, tz, cost_of)
-    result.prompts = upsert_prompts(conn, read_prompts([(s_, p_) for s_, p_, _ in changed]))
-    now = datetime.now(timezone.utc).isoformat()
-    conn.executemany(
-        "INSERT OR REPLACE INTO files VALUES (?,?,?,?,?)",
-        [(path, mtime, size, now, n) for path, mtime, size, n in per_file])
-    result.parsed = len(changed)
+    if full_rebuild:
+        rebuild_rollup(conn)
+    elif hours:
+        rebuild_rollup(conn, hours)
+    if import_history(conn) or full_rebuild or hours:
+        # Report caches are keyed on this, so an unchanged store keeps them.
+        conn.execute("INSERT OR REPLACE INTO meta VALUES ('generation', ?)",
+                     (str(generation(conn) + 1),))
+    conn.execute("INSERT OR REPLACE INTO meta VALUES ('last_sync', ?)",
+                 (datetime.now(timezone.utc).isoformat(),))
     return result
 
 

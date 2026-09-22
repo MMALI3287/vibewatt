@@ -126,24 +126,27 @@ def run(cfg: dict, tz) -> int:
     if span > 30 and len(all_days) < span * 0.4:
         say("    note: sparse coverage over a long span is what pruned history looks like")
 
-    # --- history store -------------------------------------------------------
+    # --- the store, which keeps every turn after its log is pruned --------------
     say()
-    say("  stored history")
-    store = data_dir() / "history.json"
-    if store.exists():
-        try:
-            blob = json.loads(store.read_text(encoding="utf-8"))
-            rows = blob.get("days", {})
-            days_stored = {k.split("|", 1)[0] for k in rows}
-            say(f"    {store}")
-            say(f"    {len(rows)} row(s) covering {len(days_stored)} day(s)")
-            if days_stored:
-                say(f"    range {min(days_stored)} .. {max(days_stored)}")
-        except (OSError, json.JSONDecodeError):
-            say("    unreadable")
+    say("  store")
+    from . import store
+
+    if not store.db_path().exists():
+        say("    none yet - run 'vibewatt sync'; it keeps days from then on and cannot")
+        say("    recover pruning that happened before")
     else:
-        say("    none yet - it is written on the first run without --no-history")
-        say("    it can only preserve days from now on; it cannot recover past pruning")
+        with store.connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) n, MIN(day) lo, MAX(day) hi FROM turns").fetchone()
+            imported = conn.execute(
+                "SELECT COUNT(*) n, MIN(day) lo, MAX(day) hi FROM history_days").fetchone()
+            last = conn.execute("SELECT value FROM meta WHERE key = 'last_sync'").fetchone()
+        say(f"    {store.db_path()}")
+        say(f"    {row['n']:,} response(s)  {row['lo']} .. {row['hi']}")
+        say(f"    last sync {last[0] if last else 'never'}")
+        if imported["n"]:
+            say(f"    history.json import: {imported['n']} day/model row(s), "
+                f"{imported['lo']} .. {imported['hi']} (fills only what the store lacks)")
 
     # --- account level -------------------------------------------------------
     say()

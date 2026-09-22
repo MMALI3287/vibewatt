@@ -44,7 +44,7 @@ DEFAULTS: dict[str, Any] = {
     "pricing_overrides": {},        # {"model-id": {"input": 1.0, "output": 5.0, ...}}
     "project_aliases": {},          # {"-home-user-api": "API"}
     "quota": True,                  # read account-level plan utilization
-    "history": True,                # persist rollups so pruning cannot erase them
+    "sync_interval_seconds": 60,    # serve: background log sync; 0 disables
     "ai_summary": {
         "enabled": False,
         "model": "claude-haiku-4-5",

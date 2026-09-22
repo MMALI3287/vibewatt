@@ -10,10 +10,10 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 from . import config as configmod
-from . import history, pricing, quota, terminal
-from .aggregate import build
+from . import pricing, quota, terminal
+from .aggregate import cost_of, from_store
 from .ingest import discover
-from .sources import CLAUDE_CODE, COWORK, load
+from .sources import CLAUDE_CODE, COWORK
 
 
 def resolve_tz(name: str | None):
@@ -128,47 +128,48 @@ def statusline(report, q) -> str:
     return "  |  ".join(parts)
 
 
+def sync_store(cfg, tz, files=None, progress=None):
+    """Bring the store up to date with the logs. Returns the SyncResult."""
+    from . import store
+
+    files = discover(cfg) if files is None else files
+    overrides = cfg.get("pricing_overrides")
+    with store.connect() as conn:
+        return store.sync_files(conn, files, tz, lambda t: cost_of(t, overrides),
+                                progress=progress)
+
+
 def build_report(cfg, tz, *, source="all", date_from=None, date_to=None,
-                  project=None, model=None):
-    """The discover -> load -> aggregate -> history -> quota pipeline.
+                  project=None, model=None, refresh=False, with_quota=True, parts=None):
+    """Report numbers, always from the SQLite store.
 
     Shared by the CLI and the API so filtering logic lives in exactly one
     place. `date_from`/`date_to` are inclusive `date` objects; `project` and
-    `model` match a turn's exact project/model string.
+    `model` match a turn's exact project/model string. `refresh` syncs changed
+    log files into the store first; request handlers leave it off because the
+    server syncs in the background.
     """
-    files = discover(cfg)
-    if source != "all":
-        files = [(s, p) for s, p in files if s == source]
-    turns, duplicates = load(files)
-    if date_from:
-        turns = [t for t in turns if t.ts.astimezone(tz).date() >= date_from]
-    if date_to:
-        turns = [t for t in turns if t.ts.astimezone(tz).date() <= date_to]
-    if project:
-        turns = [t for t in turns if t.project == project]
-    if model:
-        turns = [t for t in turns if t.model == model]
+    from . import store
 
-    report = build(
-        turns, tz=tz,
-        include_sidechains=cfg.get("include_sidechains", True),
-        overrides=cfg.get("pricing_overrides"),
-        session_hours=cfg.get("session_length_hours", 5),
-    )
-
-    # History is one rollup across every source and project: restoring it into a
-    # filtered report re-adds the rows the filter removed, and merging a filtered
-    # report would overwrite the rollup with a partial view.
-    unfiltered = source == "all" and not (date_from or date_to or project or model)
-    if cfg.get("history", True) and unfiltered:
-        history.merge(report)
-        history.restore(report)
+    files: list = []
+    duplicates = 0
+    if refresh:
+        files = discover(cfg)
+        duplicates = sync_store(cfg, tz, files).duplicates
+    with store.connect() as conn:
+        report = from_store(
+            conn, tz, source=source, date_from=date_from, date_to=date_to,
+            project=project, model=model,
+            include_sidechains=cfg.get("include_sidechains", True),
+            session_hours=cfg.get("session_length_hours", 5),
+            overrides=cfg.get("pricing_overrides"), parts=parts,
+        )
 
     apply_aliases(report, cfg.get("project_aliases") or {})
     if cfg.get("mask_projects"):
         mask_projects(report)
 
-    q, quota_note = quota.read(cfg)
+    q, quota_note = quota.read(cfg) if with_quota else (None, None)
     return report, q, quota_note, duplicates, files
 
 
@@ -212,12 +213,15 @@ def harvest(args, cfg, tz) -> int:
 def sync(args, cfg, tz) -> int:
     """Parse changed local logs into the store so later queries do not re-read them."""
     from . import store
-    from .aggregate import cost_of
 
     files = discover(cfg)
-    overrides = cfg.get("pricing_overrides")
+
+    def progress(done: int, total: int) -> None:
+        if total > 200:
+            print(f"  read {done}/{total} changed file(s)", file=sys.stderr)
+
+    result = sync_store(cfg, tz, files, progress)
     with store.connect() as conn:
-        result = store.sync_files(conn, files, tz, lambda t: cost_of(t, overrides))
         info = store.summary(conn)
     print(f"  parsed {result.parsed} changed file(s), skipped {result.skipped} unchanged, "
           f"{len(files)} total")
@@ -272,7 +276,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--by-project", action="store_true")
     p.add_argument("--mask-projects", action="store_true", help="pseudonymise project names")
     p.add_argument("--no-quota", action="store_true", help="skip the account-level lookup")
-    p.add_argument("--no-history", action="store_true", help="do not read or write stored history")
     p.add_argument("--offline", action="store_true", help="never fetch pricing")
     p.add_argument("--out", metavar="PATH", help="write html/csv/json here instead of stdout")
     p.add_argument("--host", default="127.0.0.1", help="serve: bind address")
@@ -300,8 +303,6 @@ def main(argv: list[str] | None = None) -> int:
         cfg["include_sidechains"] = False
     if args.no_quota:
         cfg["quota"] = False
-    if args.no_history:
-        cfg["history"] = False
     if args.offline:
         cfg["offline"] = True
     if args.mask_projects:
@@ -358,7 +359,7 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(f"--since expects YYYY-MM-DD, got {args.since!r}")
 
     report, q, quota_note, duplicates, files = build_report(
-        cfg, tz, source=args.source, date_from=cutoff)
+        cfg, tz, source=args.source, date_from=cutoff, refresh=True)
 
     if args.command == "json":
         payload = serialize(report)
@@ -448,7 +449,8 @@ def main(argv: list[str] | None = None) -> int:
     if duplicates:
         notes.append(f"{duplicates} repeated content-block rows collapsed into their response")
     if report.restored_days:
-        notes.append(f"{len(report.restored_days)} day(s) restored from stored history")
+        notes.append(f"{len(report.restored_days)} day(s) include usage from the imported "
+                     "history.json")
     if report.unknown_models:
         notes.append("unpriced model(s): " + ", ".join(sorted(report.unknown_models)))
     if q is None and quota_note:
