@@ -21,7 +21,7 @@ def build(
     year: int,
     *,
     source: str = "all",
-    project: str | None = None,
+    project: str | list[str] | None = None,
     model: str | None = None,
 ) -> dict:
     """Preserve summary parity without treating retained/cloud usage as live logs."""
@@ -34,9 +34,11 @@ def build(
         session_hours=cfg.get("session_length_hours", 5),
         overrides=cfg.get("pricing_overrides"),
     )
-    cli.apply_aliases(report, cfg.get("project_aliases") or {})
-    if cfg.get("mask_projects"):
-        cli.mask_projects(report)
+    from ..projects import project_map, relabel_buckets
+
+    labels = project_map(conn, cfg)
+    report.by_project = relabel_buckets(report.by_project, labels)
+    wanted = None if project is None else set([project] if isinstance(project, str) else project)
     rows = []
     all_local_ids = set(report.sessions)
     for raw in conn.execute("SELECT * FROM turns ORDER BY ts, msg_id, request_id"):
@@ -47,7 +49,7 @@ def build(
             not day
             or not start.isoformat() <= day <= end.isoformat()
             or (source != "all" and row["source"] != source)
-            or (project and row["project"] != project)
+            or (wanted is not None and row["project"] not in wanted)
             or (model and row["model"] != model)
             or (row["sidechain"] and not cfg.get("include_sidechains", True))
         ):
@@ -147,14 +149,15 @@ def build(
         if isinstance(plan, (int, float)) and math.isfinite(plan) and plan > 0
         else None
     )
-    aliases = cfg.get("project_aliases") or {}
-    ranked = sorted(projects.values(), key=lambda p: (-p["tokens"], p["name"]))
-    for index, item in enumerate(ranked, 1):
-        item["name"] = (
-            f"project {index}"
-            if cfg.get("mask_projects")
-            else aliases.get(item["name"], item["name"])
-        )
+    # Aliased projects merge into one entry; the name shown is the one
+    # every other endpoint shows (A-049).
+    merged: dict[str, dict] = {}
+    for item in projects.values():
+        name = labels.get(item["name"], item["name"])
+        into = merged.setdefault(name, {**item, "name": name, "cost_usd": 0.0, "tokens": 0})
+        into["cost_usd"] += item["cost_usd"]
+        into["tokens"] += item["tokens"]
+    ranked = sorted(merged.values(), key=lambda p: (-p["tokens"], p["name"]))
     return {
         "year": year,
         "timezone": str(tz),

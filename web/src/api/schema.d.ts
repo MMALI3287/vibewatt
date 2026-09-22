@@ -361,74 +361,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/usage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Legacy Usage */
-        get: operations["legacy_usage_api_usage_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/dataset": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Legacy Dataset */
-        get: operations["legacy_dataset_api_dataset_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/index.html": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Legacy Page */
-        get: operations["legacy_page_index_html_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Legacy Page */
-        get: operations["legacy_page__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -550,6 +482,22 @@ export interface components {
             /** Notes */
             notes: string[];
         };
+        /** CountOut */
+        CountOut: {
+            /** N */
+            n: number;
+        };
+        /** CoverageOut */
+        CoverageOut: {
+            /** Sources */
+            sources: components["schemas"]["SourceCoverageOut"][];
+            /** Gaps */
+            gaps: components["schemas"]["GapOut"][];
+            /** Dropped Records */
+            dropped_records: {
+                [key: string]: number;
+            };
+        };
         /** DismissFindingIn */
         DismissFindingIn: {
             /**
@@ -604,10 +552,37 @@ export interface components {
             /** Created At */
             created_at: string;
         };
+        /** GapOut */
+        GapOut: {
+            /** Start */
+            start: string;
+            /** End */
+            end: string;
+            /** Days */
+            days: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HarvestEnvelope
+         * @description A session listing wrapped as `{"data": [...]}` or `{"ccr": ...}`.
+         */
+        HarvestEnvelope: {
+            /** Data */
+            data?: {
+                [key: string]: unknown;
+            }[] | null;
+            /** Ccr */
+            ccr?: {
+                [key: string]: unknown;
+            }[] | {
+                [key: string]: unknown;
+            } | null;
+        } & {
+            [key: string]: unknown;
         };
         /** HarvestResultOut */
         HarvestResultOut: {
@@ -615,27 +590,29 @@ export interface components {
             written: number;
             /** Skipped */
             skipped: number;
+            /**
+             * Rejected No Id
+             * @default 0
+             */
+            rejected_no_id: number;
+            /**
+             * Skipped Environment
+             * @default 0
+             */
+            skipped_environment: number;
         };
         /** HealthOut */
         HealthOut: {
-            /** Turns */
-            turns: {
-                [key: string]: unknown;
-            };
-            /** Cloud */
-            cloud: {
-                [key: string]: unknown;
-            };
+            turns: components["schemas"]["StoreTurnsOut"];
+            cloud: components["schemas"]["StoreCloudOut"];
             /** Cloud By Surface */
-            cloud_by_surface: {
-                [key: string]: unknown;
-            }[];
-            /** Prompts */
-            prompts: {
-                [key: string]: unknown;
-            };
+            cloud_by_surface: components["schemas"]["SurfaceCountOut"][];
+            prompts: components["schemas"]["CountOut"];
             /** Last Harvest */
             last_harvest: string | null;
+            /** Last Sync */
+            last_sync: string | null;
+            coverage: components["schemas"]["CoverageOut"];
             /** Note */
             note: string;
         };
@@ -761,6 +738,35 @@ export interface components {
             /** Context Max */
             context_max?: number | null;
         };
+        /** SourceCoverageOut */
+        SourceCoverageOut: {
+            /** Source */
+            source: string;
+            /** Files */
+            files: number;
+            /** First Day */
+            first_day: string | null;
+            /** Last Day */
+            last_day: string | null;
+        };
+        /** StoreCloudOut */
+        StoreCloudOut: {
+            /** N */
+            n: number;
+            /** Cost */
+            cost: number | null;
+        };
+        /** StoreTurnsOut */
+        StoreTurnsOut: {
+            /** N */
+            n: number;
+            /** Lo */
+            lo: string | null;
+            /** Hi */
+            hi: string | null;
+            /** Cost */
+            cost: number | null;
+        };
         /** SummaryOut */
         SummaryOut: {
             total: components["schemas"]["BucketOut"];
@@ -798,6 +804,15 @@ export interface components {
             cache_hit_rate: number;
             active_block?: components["schemas"]["ActiveBlockOut"] | null;
         };
+        /** SurfaceCountOut */
+        SurfaceCountOut: {
+            /** Surface */
+            surface: string | null;
+            /** N */
+            n: number;
+            /** Cost */
+            cost: number | null;
+        };
         /** SyncResultOut */
         SyncResultOut: {
             /** Parsed */
@@ -810,6 +825,11 @@ export interface components {
             duplicates: number;
             /** Prompts */
             prompts: number;
+            /**
+             * Unreadable
+             * @default 0
+             */
+            unreadable: number;
         };
         /** TurnOut */
         TurnOut: {
@@ -983,10 +1003,10 @@ export interface operations {
                 year?: number | null;
                 from?: string | null;
                 to?: string | null;
-                source?: string;
+                source?: "all" | "claude-code" | "cowork" | "web";
                 project?: string | null;
                 model?: string | null;
-                metric?: string;
+                metric?: "cost" | "tokens";
             };
             header?: never;
             path?: never;
@@ -1113,10 +1133,10 @@ export interface operations {
                 include_dismissed?: boolean;
                 from?: string | null;
                 to?: string | null;
-                source?: string;
+                source?: "all" | "claude-code" | "cowork" | "web";
                 project?: string | null;
                 model?: string | null;
-                metric?: string;
+                metric?: "cost" | "tokens";
             };
             header?: never;
             path?: never;
@@ -1152,10 +1172,10 @@ export interface operations {
                 include_dismissed?: boolean;
                 from?: string | null;
                 to?: string | null;
-                source?: string;
+                source?: "all" | "claude-code" | "cowork" | "web";
                 project?: string | null;
                 model?: string | null;
-                metric?: string;
+                metric?: "cost" | "tokens";
             };
             header?: never;
             path?: never;
@@ -1223,10 +1243,10 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: string;
+                source?: "all" | "claude-code" | "cowork" | "web";
                 project?: string | null;
                 model?: string | null;
-                metric?: string;
+                metric?: "cost" | "tokens";
             };
             header?: never;
             path?: never;
@@ -1259,10 +1279,10 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: string;
+                source?: "all" | "claude-code" | "cowork" | "web";
                 project?: string | null;
                 model?: string | null;
-                metric?: string;
+                metric?: "cost" | "tokens";
             };
             header?: never;
             path?: never;
@@ -1297,10 +1317,10 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: string;
+                source?: "all" | "claude-code" | "cowork" | "web";
                 project?: string | null;
                 model?: string | null;
-                metric?: string;
+                metric?: "cost" | "tokens";
             };
             header?: never;
             path?: never;
@@ -1335,10 +1355,10 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: string;
+                source?: "all" | "claude-code" | "cowork" | "web";
                 project?: string | null;
                 model?: string | null;
-                metric?: string;
+                metric?: "cost" | "tokens";
             };
             header?: never;
             path: {
@@ -1378,10 +1398,10 @@ export interface operations {
                 q?: string | null;
                 from?: string | null;
                 to?: string | null;
-                source?: string;
+                source?: "all" | "claude-code" | "cowork" | "web";
                 project?: string | null;
                 model?: string | null;
-                metric?: string;
+                metric?: "cost" | "tokens";
             };
             header?: never;
             path?: never;
@@ -1463,12 +1483,13 @@ export interface operations {
     blocks_api_blocks_get: {
         parameters: {
             query?: {
+                limit?: number;
                 from?: string | null;
                 to?: string | null;
-                source?: string;
+                source?: "all" | "claude-code" | "cowork" | "web";
                 project?: string | null;
                 model?: string | null;
-                metric?: string;
+                metric?: "cost" | "tokens";
             };
             header?: never;
             path?: never;
@@ -1501,10 +1522,10 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: string;
+                source?: "all" | "claude-code" | "cowork" | "web";
                 project?: string | null;
                 model?: string | null;
-                metric?: string;
+                metric?: "cost" | "tokens";
             };
             header?: never;
             path?: never;
@@ -1561,14 +1582,22 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description With `Accept: application/x-ndjson`, one `{done, total}` line per batch, then the result. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["SyncResultOut"];
+                    "application/x-ndjson": unknown;
                 };
+            };
+            /** @description A sync is already running */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -1579,7 +1608,13 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                }[] | components["schemas"]["HarvestEnvelope"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -1590,33 +1625,19 @@ export interface operations {
                     "application/json": components["schemas"]["HarvestResultOut"];
                 };
             };
-        };
-    };
-    export_api_export_get: {
-        parameters: {
-            query?: {
-                format?: string;
-                from?: string | null;
-                to?: string | null;
-                source?: string;
-                project?: string | null;
-                model?: string | null;
-                metric?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
+            /** @description Not a session listing */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": unknown;
+                content?: never;
+            };
+            /** @description Body larger than 20 MiB */
+            413: {
+                headers: {
+                    [name: string]: unknown;
                 };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -1629,82 +1650,40 @@ export interface operations {
             };
         };
     };
-    legacy_usage_api_usage_get: {
+    export_api_export_get: {
         parameters: {
-            query?: never;
+            query?: {
+                format?: "json" | "csv";
+                from?: string | null;
+                to?: string | null;
+                source?: "all" | "claude-code" | "cowork" | "web";
+                project?: string | null;
+                model?: string | null;
+                metric?: "cost" | "tokens";
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Successful Response */
+            /** @description Daily rows by model as CSV, or the summary as JSON. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": Record<string, never>;
+                    "text/csv": string;
                 };
             };
-        };
-    };
-    legacy_dataset_api_dataset_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
+            /** @description Validation Error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
-    legacy_page_index_html_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
-                };
-            };
-        };
-    };
-    legacy_page__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

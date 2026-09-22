@@ -116,11 +116,20 @@ def _load_remote_cache() -> dict | None:
         return None
 
 
+# The table is ~2 MB today. A bound before it is enabled, not after (A-102).
+REMOTE_MAX_BYTES = 16 * 1024 * 1024
+
+
 def _fetch_remote(timeout: float = 10.0) -> dict | None:
     try:
         with urllib.request.urlopen(LITELLM_URL, timeout=timeout) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
+            raw = resp.read(REMOTE_MAX_BYTES + 1)
+        if len(raw) > REMOTE_MAX_BYTES:
+            return None
+        payload = json.loads(raw.decode("utf-8"))
     except (urllib.error.URLError, OSError, json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
         return None
     path = _cache_path()
     try:

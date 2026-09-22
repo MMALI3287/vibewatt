@@ -145,12 +145,57 @@ class BlockOut(BaseModel):
     models: list[str]
 
 
+class StoreTurnsOut(BaseModel):
+    n: int
+    lo: str | None
+    hi: str | None
+    cost: float | None
+
+
+class StoreCloudOut(BaseModel):
+    n: int
+    cost: float | None
+
+
+class SurfaceCountOut(BaseModel):
+    surface: str | None
+    n: int
+    cost: float | None
+
+
+class CountOut(BaseModel):
+    n: int
+
+
+class SourceCoverageOut(BaseModel):
+    source: str
+    files: int
+    first_day: str | None
+    last_day: str | None
+
+
+class GapOut(BaseModel):
+    start: str
+    end: str
+    days: int
+
+
+class CoverageOut(BaseModel):
+    sources: list[SourceCoverageOut]
+    # Spans of 7+ days with no local turn: no activity, or logs pruned before
+    # the store existed. The store cannot tell which.
+    gaps: list[GapOut]
+    dropped_records: dict[str, int]
+
+
 class HealthOut(BaseModel):
-    turns: dict
-    cloud: dict
-    cloud_by_surface: list[dict]
-    prompts: dict
+    turns: StoreTurnsOut
+    cloud: StoreCloudOut
+    cloud_by_surface: list[SurfaceCountOut]
+    prompts: CountOut  # session titles; the name predates them
     last_harvest: str | None
+    last_sync: str | None
+    coverage: CoverageOut
     note: str
 
 
@@ -160,11 +205,34 @@ class SyncResultOut(BaseModel):
     turns: int
     duplicates: int
     prompts: int
+    unreadable: int = 0
+
+
+class HarvestEnvelope(BaseModel):
+    """A session listing wrapped as `{"data": [...]}` or `{"ccr": ...}`."""
+
+    model_config = {"extra": "allow"}
+
+    data: list[dict] | None = None
+    ccr: list[dict] | dict | None = None
+
+
+def harvest_entries(body: list[dict] | HarvestEnvelope) -> list[dict]:
+    """Session dicts from any of the accepted listing shapes."""
+    if isinstance(body, HarvestEnvelope):
+        if body.ccr is not None:
+            inner = body.ccr.get("data") if isinstance(body.ccr, dict) else body.ccr
+        else:
+            inner = body.data
+        body = inner or []
+    return [e for e in body if isinstance(e, dict)]
 
 
 class HarvestResultOut(BaseModel):
     written: int
-    skipped: int
+    skipped: int  # no usage block: an unstarted session is not free work
+    rejected_no_id: int = 0
+    skipped_environment: int = 0  # not a cloud or Cowork remote session
 
 
 class FindingOut(BaseModel):
