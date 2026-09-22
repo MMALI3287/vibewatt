@@ -921,25 +921,30 @@ audit scaffolding and dated phase notes that no longer matched the code.
   and a bundle of every local ref were kept outside the repository.
 
 ### Phase 7 — Packaging and polish
-**Status:** work in progress exists uncommitted on `feat/phase-7-packaging-polish`
-(SPA serving, build hook, packaging tests). Rebase it onto Phase 6.5g and the rename.
-**Handoff from Phase 6.5 (2026-09-22).** Start from `fix/phase-6-5g-frontend-a11y`
-(PRs #3-#10 stack onto each other; merge them in order). The uncommitted WIP in
-the main checkout predates the rename and touches three files that 6.5 changed:
-- `ccburn/api/app.py` is now `vibewatt/api/app.py`. It adds the `LocalOnly`
-  middleware (outermost; the SPA and static files must stay behind it), the
-  lifespan sync thread, the report cache and `include_in_schema=False` on the
-  legacy routes. Serve the SPA without shadowing `/api/*`. Remove `/`,
-  `/api/usage`, `/api/dataset` with `ui.py` (A-054, A-126).
-- `pyproject.toml`: the project is `vibewatt` and depends on
-  `tzdata; sys_platform == 'win32'`. Keep that marker.
-- `web/src/App.tsx`: now has the skip link, `id="main"` and the
-  `/analysis/findings/:id` modal routes.
-- `web/openapi.json` is committed and `tests/test_security_api.py` fails when it
-  drifts: after an API change run `npm run gen:api` and commit both files. Add
-  that as a CI step (the test stands in for it until then).
-- The untracked `AGENTS.md`, `.agents/`, `.codex/`, `docs/CODEX-SETUP.md`,
-  `scripts/build_hook.py` and `tests/test_packaging.py` still say `ccburn`.
+**Status (2026-09-23): in progress** on `feat/phase-7-packaging-polish`, branched
+from `master` after the 6.5 merge. The earlier uncommitted work was ported to the
+vibewatt names and committed as the branch's first commit:
+- `vibewatt/api/app.py` serves the React build from `vibewatt/static` through a
+  catch-all route that never shadows `/api/*` or `/assets/*`; it sits behind the
+  `LocalOnly` middleware. `/api/usage`, `/api/dataset` and `ui.py` are still there:
+  removing them (with the `html` command) is left to this phase (A-054, A-126).
+- `pyproject.toml` ships `vibewatt/static/**` as a build artifact and runs
+  `scripts/build_hook.py`, which refuses a release build without the React build.
+  Keep the `tzdata; sys_platform == 'win32'` marker.
+- `web/src/App.tsx` lazy-loads each view. The modal routes have their own
+  `Suspense` boundary: with one shared boundary, loading the session modal chunk
+  unmounted the page behind it and the session deep-link test hung.
+- `tests/test_packaging.py` (6) covers SPA paths, assets, API 404s and a source
+  checkout without a build.
+- Gates on the branch: pytest 266, vitest 12, Playwright 47/47 on three
+  consecutive runs. One earlier run, right after a fresh `npm run build`, failed
+  6 design checks that all pass alone: look for a cold-start race in `vite
+  preview` before adding CI.
+- `web/openapi.json` is committed; `tests/test_security_api.py` fails when it
+  drifts. After an API change run `npm run gen:api` and commit both files. Add
+  that as a CI step.
+- Agent tooling (`.claude/`, `.codex/`, `.agents/`, `docs/CODEX-SETUP.md`) is
+  local and gitignored; shared rules are in `AGENTS.md`.
 - Lint: `ruff check` reports 18 errors, all pre-existing (A-107).
 **Do:** ship `web/dist` into the wheel as `vibewatt/static`. `vibewatt serve` opens the React app. Windows path tests. Docs. Screenshots in the README.
 Added 2026-09-22 *(decided unless noted)*:
