@@ -38,8 +38,8 @@ transcripts are written at all rather than "keep forever"
 ([claude-code#23710](https://github.com/anthropics/claude-code/issues/23710)).
 
 `vibewatt doctor` tells you what your current setting is and what it is costing you.
-vibewatt's own stored history preserves days from its first run onward, but it
-cannot reach back before you installed it.
+vibewatt's store keeps every response from its first sync onward, after Claude Code
+prunes the log. It cannot reach back before you installed it.
 
 ---
 
@@ -176,8 +176,8 @@ retention setting and per-source coverage, so the cause is visible rather than
 guessed at.
 
 Shared flags: `--source {claude-code,cowork,all}`, `--since YYYY-MM-DD`, `--days N`,
-`--tz Asia/Tokyo`, `--weeks N`, `--session-hours N`, `--plan 20`, `--no-sidechains`,
-`--by-project`, `--mask-projects`, `--no-quota`, `--no-history`, `--offline`, `--no-color`.
+`--tz Asia/Tokyo`, `--day-start-hour H`, `--weeks N`, `--session-hours N`, `--plan 20`,
+`--no-sidechains`, `--by-project`, `--mask-projects`, `--no-quota`, `--offline`, `--no-color`.
 
 See [FEATURES.md](FEATURES.md) for an honest matrix of what is implemented against
 the four reference tools, including the 28 features that are not.
@@ -192,6 +192,7 @@ per project. Point `VIBEWATT_CONFIG` at a file to override.
 ```json
 {
   "timezone": "Asia/Tokyo",
+  "day_start_hour": 6,
   "session_length_hours": 5,
   "monthly_budget_usd": 200,
   "plan_usd_per_month": 20,
@@ -220,8 +221,11 @@ project names for sharing a screenshot.
 
 - **Cost is an estimate at list API rates.** On a Pro or Max subscription this is what
   the same tokens *would* have cost pay-as-you-go, not what you were billed.
-- Claude Code prunes local logs after 30 days. vibewatt's stored history covers days from
-  the first run onward; it cannot recover what was pruned before you installed it.
+- Claude Code prunes local logs after 30 days. vibewatt's store covers days from the
+  first sync onward; it cannot recover what was pruned before you installed it.
+- `day_start_hour` moves the day boundary for daily totals, streaks, the heatmap,
+  Wrapped and anomalies. With `6`, a session from 20:00 to 04:00 counts as one day.
+  The hour-of-day chart still shows clock hours.
   Raise `cleanupPeriodDays` in your Claude Code settings too.
 - Heatmap intensity is total tokens, which cache reads dominate. The tables break the
   categories apart.

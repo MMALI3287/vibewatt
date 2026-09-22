@@ -568,6 +568,39 @@ answers in < 300 ms on a 1M-turn store.
 **Gate:** every surviving pricing/timezone mutant from the audit is killed by
 the suite. `day_start_hour: 6` puts 20:00-04:00 JST activity on one day in
 daily, streak and heatmap views.
+**Status (2026-09-22): done** on `fix/phase-6-5c-parser-pricing-tz`. Record:
+- Pricing: `normalize()` strips any `<region>.anthropic.` profile prefix,
+  `[1m]`, `@date`, `-vN:M`, `-YYYYMMDD` and `-latest`, then `rate_for()` looks up
+  the exact id: overrides, then fast rates, then built-in, then remote. An id
+  nothing knows is unpriced. Fast mode without a fast rate is unpriced. Remote
+  entries with a zero, negative or non-finite input/output rate are dropped.
+  Every model in the owner's real logs still prices.
+- Parser: a malformed record is skipped and counted per file by reason
+  (`files.dropped`, shown by doctor); an unopenable file is not checkpointed and
+  is retried; `utf-8-sig` handles a BOM; discovery walks without following
+  directory links or junctions and lists each real file once; a missing `cwd`
+  carries forward within a file and subagent files take their project dir.
+- Titles: `titles` table, one row per session, rank custom-title > ai-title >
+  last-prompt > first user message; a lower rank never replaces a higher one.
+  **Removed the `prompts` table** (schema 6). Why: it kept every distinct
+  last-prompt text of a session, up to 500 characters each, though only the
+  title is ever shown (A-067). The latest stored prompt of each session became
+  its title before the drop. The API still reports the title count as `prompts`.
+- Timezone: `tzdata` on Windows; `zone_id()` keys a named zone by name, so DST
+  no longer rebuckets. A zone change rebuckets stored rows in place without
+  re-reading files; the CLI heatmap anchors on the report's today; stdout and
+  stderr are UTF-8 when redirected.
+- `day_start_hour` (config, `--day-start-hour`): `config.DayStartZone` shifts
+  the day for every day computation; `clock_zone()` keeps hour-of-day figures on
+  the clock. It is part of the sync identity, so a change rebuckets stored rows.
+- Exports: every bucket carries `unpriced`; the CSV leaves `cost_usd` empty on a
+  fully unpriced row and adds `unpriced_responses`.
+- Wrapped reads through the caller's connection; a nested one deadlocked behind
+  the caller's open write.
+- Tests: `tests/test_parser_pricing_tz.py` (39) and
+  `tests/test_mutation_guards.py`, the audit's d9 mutant killers moved into the
+  suite. The `history.restore` guard was dropped with `history.py`.
+- Also fixed: `README.md` still listed `--no-history`, removed in 6.5b.
 
 #### Phase 6.5d: Quota sources and forecasting *(decided)*
 **Do:**
@@ -840,7 +873,7 @@ Append here rather than widening a phase.
   files were introduced in Phases 2-3. Cleared in Phase 7 (A-107).
 - The `vibewatt sessions` cp1252 crash is wider than described: the default
   report crashes on any redirected stdout (`terminal.py:68` prints a
-  non-cp1252 glyph). Scheduled in 6.5c (A-057).
+  non-cp1252 glyph). Fixed in 6.5c (A-057): redirected streams are UTF-8.
 - `date.today()` in `aggregate.py:161,177`, `ui.py:77` and `doctor.py:45` is
   still present. The `aggregate.py` fallbacks are unreachable from `build()`,
   which sets `report.today` from the report tz. `terminal.py:62` is reachable

@@ -23,7 +23,7 @@ def test_discover_ignores_files_outside_source_roots(tmp_path, logs):
 def test_every_file_source_has_the_same_interface():
     for mod in ingest.SOURCES.values():
         assert list(inspect.signature(mod.discover).parameters) == ["cfg"]
-        assert list(inspect.signature(mod.parse).parameters) == ["path"]
+        assert list(inspect.signature(mod.parse).parameters) == ["path", "drops"]
 
 
 def test_parse_does_not_dedup_within_a_file(logs):

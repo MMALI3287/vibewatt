@@ -23,7 +23,15 @@ what was tried, what worked and what did not, so nobody re-derives it.
   rule in PLAN.md section 2.2.
 - **Cache write TTL split.** `cache_creation.ephemeral_1h_input_tokens` bills at 2x
   base input, `ephemeral_5m_input_tokens` at 1.25x. Using the flat
-  `cache_creation_input_tokens` understated one real session by 38%.
+  `cache_creation_input_tokens` understated one real session by 38%. A record
+  with only the flat total is priced as 5 m, the API default when no TTL is
+  requested. A split that sums to less than the total puts the rest on 5 m too,
+  so no written token is dropped (A-063).
+- **Session titles.** Claude Code writes `custom-title` (`customTitle`) when the
+  user names a session and `ai-title` (`aiTitle`) when it names one itself;
+  neither carries a timestamp. vibewatt keeps one title per session, best kind
+  first: custom-title, ai-title, `last-prompt`, then the first user message.
+  `summary` records no longer appear in current logs.
 - **Cloud session usage is reachable.** `list_sessions` returns
   `external_metadata.usage` with `cost_usd` and token counts per session, plus
   `title`, `origin`, repo, `context_usage` and `rate_limit_info`. Five sessions on

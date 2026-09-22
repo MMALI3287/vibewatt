@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import platform
+from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -31,14 +32,16 @@ def desktop_data_dirs() -> list[Path]:
 
 
 def discover(cfg: dict | None = None) -> list[Path]:
+    from . import walk
+
     files: list[Path] = []
     for base in desktop_data_dirs():
         for name in _COWORK_DIRS:
             root = base / name
             if root.is_dir():
-                files.extend(sorted(root.rglob("audit.jsonl")))
+                files.extend(walk(root, "audit.jsonl"))
     return files
 
 
-def parse(path: Path) -> Iterator[Turn]:
-    return read_file(COWORK, path)
+def parse(path: Path, drops: Counter | None = None) -> Iterator[Turn]:
+    return read_file(COWORK, path, drops)

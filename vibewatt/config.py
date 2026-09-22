@@ -24,6 +24,7 @@ import platform
 import shutil
 import sqlite3
 import sys
+from datetime import datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 from typing import Any
 
@@ -44,6 +45,7 @@ DEFAULTS: dict[str, Any] = {
     "pricing_overrides": {},        # {"model-id": {"input": 1.0, "output": 5.0, ...}}
     "project_aliases": {},          # {"-home-user-api": "API"}
     "quota": True,                  # read account-level plan utilization
+    "day_start_hour": 0,            # 0-23; 6 counts a 20:00-04:00 session as one day
     "sync_interval_seconds": 60,    # serve: background log sync; 0 disables
     "ai_summary": {
         "enabled": False,
@@ -155,3 +157,58 @@ def load() -> dict[str, Any]:
     for path in candidates:
         cfg.update(_read(path))
     return cfg
+
+
+class DayStartZone(tzinfo):
+    """A timezone whose calendar day starts at `hours` o'clock instead of midnight.
+
+    `day_start_hour: 6` puts a 20:00-04:00 session on one day. Anything that
+    buckets by day converts through this zone; anything that shows the clock
+    hour converts through ``clock_zone()``, which returns the real zone.
+    """
+
+    def __init__(self, base: tzinfo, hours: int) -> None:
+        self.base = base
+        self.shift = timedelta(hours=hours)
+
+    def utcoffset(self, dt: datetime | None) -> timedelta | None:
+        if dt is None:
+            return None
+        wall = dt.replace(tzinfo=None) + self.shift
+        offset = self.base.utcoffset(wall)
+        return None if offset is None else offset - self.shift
+
+    def dst(self, dt: datetime | None) -> timedelta | None:
+        return timedelta(0)
+
+    def tzname(self, dt: datetime | None) -> str:
+        return f"{self.base.tzname(dt)}@{int(self.shift.total_seconds() // 3600)}h"
+
+    def fromutc(self, dt: datetime) -> datetime:
+        local = dt.replace(tzinfo=timezone.utc).astimezone(self.base)
+        return (local.replace(tzinfo=None) - self.shift).replace(tzinfo=self)
+
+    @property
+    def key(self) -> str:
+        return f"{zone_id(self.base)}@{int(self.shift.total_seconds() // 3600)}h"
+
+
+def day_zone(base: tzinfo, day_start_hour: int | None) -> tzinfo:
+    hours = int(day_start_hour or 0)
+    if not 0 <= hours <= 23:
+        raise ValueError(f"day_start_hour must be 0-23, got {day_start_hour!r}")
+    return DayStartZone(base, hours) if hours else base
+
+
+def clock_zone(tz: tzinfo | None) -> tzinfo | None:
+    """The real zone behind a DayStartZone, for hour-of-day figures."""
+    return tz.base if isinstance(tz, DayStartZone) else tz
+
+
+def zone_id(tz: tzinfo | None) -> str:
+    """Stable identity of a zone. A named zone keeps its name across DST."""
+    key = getattr(tz, "key", None)
+    if key:
+        return str(key)
+    now = datetime.now(tz)
+    return f"{now.tzname() or tz}|{now.utcoffset()}"
