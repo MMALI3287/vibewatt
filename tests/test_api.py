@@ -26,7 +26,7 @@ def test_summary_matches_cli_json_totals(logs):
     client = _client()
     _, cfg = _app()
     tz = climod.resolve_tz(cfg.get("timezone"))
-    report, *_ = climod.build_report(cfg, tz)
+    report, *_ = climod.build_report(cfg, tz, refresh=True)  # what `vibewatt json` does
     expected = climod.serialize(report)
 
     resp = client.get("/api/summary")

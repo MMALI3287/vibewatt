@@ -16,8 +16,11 @@ what was tried, what worked and what did not, so nobody re-derives it.
 ## Verified findings
 
 - **Content-block repetition.** Claude Code writes one line per content block and
-  repeats the whole-response `usage` on each. Measured 2.8x inflation on a real
-  Claude Code session and 1.98x on a Cowork tree. Dedup on `(message.id, requestId)`.
+  repeats the whole-response `usage` on each. Measured 2.8x inflation of
+  input/output on a real Claude Code session (2.1x across all token types) and
+  1.98x on a Cowork tree. Dedup on `(message.id, requestId)` and keep the
+  per-field maximum, because the first line is a streaming placeholder. Full
+  rule in PLAN.md section 2.2.
 - **Cache write TTL split.** `cache_creation.ephemeral_1h_input_tokens` bills at 2x
   base input, `ephemeral_5m_input_tokens` at 1.25x. Using the flat
   `cache_creation_input_tokens` understated one real session by 38%.

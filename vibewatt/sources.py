@@ -12,7 +12,7 @@ the message/usage payload identical, so normalizing the envelope is enough.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
@@ -40,6 +40,7 @@ class Turn:
     project: str
     session: str
     key: tuple[str, str]
+    version: str | None = None
 
 
 def _parse_ts(raw: str | None) -> datetime | None:
@@ -104,6 +105,7 @@ def read_file(source: str, path: Path) -> Iterator[Turn]:
             server = usage.get("server_tool_use") or {}
             geo = usage.get("inference_geo")
 
+            session = str(rec.get("sessionId") or rec.get("session_id") or path.stem)
             yield Turn(
                 source=source,
                 ts=ts,
@@ -119,27 +121,80 @@ def read_file(source: str, path: Path) -> Iterator[Turn]:
                 geo=geo if geo in ("us", "global") else None,
                 sidechain=bool(rec.get("isSidechain")),
                 project=_project_name(source, path, rec.get("cwd")),
-                session=str(rec.get("sessionId") or rec.get("session_id") or path.stem),
-                # A response is identified by its message id plus the request that
-                # produced it; the same turn is replayed into several files.
-                key=(str(msg.get("id") or ""), str(rec.get("requestId") or "")),
+                session=session,
+                key=response_key(
+                    str(msg.get("id") or ""),
+                    # Cowork's audit.jsonl spells it request_id.
+                    str(rec.get("requestId") or rec.get("request_id") or ""),
+                    session,
+                    ts,
+                ),
+                version=str(rec["version"]) if rec.get("version") else None,
             )
 
 
+def response_key(msg_id: str, request_id: str, session: str, ts: datetime) -> tuple[str, str]:
+    """Identity of one API response, shared by every line that repeats it.
+
+    Claude Code writes one line per content block and repeats the response's
+    usage on each, so (message id, request id) is the identity. Without a
+    request id, LLM gateways reuse message ids across calls, so the session and
+    timestamp are added. Without a message id there is nothing to dedup on.
+    """
+    if msg_id and request_id:
+        return msg_id, request_id
+    if msg_id:
+        return msg_id, f"~{session}|{ts.isoformat()}"
+    return f"{session}:{ts.isoformat()}", ""
+
+
+TOKEN_FIELDS = ("input", "cache_5m", "cache_1h", "cache_read", "output", "thinking", "web_searches")
+
+
+def _attribution(turn: Turn) -> tuple:
+    # Main-thread lines own a response over sidechain replays; after that the
+    # earliest line wins, so the result never depends on which file came first.
+    return (turn.sidechain, turn.ts, turn.session, turn.project, turn.source)
+
+
+def merge(a: Turn, b: Turn) -> Turn:
+    """Two lines of the same response. Keep the per-field maximum.
+
+    The first line of a streamed response is a placeholder (output 1-3 tokens);
+    the final line carries the real counts. Every field only grows while a
+    response streams, so the maximum is the final value whatever the order.
+    """
+    keep = a if _attribution(a) <= _attribution(b) else b
+    return replace(
+        keep,
+        **{f: max(getattr(a, f), getattr(b, f)) for f in TOKEN_FIELDS},
+        fast=a.fast or b.fast,
+        geo=a.geo or b.geo,
+        version=max(a.version or "", b.version or "") or None,
+    )
+
+
+def dedupe(turns) -> tuple[list[Turn], int]:
+    """Collapse repeated lines into one Turn per response. Returns (turns, dropped).
+
+    A sidechain line whose message id also appears on a main-thread line is a
+    replay (``/btw`` asides copy parent messages under a new request id) and is
+    dropped.
+    """
+    by_key: dict[tuple[str, str], Turn] = {}
+    lines = 0
+    for turn in turns:
+        lines += 1
+        seen = by_key.get(turn.key)
+        by_key[turn.key] = merge(seen, turn) if seen else turn
+    main_ids = {t.key[0] for t in by_key.values() if not t.sidechain}
+    kept = [t for t in by_key.values() if not (t.sidechain and t.key[0] in main_ids)]
+    return kept, lines - len(kept)
+
+
 def load(files: list[tuple[str, Path]]) -> tuple[list[Turn], int]:
-    """Read every file, dropping turns already seen. Returns (turns, duplicates)."""
-    seen: set[tuple[str, str]] = set()
-    turns: list[Turn] = []
-    duplicates = 0
-    for source, path in files:
-        for turn in read_file(source, path):
-            if turn.key != ("", "") and turn.key in seen:
-                duplicates += 1
-                continue
-            if turn.key != ("", ""):
-                seen.add(turn.key)
-            turns.append(turn)
-    return turns, duplicates
+    """Read and dedupe every file. Returns (turns, lines collapsed)."""
+    return dedupe(turn for source, path in files for turn in read_file(source, path))
 
 
 def read_prompts(files: list[tuple[str, Path]]) -> list[dict]:

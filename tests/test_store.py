@@ -24,7 +24,7 @@ def test_fresh_store_is_at_current_schema(tmp_path):
             r[0]
             for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
-        assert store.schema_version(conn) == store.SCHEMA_VERSION == 4
+        assert store.schema_version(conn) == store.SCHEMA_VERSION == 5
     assert {
         "meta",
         "turns",
@@ -83,7 +83,7 @@ def test_sync_reparses_a_changed_file(tmp_path, logs):
         assert _turn_count(conn) == 4
 
     assert (result.parsed, result.skipped) == (1, 1)
-    assert recorded == 4  # responses parsed from the file, repeats included
+    assert recorded == 3  # responses in the file (A-114), not the lines that repeat them
 
 
 def test_response_replayed_across_files_counts_once(tmp_path, logs):

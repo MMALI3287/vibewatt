@@ -23,6 +23,7 @@ def wrapped(request: Request, year: int | None = Query(None, ge=1, le=9998),
             filters: Filters = Depends(get_filters)):
     from ..analysis.wrapped import build
 
+    request.app.state.ensure_synced()
     with store.connect() as conn:
         return build(conn, request.app.state.cfg, request.app.state.tz,
                      year or datetime.now(request.app.state.tz).year,
@@ -52,6 +53,7 @@ def service_status(request: Request):
 def weekly_summary(request: Request):
     from ..weekly import generate
 
+    request.app.state.ensure_synced()
     return generate(request.app.state.cfg, request.app.state.tz)
 
 
@@ -93,11 +95,11 @@ def dismiss_finding(finding_id: str, body: schemas.DismissFindingIn):
     return schemas.DismissFindingOut(id=finding_id, dismissed=body.dismissed)
 
 
-def _report(request: Request, filters: Filters):
-    cfg, tz = request.app.state.cfg, request.app.state.tz
-    return climod.build_report(
-        cfg, tz, source=filters.source, date_from=filters.date_from,
-        date_to=filters.date_to, project=filters.project, model=filters.model,
+def _report(request: Request, filters: Filters, parts: frozenset[str] | None = None):
+    request.app.state.ensure_synced()
+    return request.app.state.report(
+        source=filters.source, date_from=filters.date_from, date_to=filters.date_to,
+        project=filters.project, model=filters.model, parts=parts,
     )
 
 
@@ -125,13 +127,13 @@ def summary(request: Request, filters: Filters = Depends(get_filters)):
 
 @router.get("/daily", response_model=dict[str, schemas.BucketOut])
 def daily(request: Request, filters: Filters = Depends(get_filters)):
-    report, *_ = _report(request, filters)
+    report, *_ = _report(request, filters, frozenset({"by_day"}))
     return {str(d): climod._bucket_dict(b) for d, b in sorted(report.by_day.items())}
 
 
 @router.get("/hourly", response_model=dict[str, schemas.BucketOut])
 def hourly(request: Request, filters: Filters = Depends(get_filters)):
-    report, *_ = _report(request, filters)
+    report, *_ = _report(request, filters, frozenset({"by_hour"}))
     return {str(h): climod._bucket_dict(b) for h, b in sorted(report.by_hour.items())}
 
 
@@ -145,7 +147,7 @@ def breakdown(dim: str, request: Request, filters: Filters = Depends(get_filters
     if attr is None:
         raise HTTPException(404, f"unknown breakdown dimension {dim!r}, "
                                   f"expected one of {sorted(_BREAKDOWNS)}")
-    report, *_ = _report(request, filters)
+    report, *_ = _report(request, filters, frozenset({attr}))
     return {k: climod._bucket_dict(v) for k, v in getattr(report, attr).items()}
 
 
@@ -194,7 +196,7 @@ def session_facets():
 
 @router.get("/blocks", response_model=list[schemas.BlockOut])
 def blocks(request: Request, filters: Filters = Depends(get_filters)):
-    report, *_ = _report(request, filters)
+    report, *_ = _report(request, filters, frozenset({"blocks"}))
     return [
         schemas.BlockOut(
             start=b.start.isoformat(), end=b.end.isoformat(), is_active=b.is_active,
@@ -207,7 +209,9 @@ def blocks(request: Request, filters: Filters = Depends(get_filters)):
 
 @router.get("/quota", response_model=schemas.QuotaOut | None)
 def quota_endpoint(request: Request, filters: Filters = Depends(get_filters)):
-    _, q, *_ = _report(request, filters)
+    from .. import quota
+
+    q, _ = quota.read(request.app.state.cfg)
     return _quota_out(q)
 
 
@@ -224,14 +228,12 @@ def health():
 
 @router.post("/sync", response_model=schemas.SyncResultOut)
 def sync(request: Request):
-    from ..aggregate import cost_of
     from ..ingest import discover
 
     cfg, tz = request.app.state.cfg, request.app.state.tz
-    files = discover(cfg)
-    overrides = cfg.get("pricing_overrides")
-    with store.connect() as conn:
-        result = store.sync_files(conn, files, tz, lambda t: cost_of(t, overrides))
+    with request.app.state.sync_lock:
+        result = climod.sync_store(cfg, tz, discover(cfg))
+        request.app.state.synced = True
     return schemas.SyncResultOut(
         parsed=result.parsed, skipped=result.skipped, turns=result.turns,
         duplicates=result.duplicates, prompts=result.prompts,
