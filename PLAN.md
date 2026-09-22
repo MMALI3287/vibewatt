@@ -869,10 +869,51 @@ the raw-line rule.
 **Gate:** the existing e2e suite plus overflow at 1440/1024/768/390 in both
 themes on every route. An axe-style contrast check passes for text tokens.
 Vitest covers format, filters, dates and the error client.
+**Status (2026-09-22): done** on `fix/phase-6-5g-frontend-a11y`. Record:
+- Correctness: `lib/chart.ts` `barLayout()` keeps every day inside the daily
+  chart (A-037); `fmtUsd` shows `<$0.01` (A-079); `api/client.ts`
+  `errorMessage()` renders 422 lists as `field: message` (A-080); impossible
+  URL dates are dropped by `isCalendarDay()` (A-082); the Overview daily table,
+  the model table and both Wrapped tables use the paginated `DataTable` (A-086);
+  the footer copy says which views are local-only and links to the source,
+  DATA-SOURCES and issues (A-081, A-087); embedded sessions are headed by their
+  dimension (A-088); FilterBar reports a failed options query (A-117).
+- Accessibility: a skip link to `#main`; the heatmap is one `role="grid"` tab
+  stop with arrow keys (A-040); `scroll-padding-top` under the sticky bar
+  (A-038); an Overview `h1` and `useTitle()` per route (A-085); the hour chart is
+  named and its tooltip uses theme tokens (A-089, A-090).
+- **Changed: muted text and the footer use `--ts`, not `--tm`.** Why: `--tm` is
+  3.7:1 on the light surfaces, below AA for the local-only disclaimers it
+  carried (A-062). The token itself is unchanged, as DESIGN.md requires; it
+  still colours disabled controls. Error headings are `--tp` with a
+  `--serious` border (A-084). The backdrop is a token and the share card reads
+  its colours from the tokens (A-110). More grids set `min-width: 0` (A-111).
+- Tests: `src/lib/lib.test.ts` (8); `e2e/design.spec.ts`: overflow at four widths
+  in both themes on eight routes, an axe-style contrast check that fails at
+  3.71:1 when `.muted` goes back to `--tm`, the theme toggle, the skip link,
+  heatmap keys, titles and the sticky bar (A-109, A-112).
 
 ### Phase 7 — Packaging and polish
 **Status:** work in progress exists uncommitted on `feat/phase-7-packaging-polish`
 (SPA serving, build hook, packaging tests). Rebase it onto Phase 6.5g and the rename.
+**Handoff from Phase 6.5 (2026-09-22).** Start from `fix/phase-6-5g-frontend-a11y`
+(PRs #3-#10 stack onto each other; merge them in order). The uncommitted WIP in
+the main checkout predates the rename and touches three files that 6.5 changed:
+- `ccburn/api/app.py` is now `vibewatt/api/app.py`. It adds the `LocalOnly`
+  middleware (outermost; the SPA and static files must stay behind it), the
+  lifespan sync thread, the report cache and `include_in_schema=False` on the
+  legacy routes. Serve the SPA without shadowing `/api/*`. Remove `/`,
+  `/api/usage`, `/api/dataset` with `ui.py` (A-054, A-126).
+- `pyproject.toml`: the project is `vibewatt` and depends on
+  `tzdata; sys_platform == 'win32'`. Keep that marker.
+- `web/src/App.tsx`: now has the skip link, `id="main"` and the
+  `/analysis/findings/:id` modal routes.
+- `web/openapi.json` is committed and `tests/test_security_api.py` fails when it
+  drifts: after an API change run `npm run gen:api` and commit both files. Add
+  that as a CI step (the test stands in for it until then).
+- The untracked `AGENTS.md`, `.agents/`, `.codex/`, `docs/CODEX-SETUP.md`,
+  `scripts/build_hook.py` and `tests/test_packaging.py` still say `ccburn`.
+- Lint: `ruff check` reports 18 errors, all pre-existing (A-107).
 **Do:** ship `web/dist` into the wheel as `vibewatt/static`. `vibewatt serve` opens the React app. Windows path tests. Docs. Screenshots in the README.
 Added 2026-09-22 *(decided unless noted)*:
 - Name: re-check that `vibewatt` is free on PyPI, npm and GitHub. With the

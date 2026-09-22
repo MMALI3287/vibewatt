@@ -15,10 +15,15 @@ export function Footer() {
         {health.data?.last_harvest && ` · last cloud harvest ${health.data.last_harvest}`}
       </span>
       <span>
-        Token and cost figures cover local logs plus harvested cloud sessions only. Plan
-        utilization is the one account-wide number.
+        Overview, Projects and Models count local logs. Sessions and Wrapped add harvested
+        cloud sessions. Plan utilization is the one account-wide number.
       </span>
-      <span>vibewatt v{__APP_VERSION__}</span>
+      <nav aria-label="About vibewatt" className="footer-links">
+        <a href="https://github.com/MMALI3287/vibewatt">Source</a>
+        <a href="https://github.com/MMALI3287/vibewatt/blob/master/docs/DATA-SOURCES.md">Data sources</a>
+        <a href="https://github.com/MMALI3287/vibewatt/issues">Report a problem</a>
+        <span>vibewatt v{__APP_VERSION__}</span>
+      </nav>
     </footer>
   );
 }

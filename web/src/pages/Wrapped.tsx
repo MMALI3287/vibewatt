@@ -4,8 +4,11 @@ import { useSearchParams } from "react-router-dom";
 import { getWrapped } from "../api/client";
 import { useFilters } from "../lib/filters";
 import { fmtCompact, fmtUsd } from "../lib/format";
+import { useTitle } from "../lib/title";
+import { DataTable } from "../components/DataTable";
 
 export function Wrapped() {
+  useTitle("Wrapped");
   const [params, setParams] = useSearchParams();
   const [filters] = useFilters();
   const rawYear = params.get("year");
@@ -35,7 +38,11 @@ export function Wrapped() {
       `${data.longest_streak} day longest streak`, "Retained local + harvested usage. Not account-wide.",
       data.unpriced_turns ? `${data.unpriced_turns} unpriced responses excluded from cost.` : "Cost is not a subscription bill."];
     const escape = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c]!);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="440" viewBox="0 0 900 440"><rect width="900" height="440" fill="#fcfcfb"/>${lines.map((line, index) => `<text x="40" y="${65 + index * 50}" fill="#0b0b0b" font-family="sans-serif" font-size="${index ? 22 : 32}">${escape(line)}</text>`).join("")}</svg>`;
+    // The card takes its colours from the theme tokens, not literals (A-110).
+    const css = getComputedStyle(document.documentElement);
+    const paper = css.getPropertyValue("--s1").trim() || "white";
+    const ink = css.getPropertyValue("--tp").trim() || "black";
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="440" viewBox="0 0 900 440"><rect width="900" height="440" fill="${paper}"/>${lines.map((line, index) => `<text x="40" y="${65 + index * 50}" fill="${ink}" font-family="sans-serif" font-size="${index ? 22 : 32}">${escape(line)}</text>`).join("")}</svg>`;
     const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
     const link = document.createElement("a"); link.href = url; link.download = `vibewatt-wrapped-${data.year}.svg`; link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -66,12 +73,19 @@ export function Wrapped() {
       {data.biggest_session && <p>Biggest session by tokens: {data.biggest_session.title} · {fmtCompact(data.biggest_session.tokens)} tokens · {fmtUsd(data.biggest_session.cost_usd)} ({data.biggest_session.harvested ? "harvested" : "local"}).</p>}
       <button onClick={download}>Download share card</button><p>The card contains aggregate figures only, without project names or session titles.</p>
     </section>
-    <section className="card"><h2>Top projects by tokens</h2><div className="table-wrap"><table><thead><tr><th>Project</th><th>Tokens</th><th>Cost</th></tr></thead>
-      <tbody>{data.top_projects.length === 0 ? <tr><td colSpan={3}>No project usage this year.</td></tr> :
-        data.top_projects.map((p, index) => <tr key={index}><td>{p.name}</td><td>{fmtCompact(p.tokens)}</td><td>{fmtUsd(p.cost_usd)}</td></tr>)}</tbody></table></div></section>
-    <section className="card"><h2>Model mix over time</h2><div className="table-wrap"><table><thead><tr><th>Month</th><th>Model</th><th>Tokens</th><th>Cost</th></tr></thead>
-      <tbody>{data.model_months.length === 0 ? <tr><td colSpan={4}>No model usage this year.</td></tr> :
-        data.model_months.map(p => <tr key={`${p.month}|${p.model}`}><td>{p.month}</td><td>{p.model}</td><td>{fmtCompact(p.tokens)}</td><td>{fmtUsd(p.cost_usd)}</td></tr>)}</tbody></table></div></section>
+    <section className="card"><h2>Top projects by tokens</h2>{data.top_projects.length === 0 ? <p>No project usage this year.</p> :
+      <DataTable label="Top projects" rows={data.top_projects} columns={[
+        { accessorKey: "name", header: "Project" },
+        { accessorKey: "tokens", header: "Tokens", cell: info => fmtCompact(info.row.original.tokens) },
+        { accessorKey: "cost_usd", header: "Cost", cell: info => fmtUsd(info.row.original.cost_usd) },
+      ]} />}</section>
+    <section className="card"><h2>Model mix over time</h2>{data.model_months.length === 0 ? <p>No model usage this year.</p> :
+      <DataTable label="Model mix" rows={data.model_months} columns={[
+        { accessorKey: "month", header: "Month" },
+        { accessorKey: "model", header: "Model" },
+        { accessorKey: "tokens", header: "Tokens", cell: info => fmtCompact(info.row.original.tokens) },
+        { accessorKey: "cost_usd", header: "Cost", cell: info => fmtUsd(info.row.original.cost_usd) },
+      ]} />}</section>
     <details className="card"><summary>Coverage and interpretation</summary>{data.notes.map(note => <p key={note}>{note}</p>)}</details>
   </section>;
 }

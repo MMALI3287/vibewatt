@@ -29,10 +29,19 @@ export const DEFAULT_FILTERS: Filters = {
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
+/** A real calendar day: 2026-13-45 matches the pattern but is dropped (A-082). */
+export function isCalendarDay(v: string | null): v is string {
+  if (!v || !ISO_DAY.test(v)) return false;
+  const [y, m, d] = v.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d
+    && y >= 1970 && y <= 9998;
+}
+
 export function parseFilters(params: URLSearchParams): Filters {
   const day = (k: string) => {
     const v = params.get(k);
-    return v && ISO_DAY.test(v) ? v : null;
+    return isCalendarDay(v) ? v : null;
   };
   const text = (k: string) => params.get(k) || null;
   return {

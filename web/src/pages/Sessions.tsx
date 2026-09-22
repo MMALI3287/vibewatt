@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useTitle } from "../lib/title";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { getSession, getSessions, SESSION_PAGE_SIZE, type SessionDetail } from "../api/client";
@@ -13,8 +14,9 @@ export function duration(start?: string | null, end?: string | null) {
   return Number.isFinite(minutes) ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : "Unavailable";
 }
 
-export function Sessions({ embedded = false }: { embedded?: boolean }) {
+export function Sessions({ embedded }: { embedded?: "project" | "model" }) {
   const [filters] = useFilters();
+  useTitle(embedded ? (embedded === "model" ? "Models" : "Projects") : "Sessions");
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const q = params.get("q") ?? "";
@@ -35,7 +37,7 @@ export function Sessions({ embedded = false }: { embedded?: boolean }) {
   return <>
     {!embedded && <><h1>Sessions</h1><UsageSummary /></>}
     <section className="card" aria-label="Sessions">
-      <h2>{embedded ? "Project sessions" : "Local and harvested sessions"}</h2>
+      <h2>{embedded === "model" ? "Model sessions" : embedded === "project" ? "Project sessions" : "Local and harvested sessions"}</h2>
       <p className="muted">Local totals follow the filters. Cloud totals are selected by start date and retain the API cost. Detail shows the full session.</p>
       <label className="search-label">Search titles, projects or models
         <input type="search" aria-label="Search sessions" maxLength={500} value={q} onChange={event => {
