@@ -6,7 +6,7 @@ import os
 from collections.abc import Iterator
 from pathlib import Path
 
-from ccburn.sources import CLAUDE_CODE, Turn, read_file
+from vibewatt.sources import CLAUDE_CODE, Turn, read_file
 
 
 def roots() -> list[Path]:

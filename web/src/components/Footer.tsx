@@ -18,7 +18,7 @@ export function Footer() {
         Token and cost figures cover local logs plus harvested cloud sessions only. Plan
         utilization is the one account-wide number.
       </span>
-      <span>ccburn v{__APP_VERSION__}</span>
+      <span>vibewatt v{__APP_VERSION__}</span>
     </footer>
   );
 }

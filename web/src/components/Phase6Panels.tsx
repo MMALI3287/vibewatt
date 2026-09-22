@@ -37,7 +37,7 @@ function WeeklySummary() {
   const result = useMutation({ mutationFn: generateWeeklySummary });
   return <details className="card phase6-panel">
     <summary>AI weekly summary</summary>
-    <p>Off by default. When enabled in your ccburn configuration, generating sends aggregate usage to Claude. Prompt text is excluded and project names require a separate opt-in.</p>
+    <p>Off by default. When enabled in your vibewatt configuration, generating sends aggregate usage to Claude. Prompt text is excluded and project names require a separate opt-in.</p>
     <button disabled={result.isPending} onClick={() => result.mutate()}>{result.isPending ? "Generating…" : "Generate weekly summary"}</button>
     {result.isError && <p role="alert">Could not generate summary: {result.error.message}</p>}
     {result.data && <div role="status"><p>{result.data.detail}</p>{result.data.text && <p className="phase6-copy">{result.data.text}</p>}</div>}

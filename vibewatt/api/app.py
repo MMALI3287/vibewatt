@@ -1,5 +1,5 @@
 """FastAPI app factory. Mounts every `/api/*` route from `routes.py` plus the
-pre-React dashboard (`/`, `/api/dataset`, `/api/usage`) so `ccburn serve` keeps
+pre-React dashboard (`/`, `/api/dataset`, `/api/usage`) so `vibewatt serve` keeps
 working until the phase 3 frontend replaces it."""
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ def create_app(cfg: dict | None = None) -> FastAPI:
         pricing.refresh(offline=cfg.get("offline", False))
         yield
 
-    app = FastAPI(title="ccburn", lifespan=lifespan)
+    app = FastAPI(title="vibewatt", lifespan=lifespan)
     app.state.cfg = cfg
     app.state.tz = tz
 

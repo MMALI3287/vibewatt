@@ -2,8 +2,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from ccburn import store
-from ccburn.analysis.alerts import evaluate
+from vibewatt import store
+from vibewatt.analysis.alerts import evaluate
 
 UTC = timezone.utc
 NOW = datetime(2026, 9, 21, 2, tzinfo=UTC)

@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone, tzinfo
 from pathlib import Path
 
-from .config import data_dir
+from .config import copy_sqlite, data_dir
 
 SCHEMA_VERSION = 4
 
@@ -90,7 +90,12 @@ CREATE TABLE IF NOT EXISTS prompts (
 
 
 def db_path() -> Path:
-    return data_dir() / "ccburn.db"
+    path = data_dir() / "vibewatt.db"
+    legacy = path.with_name("ccburn.db")
+    if not path.exists() and legacy.is_file():
+        # A CCBURN_DATA_DIR store; the old file stays for a downgrade.
+        copy_sqlite(legacy, path)
+    return path
 
 
 def _v2_files_and_quota_samples(conn) -> None:

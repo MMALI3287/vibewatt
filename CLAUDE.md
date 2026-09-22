@@ -1,4 +1,4 @@
-# ccburn
+# vibewatt
 
 Token usage, cost and plan utilization for Claude Code and Cowork. Python backend
 reads local logs into SQLite; React frontend renders it. See `PLAN.md` for the
@@ -8,17 +8,17 @@ implementation plan and `docs/DATA-SOURCES.md` for where every number comes from
 
 ```bash
 uv sync                          # or: pip install -e ".[dev]"
-uv run ccburn sync               # parse local logs into SQLite
-uv run ccburn harvest --file s.json   # ingest cloud session usage
-uv run ccburn doctor             # what the tool can and cannot see
-uv run ccburn serve              # API + dashboard on :8777
+uv run vibewatt sync               # parse local logs into SQLite
+uv run vibewatt harvest --file s.json   # ingest cloud session usage
+uv run vibewatt doctor             # what the tool can and cannot see
+uv run vibewatt serve              # API + dashboard on :8777
 
 uv run pytest -q                 # tests (fast, no network)
 uv run pytest -q tests/test_pricing.py::test_cache_ttl_split   # single test
 uv run ruff check . && uv run ruff format --check .
 
 cd web && npm run dev            # frontend dev server
-cd web && npm run build          # production build into ccburn/static
+cd web && npm run build          # production build into vibewatt/static
 cd web && npm run test           # vitest
 ```
 
@@ -33,7 +33,7 @@ These are the rules that produce wrong numbers when broken. Each one cost a real
   at 2x base input; `ephemeral_5m_input_tokens` at 1.25x. Never apply one flat
   multiplier to `cache_creation_input_tokens`.
 - **Never price an unknown model at zero.** Report it as unpriced instead.
-  `ccburn/pricing.py` is the only place rates live, and the built-in table
+  `vibewatt/pricing.py` is the only place rates live, and the built-in table
   outranks any fetched table.
 - **Use the report's timezone for "today", never `date.today()`.** Streaks and
   month-to-date break otherwise.

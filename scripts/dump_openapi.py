@@ -4,6 +4,6 @@ from __future__ import annotations
 
 import json
 
-from ccburn.api import create_app
+from vibewatt.api import create_app
 
 print(json.dumps(create_app({"offline": True, "quota": False}).openapi(), indent=2))

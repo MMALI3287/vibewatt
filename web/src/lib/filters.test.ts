@@ -7,7 +7,7 @@ describe("filters <-> URL", () => {
       from: "2026-08-01",
       to: "2026-08-31",
       source: "claude-code",
-      project: "ccburn",
+      project: "vibewatt",
       model: "claude-opus-5",
       metric: "tokens" as const,
     };

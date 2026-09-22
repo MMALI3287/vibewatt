@@ -1,4 +1,4 @@
-"""Normalization of local session logs. Discovery lives in ccburn.ingest.
+"""Normalization of local session logs. Discovery lives in vibewatt.ingest.
 
 Two producers write the same broad JSONL shape in different places:
 

@@ -16,7 +16,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 
-from ccburn.sources import CLAUDE_CODE, COWORK, Turn
+from vibewatt.sources import CLAUDE_CODE, COWORK, Turn
 
 from . import claude_code, cowork
 
@@ -28,7 +28,7 @@ def discover(cfg: dict | None = None) -> list[tuple[str, Path]]:
 
     Claude Code on the web and Cowork remote sessions are deliberately absent:
     they run in throwaway cloud containers and never write to this disk. See
-    ccburn.quota for the account-level figures that do include them.
+    vibewatt.quota for the account-level figures that do include them.
     """
     return [(name, path) for name, mod in SOURCES.items() for path in mod.discover(cfg)]
 

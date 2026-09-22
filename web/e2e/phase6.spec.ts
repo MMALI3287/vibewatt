@@ -19,7 +19,7 @@ test("Wrapped year, filters, share card and empty state", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Model mix over time" })).toBeVisible();
   const downloaded = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download share card" }).click();
-  expect((await downloaded).suggestedFilename()).toBe("ccburn-wrapped-2026.svg");
+  expect((await downloaded).suggestedFilename()).toBe("vibewatt-wrapped-2026.svg");
   await page.reload();
   await expect(page.getByLabel("Wrapped year")).toHaveValue("2026");
   await page.goto("/wrapped?year=2000");

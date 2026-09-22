@@ -19,7 +19,7 @@ export default defineConfig({
     {
       command: `npx vite preview --host 127.0.0.1 --port ${WEB_PORT} --strictPort`,
       url: `http://127.0.0.1:${WEB_PORT}/`,
-      env: { CCBURN_API: `http://127.0.0.1:${API_PORT}` },
+      env: { VIBEWATT_API: `http://127.0.0.1:${API_PORT}` },
       reuseExistingServer: false,
       timeout: 60_000,
     },
