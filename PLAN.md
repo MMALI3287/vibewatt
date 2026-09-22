@@ -462,8 +462,10 @@ as-is (they are data locations). The GitHub repo rename is done by the user.
   `docs/PHASE-5.md` are dated records; their `ccburn/...` paths are evidence of
   the code as audited, so they were not rewritten. The probes were renamed so
   they run.
-- PyPI: `vibewatt` was free on 2026-09-22 (PyPI 404, npm 404). A 0.0.1
-  placeholder is built; publishing needs the user's PyPI token.
+- PyPI: `vibewatt` 0.0.1 (placeholder) published by the user on 2026-09-22 to
+  reserve the name; ship a real release before PEP 541 treats it as abandoned.
+  The GitHub repo is now `MMALI3287/vibewatt`; npm `vibewatt` is still free and
+  unreserved.
 
 #### Phase 6.5b: Dedup rule and single source of truth *(decided)*
 **Do:**
