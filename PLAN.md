@@ -48,6 +48,11 @@ Working and verified against a real account:
 | Single-file interactive HTML | `ccburn/ui.py` | done, to be superseded by the React app |
 | Dashboard server | `ccburn/dashboard.py` | done, to be replaced by FastAPI |
 
+**Audit 2026-09-22:** phases 1-6 were audited against this plan. 128 findings,
+evidence in `docs/AUDIT-2026-09-22.md`, one line each in section 11, scheduled
+as Phase 6.5a-g below. The table above is partly stale (`dashboard.py` was
+removed in Phase 2; the CLI is argparse, not Typer); Phase 7 refreshes it.
+
 Numbers proven on real data: content-block dedup avoids a **2.8x** overcount;
 per-TTL cache pricing moves the cache-write line **38%**; five cloud sessions
 carried **$120 of web usage** absent from every local log.
@@ -159,6 +164,15 @@ Claude Code deletes transcripts older than `cleanupPeriodDays` (default **30**) 
 **every startup**. `0` disables transcript writing entirely — it is a trap, not a
 fix. Recommend 3650. `ccburn/history.py` and the SQLite store preserve rollups
 from first run forward but cannot recover what was already deleted.
+
+**Corrected 2026-09-22 (audit):** since Claude Code 2.1.89 `cleanupPeriodDays: 0`
+fails settings validation instead of silently disabling writing; older versions
+still have the trap. Minimum is 1, default still 30 and the sweep runs as a
+background task after start. Since 2.1.248 desktop and Cowork transcripts are
+exempt from age cleanup unless `desktopSessionCleanupPeriodDays` or a managed
+`cleanupPeriodDays` is set. The promise above does not hold today: history.json
+permanently loses partially pruned days (A-001). Phase 6.5b makes the store the
+only source of headline numbers.
 
 ---
 
@@ -402,9 +416,247 @@ correctness gaps. See `docs/PHASE-6.md` for coverage, bounds and validation.
 **Do:** 7.3, 7.5, 7.8, 7.12, 7.13.
 **Gate:** Wrapped snapshot test; alert fires once not per sample; AI summary makes no network call when disabled; dashboard renders with the status fetch stubbed to fail.
 
+### Phase 6.5: Audit fixes and spec corrections (added 2026-09-22)
+**Why:** the phase 1-6 audit (`docs/AUDIT-2026-09-22.md`) found 128 issues:
+1 critical, 6 high, 55 medium, 50 low, 16 info. The worst ones change headline
+numbers. Output tokens are undercounted by 7.6-16% and pruned days lose usage
+permanently. Localhost security is open. The burn alert almost never fires.
+Online research also showed that parts of section 2 are out of date. This work
+has to land before Phase 7 packages it.
+Split into seven sessions, each one PR, run in order. Every fix starts with a
+failing test that reproduces the audit item (see the A-numbers). Decisions
+taken with the user on 2026-09-22 are marked *(decided)*.
+
+#### Phase 6.5a: Rename to vibewatt *(decided)*
+**Why:** the PyPI name `ccburn` belongs to an unrelated tool in the same space
+(JuanjoFuchs/ccburn, 24 releases). The project is also growing beyond Claude
+(Codex and Antigravity are planned), so the new name is agent-neutral.
+`vibewatt` had no GitHub repositories and no PyPI or npm package on
+2026-09-22.
+**Do:** a mechanical rename: package dir `ccburn/` to `vibewatt/`, CLI
+`vibewatt`, project and web package names and env vars `CCBURN_*` to
+`VIBEWATT_*` (read the old names as a fallback for one release and print a
+deprecation note). Move the data dir with a one-time copy that leaves the old
+store in place. Update docs, skills and agent configs. Record the rename and
+its reason in this file.
+**Out of scope:** any behaviour change. Log paths that mention Claude stay
+as-is (they are data locations). The GitHub repo rename is done by the user.
+**Gate:** every existing gate passes under the new names. An existing
+`ccburn` store and `CCBURN_DATA_DIR` are picked up and migrated (test).
+`grep -ri ccburn` returns only the fallback, the migration and the changelog.
+
+#### Phase 6.5b: Dedup rule and single source of truth *(decided)*
+**Do:**
+- Replace the dedup non-negotiable in `CLAUDE.md`, section 2.2 and trap 1 in the
+  same PR as the code. New rule:
+  - Key on `(message.id, requestId)` and keep the per-field maximum, which is
+    the final streamed line (A-003).
+  - Drop a sidechain line whose `message.id` already appears on a main-thread
+    line. `/btw` aside files replay parent messages under a new `requestId`.
+  - Without a `requestId`, key on `(session, message.id, timestamp)`. LLM
+    gateways reuse message ids (A-010).
+  - The result must not depend on file order (A-009).
+  - Cowork writes each response to both `audit.jsonl` (snake_case
+    `request_id`) and a nested `.claude/projects` transcript. Count it once.
+- Make the SQLite store the only source for every endpoint and CLI report.
+  Sync keeps it fresh and requests never reparse logs (A-025 and the Deferred
+  `build_report` quota item). Import the `history.json` rows the store lacks
+  once, then retire `history.py` and record the removal (A-001, A-002, A-008,
+  A-022, A-124).
+- Store Claude Code `version` per turn. `files.turn_count` counts responses,
+  not lines (A-114). Keep first-sync memory bounded and report progress
+  (A-071).
+- Cloud ingest implements the common interface, or the deviation is recorded
+  (A-064).
+- Tests: A-018, A-021, A-039, A-044. Correct the 2.8x claim, which holds only
+  for input/output (A-101).
+**Gate:** fixture suites for placeholder lines (3 then 956 gives 956), aside
+replay, a gateway without `requestId`, files arriving in both orders, and
+Cowork dual copies. Pruning any subset of files never lowers any day's total.
+A real-data oracle run matches the store exactly. Every report endpoint
+answers in < 300 ms on a 1M-turn store.
+
+#### Phase 6.5c: Parser robustness, pricing lookup, timezone and day boundary
+**Do:**
+- Pricing lookup by exact id after normalization. Strip date,
+  `@date`, `-vN:M` and `[1m]` suffixes and all Bedrock profile prefixes. An
+  unknown id is unpriced, never borrowed from a sibling (A-011, A-012). Fast
+  mode on a model with no fast rate is unpriced. Validate remote rates
+  (A-066). `inference_geo` values other than `us` mean 1.0x (`not_available`
+  is common). Record the TTL assumed when the split is missing (A-063). Export
+  carries per-row unpriced flags (A-026).
+- A wrong-typed field skips that record, not the whole sync (A-023). A file
+  that cannot be opened is retried, not checkpointed (A-024). Handle BOMs and
+  junction loops (A-069, A-070). Count dropped records per file by reason and
+  show them in doctor.
+- Titles: `custom-title` > `ai-title` > `last-prompt` > first user message,
+  because `summary` records no longer exist (A-059, A-060). Retain only the
+  title, not every prompt (A-067). Project attribution works without `cwd`
+  (A-065).
+- Timezone: add `tzdata` for Windows IANA zones (A-058). The CLI heatmap uses
+  the report tz (A-055). DST no longer forces a full reparse (A-113). Fix the
+  Windows stdout crash (A-057).
+- New config `day_start_hour` (default 0) *(decided)*. It shifts the day
+  boundary for daily, streak, heatmap, Wrapped and anomaly views, so an
+  8 PM-4 AM session counts as one day.
+- Pricing and timezone tests that the mutation run showed to be missing:
+  A-014 to A-017, A-019, A-020, A-034, A-068.
+**Gate:** every surviving pricing/timezone mutant from the audit is killed by
+the suite. `day_start_hour: 6` puts 20:00-04:00 JST activity on one day in
+daily, streak and heatmap views.
+
+#### Phase 6.5d: Quota sources and forecasting *(decided)*
+**Do:**
+- Layered quota sources, recorded in section 2 as the new order of preference:
+  1. `vibewatt statusline` reads Claude Code's documented statusline JSON
+     (`rate_limits.five_hour` / `seven_day`: `used_percentage`, `resets_at`).
+     It appends a throttled sample, prints one line, chains the user's
+     existing `statusLine` command, uses no network and finishes in < 50 ms.
+  2. A read-only import of the desktop app's `plan-usage-history.json`,
+     version-gated and deduped on `(org, t)`.
+  3. `/api/oauth/usage` as a fallback only: at least 10 min between calls,
+     backoff on 429 and never on page render. Parse any window generically.
+- Quota becomes a list of windows `{key, label, scope, utilization, resets_at,
+  source}`, per model where available. Resets are detected from the data,
+  never from an assumed schedule. Stale dumps are not samples (A-013).
+- Replace the two-sample burn rule (A-006, A-048). Each window shows a pace
+  delta (used% minus elapsed%) and a P10-P90 projected-at-reset band from this
+  account's past windows. Until enough windows exist it says "not enough
+  history". An alert fires once per window episode. Spike alerts are
+  time-scoped, not "every historical spike" (A-050). Alert days use the
+  report tz (A-096). Meters render without local usage (A-036) and clamp
+  `aria-valuenow` (A-083). Test A-053.
+**Gate:** a burst-sampled series crossing 100% fires exactly once. A noisy
+flat series fires nothing. The band never goes below the current value.
+Statusline fixtures from Claude Code 2.1.80+ ingest correctly.
+
+#### Phase 6.5e: Local security and API contract *(decided)*
+**Do:**
+- Security:
+  - An ASGI middleware, first in the stack, allowlists Host
+    `{127.0.0.1, localhost, [::1]}:<port>` (DNS rebinding, A-007).
+  - Every non-GET request needs `Sec-Fetch-Site: same-origin` or a matching
+    `Origin` and JSON content type (CSRF, A-004, A-047).
+  - Warn on any non-loopback bind (A-103).
+  - Neutralize CSV formula cells (A-072).
+  - Size-cap every auto-fetched body (A-102).
+  - Salt the repeated-read path hash (A-121).
+- SQLite concurrency: WAL, `busy_timeout`, `BEGIN IMMEDIATE` writers, and
+  migrations once at startup. Reads never 500 during a sync (A-056).
+- Finish section 5:
+  - `POST /api/sync` streams progress.
+  - `/api/health` reports last sync, last harvest and coverage gaps.
+  - `/api/quota` returns recent samples (A-005).
+  - OpenAPI is complete and CI fails if `npm run gen:api` changes anything
+    (A-033).
+  - The filter dependency validates the same way everywhere (A-073).
+  - Blocks list the active block first (A-074).
+  - `surface` is a real dimension (A-075).
+  - Extreme dates return 4xx, not 500 (A-028).
+  - Alias and mask filters match what the API returns and mask covers
+    sessions (A-029, A-030).
+  - Hourly returns a matrix, or the spec says vector (A-115).
+- Harvest:
+  - Validate input (A-031).
+  - Reject rows without an id (A-032).
+  - A session without `cost_usd` is unpriced, not $0 (A-027).
+  - Count only `environment_kind: anthropic_cloud` and Cowork remote. Drop
+    ids that match a local `bridge-session`, so Remote Control sessions are
+    not counted twice.
+- Status uses `https://status.claude.com/api/v2/summary.json` with a
+  3-second total timeout (A-095).
+- Docs and tests: A-035, A-076. Fix the false README privacy section (A-061).
+  List every outbound call in DATA-SOURCES (A-108). Remove the dead
+  `--refresh` flag (A-078).
+**Gate:** probe tests:
+- Host `evil.example` is rejected.
+- A cross-site `text/plain` POST is rejected and a same-origin JSON POST
+  succeeds.
+- A GET during a sync never returns 500.
+- The OpenAPI diff check passes.
+
+#### Phase 6.5f: Analysis corrections, Wrapped and stats reconciliation
+**Do:**
+- Anomaly (7.4, spec change). The baseline uses active days only (no
+  zero-fill) and the threshold is `median + 3 × max(1.4826·MAD, 0.1·median)`.
+  Raw MAD with zero-fill flags every day for part-time users and gives 6-10%
+  false positives on stable spend (A-041, A-042, A-120). "Not enough history"
+  is correct and visible (A-043, A-093). Test A-045.
+- Findings:
+  - GET reads the stored snapshot and only `POST /api/analysis` recomputes
+    (A-092).
+  - Dismissal is keyed by rule and subject across filters (A-091).
+  - Implement the route-backed finding-detail modal from section 6, or record
+    the deviation (A-046).
+  - Severity and "show dismissed" live in the URL (A-123).
+  - Name the timezone (A-122).
+  - Record the 7.6 cache-write deviation (A-119).
+  - Test A-094.
+- Wrapped: merge aliased projects (A-049), fix the year input (A-051), use a
+  richer fixture and add tz tests (A-052, A-097, A-098), empty states (A-100),
+  and widen the tests for 7.8/7.13 (A-099). KPI formula tests (A-077).
+- **Stats reconciliation *(decided)*.** Next to the deduped totals, show
+  "input + output (Claude Stats-equivalent)", plus a "why numbers differ"
+  panel in Health/Overview. The desktop app and `/usage` Stats count every
+  JSONL line without dedup, exclude cache, count messages as lines, include
+  subagents in tokens and may be a stale snapshot. Show the raw-line figure
+  only as a comparison, never as a headline. Define "session" in the UI
+  (A-116, A-125).
+**Gate:** a 2-days-a-week fixture yields zero anomalies and 30 flat days plus
+one 10x day still yield exactly one. On the audit's real-data snapshot, the
+reconciliation panel reproduces the desktop figures (33 / 21,183 / 15M) from
+the raw-line rule.
+
+#### Phase 6.5g: Frontend correctness and accessibility
+**Do:**
+- Correctness:
+  - The daily chart keeps the newest days on long ranges (A-037).
+  - Show sub-cent costs as `<$0.01` (A-079).
+  - Readable 422 errors (A-080).
+  - Invalid URL dates degrade gracefully (A-082).
+  - Paginate the remaining tables (A-086).
+  - Coverage copy matches the data (A-087, A-088).
+  - Footer links (A-081).
+  - FilterBar handles errors (A-117).
+- Accessibility and design:
+  - Skip link and the heatmap is not 420 tab stops (A-040).
+  - The sticky bar does not hide focus (A-038).
+  - Contrast of `--tm` and error headings (A-062, A-084).
+  - h1 and per-route titles (A-085).
+  - Chart accessible names (A-090).
+  - Tooltip tokens (A-089), no hard-coded colours (A-110) and `min-width: 0`
+    everywhere (A-111).
+- Tests: vitest for `lib/` (A-109) and theme plus dark-mode overflow e2e
+  (A-112).
+**Gate:** the existing e2e suite plus overflow at 1440/1024/768/390 in both
+themes on every route. An axe-style contrast check passes for text tokens.
+Vitest covers format, filters, dates and the error client.
+
 ### Phase 7 — Packaging and polish
-**Do:** ship `web/dist` into the wheel as `ccburn/static`. `ccburn serve` opens the React app. Windows path tests. Docs. Screenshots in the README.
-**Gate:** `pip install dist/*.whl` in a clean venv on Windows and Linux, then `ccburn serve` renders the dashboard with no Node present.
+**Status:** work in progress exists uncommitted on `feat/phase-7-packaging-polish`
+(SPA serving, build hook, packaging tests). Rebase it onto Phase 6.5g and the rename.
+**Do:** ship `web/dist` into the wheel as `vibewatt/static`. `vibewatt serve` opens the React app. Windows path tests. Docs. Screenshots in the README.
+Added 2026-09-22 *(decided unless noted)*:
+- Name: re-check that `vibewatt` is free on PyPI, npm and GitHub. With the
+  user's go-ahead, reserve the names; publishing is outward-facing.
+- Toolchain first, as its own commit: Vite 8, `@vitejs/plugin-react` 6,
+  Vitest 5, react-router 7.18.4 (import from `react-router`). Pin TypeScript
+  to 5.x for openapi-typescript and pin openapi-fetch 0.17.0 exactly. Then
+  split chunks with Vite 8 `codeSplitting` and route-level `lazy`. `npm audit`
+  must show no high/critical findings in runtime dependencies (A-118, A-127).
+- Remove `ccburn/ui.py` and the `html` command and record why: the React app
+  supersedes them and they carry XSS sinks (A-054, A-126).
+- `requires-python >=3.11` (3.10 reaches end of life on 2026-10-31).
+  `fastapi>=0.141.1` (strict JSON content type, `app.frontend()`),
+  `uvicorn>=0.53`. Dev group: `httpx2`, plus a narrow filter for the anyio
+  deprecation warning. Test the floors with `--resolution lowest-direct`.
+- Serve the SPA with `app.frontend()`. Register JS/CSS/SVG/woff2 MIME types
+  explicitly, because the Windows registry can map `.js` to `text/plain`.
+  The build hook requires `index.html` plus hashed JS and CSS. Exclude `.map`
+  from the wheel. The sdist includes `static/`.
+- Docs refresh: section 1 and 3 drift, FEATURES.md, README, CLAUDE.md
+  commands and repository-wide lint and format debt (A-104 to A-107, A-128).
+**Gate:** `pip install dist/*.whl` in a clean venv on Windows and Linux, then `vibewatt serve` renders the dashboard with no Node present.
 
 ---
 
@@ -417,6 +669,13 @@ Stated so they do not creep in:
 - Copying code from the reference tools. One is AGPL; borrowing an idea is fine, borrowing source is not.
 - Multi-user, auth, or hosting. Single user, localhost.
 - Recovering logs already deleted by retention. Impossible; say so.
+- Inferring plan limits from past token totals. Utilization comes only from
+  official sources (statusline, desktop history, OAuth usage). ccusage removed
+  its `blocks --live` monitor after accuracy complaints for exactly this.
+- Adopting the Claude Stats / desktop counting rules (raw line sums) for
+  headline numbers. They are shown only as a labelled comparison (6.5f).
+- An MCP server, for now. ccusage shipped one and removed it (May 2026). A
+  stable `--json` CLI output is the preferred agent interface; see Deferred.
 
 ---
 
@@ -424,7 +683,10 @@ Stated so they do not creep in:
 
 Every one of these produced a wrong number or a broken page during earlier work.
 
-1. Summing JSONL lines instead of deduping responses → 2-3x overcount.
+1. Summing JSONL lines instead of deduping responses → 2-3x overcount. **Amended
+   2026-09-22:** keeping the *first* line per key undercounts output 7.6-16%,
+   because earlier lines carry streaming placeholder `output_tokens`. Keep the
+   per-field maximum. Full rule in Phase 6.5b.
 2. One flat cache-write multiplier → 38% error on that line.
 3. `date.today()` instead of the report timezone → wrong streaks and MTD.
 4. Pricing an unknown model at zero → silent undercount. ccusage 20.0.20 does this for current models.
@@ -433,6 +695,17 @@ Every one of these produced a wrong number or a broken page during earlier work.
 7. Recomputing cost for harvested cloud sessions → wrong, no TTL split available. Use the API's `cost_usd`.
 8. Treating a single quota reading as a trend → spurious alerts. Needs `quota_samples`.
 9. Labelling local-only stats as complete → the "streak is 0 but I use Claude daily" bug.
+10. `/btw` aside transcripts re-log parent messages under a new `requestId` → a
+    `(message.id, requestId)` key alone double-counts them.
+11. Harvesting Remote Control (`bridge`) sessions that also have local transcripts →
+    the same work counted twice. Match `bridge-session` ids.
+12. Longest-prefix model lookup → a new model id silently priced as an older
+    sibling (`claude-opus-4-9` as Opus 4 at $15/$75). Look up exact ids only.
+13. Trusting the desktop app's or `/usage` Stats token totals as ground truth →
+    about 2.7x overcount (raw line sums, no dedup). See `docs/AUDIT-2026-09-22.md`.
+
+Trap 6 is version-dependent: `cleanupPeriodDays: 0` fails validation on Claude
+Code 2.1.89 and later (section 2.4).
 
 ---
 
@@ -495,3 +768,203 @@ Append here rather than widening a phase.
 - Phase 5: local context percentages need a trustworthy per-session context
   snapshot and maximum. Rate-limit blocks cannot supply that denominator;
   local context is explicitly unavailable while harvested nudges are supported.
+
+### Audit status of the items above (2026-09-22)
+
+- Lint entry is stale. The real figures are 21 `ruff check` errors and 15
+  unformatted files. `dashboard.py` no longer exists and 4 of the unformatted
+  files were introduced in Phases 2-3. Cleared in Phase 7 (A-107).
+- The `ccburn sessions` cp1252 crash is wider than described: the default
+  report crashes on any redirected stdout (`terminal.py:68` prints a
+  non-cp1252 glyph). Scheduled in 6.5c (A-057).
+- `date.today()` in `aggregate.py:161,177`, `ui.py:77` and `doctor.py:45` is
+  still present. The `aggregate.py` fallbacks are unreachable from `build()`,
+  which sets `report.today` from the report tz. `terminal.py:62` is reachable
+  and wrong (A-055, 6.5c). `ui.py` is removed in Phase 7.
+- The `build_report` quota-per-request item and the "filtered reports skip
+  history" item are resolved by 6.5b (store as the only source) and 6.5d
+  (throttled quota).
+- npm audit: the count of 7 is accurate. The severities were not recorded: 1
+  critical and 1 high, both in dev dependencies, plus react-router moderates.
+  The Phase 7 toolchain upgrade resolves them (A-118, A-127).
+- The `--refresh` serve flag, left behind when `dashboard.py` was removed, is
+  still documented. Removed in 6.5e (A-078).
+- The repricing item: key the reprice pass on a `PRICING_VERSION` constant
+  stamped per stored turn, so a table change reprices automatically.
+- Features 7.1 and 7.2 were never assigned a phase. The 7.2 `summary`
+  preference cannot be implemented as written, because Claude Code no longer
+  writes `summary` records. The title rule moves to 6.5c (A-059, A-128).
+
+### Researched, not scheduled (2026-09-22)
+
+Evidence and sources are in `docs/AUDIT-2026-09-22.md` and the research notes.
+The user chose to schedule only the stats reconciliation from this list.
+
+- **Pricing completeness.** These change numbers for some users:
+  - Advisor-model tokens live only in `usage.iterations[]` and are dropped
+    today.
+  - Historical Opus 4.6/4.7 fast mode at $30/$150 (Feb-Jul 2026) is priced at
+    standard, a 6x undercount.
+  - The pre-2026 long-context premium (over 200k input on Sonnet 4/4.5 until
+    2026-04-30, on Opus/Sonnet 4.6 until 2026-03-13) is not applied.
+  - `web_fetch` and code-execution counts are not recorded.
+  - Rows are missing for `claude-mythos-preview` ($25/$125) and retired
+    Sonnet 3.5/3.7.
+- **Drain explainer / metering drift.** Quota % gained per $100
+  API-equivalent over time and per Claude Code version, the 1h/5m cache-write
+  share and limit-regime annotations. The most-reacted usage complaints in
+  anthropics/claude-code (#16157, #38335) ask for this.
+- **Multi-account and multi-machine.** Several `CLAUDE_CONFIG_DIR` roots
+  tagged by account, org-keyed quota and export/import to merge another
+  machine's store. No daemon, no network.
+- **Optional OTLP receiver** for Claude Code's OpenTelemetry `api_request`
+  events, for attribution only. JSONL stays the source of truth for tokens.
+- **`history.jsonl` activity backfill.** It survives retention. Use
+  timestamps and project only, never prompt text.
+- **Cloud session listing.** Spike `GET /v1/code/sessions` (claude.ai OAuth,
+  undocumented) behind an opt-in flag. `--file` harvest stays the supported
+  path.
+- **Stable agent-facing JSON.** `vibewatt status --json` and `quota --json`
+  with a `schema_version` and exit codes, instead of an MCP server.
+- Provenance badges (`official | computed_local | cloud_reported |
+  estimate`) and an `as_of` time on every figure.
+- Outcome features seen in codeburn: spend linked to commits and a
+  before/after follow-up for each dismissed finding.
+- Frontend majors: React 19, React Router 8, TanStack Table 9 (an API
+  rewrite). Not needed for packaging.
+- Browser notifications and a generic webhook for alerts. This extends the
+  existing "Webhooks and desktop notifications" item.
+
+### Audit 2026-09-22 findings
+
+One line per finding: ID, severity and the phase that fixes it. Evidence,
+repro and suggested fix are in `docs/AUDIT-2026-09-22.md`.
+
+- A-001 [critical, 6.5b] history.json rollup permanently loses usage when a day is partially pruned (session spanning midnight, resumed/forked files)
+- A-002 [high, 6.5b] Restored history days show unknown-model usage as $0 and drop the unpriced flag
+- A-003 [high, 6.5b] Dedup keeps the first (streaming placeholder) usage line, undercounting output tokens by 7.6% on real data
+- A-004 [high, 6.5e] CSRF: POST /api/harvest accepts a cross-origin text/plain body and writes fake sessions and costs to the store
+- A-005 [high, 6.5e] Section 5 endpoints only partly built: POST /api/sync does not stream, /api/health lacks last-sync and coverage gaps, /api/quota lacks recent samples
+- A-006 [high, 6.5d] Burn alert effectively never fires under the app's own quota sampling (burst samples give zero slope)
+- A-007 [high, 6.5e] No Host-header validation: DNS rebinding lets any website read sessions, export, concierge and trigger paid calls
+- A-008 [medium, 6.5b] Timezone change double-counts turns in the history rollup
+- A-009 [medium, 6.5b] Session/project attribution of a replayed response depends on sync order (store vs live report disagree)
+- A-010 [medium, 6.5b] Records lacking message.id: live report and store count them differently
+- A-011 [medium, 6.5c] Unknown model ids silently inherit an older sibling's rate via prefix match; the remote table cannot fill the gap
+- A-012 [medium, 6.5c] normalize() misses Bedrock global./jp./au./us-gov. inference-profile prefixes, so those models are unpriced
+- A-013 [medium, 6.5d] Stale statusline dump is recorded as a 0% quota sample at its original capture time
+- A-014 [medium, 6.5c] Pricing non-negotiables have no direct tests: cache-write TTL split, cache-read rate and unknown-model-as-unpriced in cost_of all survive mutation
+- A-015 [medium, 6.5c] 'Built-in pricing table outranks fetched table' is untested
+- A-016 [medium, 6.5c] Report 'today' from the report timezone is untested
+- A-017 [medium, 6.5c] Cost inputs geo, fast mode and web_search are untested through the parser and cost_of
+- A-018 [medium, 6.5b] Incremental sync (mtime, size) check: the size half is untested
+- A-019 [medium, 6.5c] Streak yesterday-grace and month-to-date year check are untested
+- A-020 [medium, 6.5c] Pricing lookup: longest-prefix match and cloud-provider prefix stripping are untested
+- A-021 [medium, 6.5b] include_sidechains=False is untested
+- A-022 [medium, 6.5b] History restore 'live logs win' precedence is untested
+- A-023 [medium, 6.5c] One wrong-typed field in any log crashes sync (rolling back every file) and returns 500 on every report endpoint
+- A-024 [medium, 6.5c] A file that cannot be opened is recorded as parsed, so its turns are skipped for good once the lock clears
+- A-025 [medium, 6.5b] Report endpoints re-parse every log file (and re-read quota) on each request: 0.7-3.5 s on real data, 12 s per endpoint and 46 s per Overview load at 1M lines
+- A-026 [medium, 6.5c] Unpriced models are exported with cost 0 per row (CSV, JSON export, BucketOut) and no per-row unpriced flag
+- A-027 [medium, 6.5e] Harvested session with usage but no cost_usd is stored as $0 and not flagged unpriced (sessions, Wrapped, API-equivalent multiple)
+- A-028 [medium, 6.5e] Extreme valid dates overflow in store date boundaries: /api/sessions (from=0001-01-01 or to=9999-12-31) and /api/wrapped?year=1 return 500 east of UTC
+- A-029 [medium, 6.5e] Project filter cannot match names returned when project_aliases or mask_projects is set
+- A-030 [medium, 6.5e] mask_projects is ignored by /api/sessions, /api/session-facets and /api/sessions/{id}, so raw project names leak
+- A-031 [medium, 6.5e] POST /api/harvest and `ccburn harvest` crash or silently accept malformed input
+- A-032 [medium, 6.5e] Harvest entries without an id are stored with a NULL key: re-harvest doubles them and /api/sessions returns 500
+- A-033 [medium, 6.5e] OpenAPI is incomplete: several responses untyped and the harvest request body undocumented
+- A-034 [medium, 6.5c] Report-timezone day/hour bucketing and date-range filters in the report pipeline are untested
+- A-035 [medium, 6.5e] Model filter is unverified on most endpoints and in the web client
+- A-036 [medium, 6.5d] Account-wide plan utilization meters disappear when filters match no local usage (and while summary loads or fails)
+- A-037 [medium, 6.5g] Overview 'Daily cost' bar chart silently drops the most recent days once the range exceeds 240 days
+- A-038 [medium, 6.5g] Sticky filter bar hides the focused element when tabbing backwards
+- A-039 [medium, 6.5b] PLAN 7.1 Verify (session total equals sum of its turns) has no real test
+- A-040 [medium, 6.5g] Heatmap makes every day a tab stop (420 of 457) and there is no skip link
+- A-041 [medium, 6.5f] Anomaly baseline zero-fills inactive days, so users active 3 or fewer days a week get every active day flagged, as does every day back from a break
+- A-042 [medium, 6.5f] No floor when MAD = 0: any day above the median is flagged, including float summation noise
+- A-043 [medium, 6.5f] 'Not enough history' note is wrong for ranges without activity and hides the real cause when an unpriced day lies outside the range
+- A-044 [medium, 6.5b] v4 migration could destroy user tables without any test failing
+- A-045 [medium, 6.5f] Anomaly 'median + 3xMAD, not mean + stdev' is not verified
+- A-046 [medium, 6.5f] Finding-detail modal from the section 6 spec is not implemented and no deviation recorded
+- A-047 [medium, 6.5e] Body-less POSTs (/api/sync, /api/analysis, /api/weekly-summary) run on cross-origin simple requests; weekly-summary spends API credit
+- A-048 [medium, 6.5d] Two-sample slope on close, whole-percent samples produces spurious burn alerts
+- A-049 [medium, 6.5f] Wrapped top_projects does not merge projects that share an alias
+- A-050 [medium, 6.5d] Spike alerts are not time-scoped: every historical spike is an active alert, rescanned with per-turn median on each GET (17,436 alerts, 4.95 MB, 3.65 s at scale)
+- A-051 [medium, 6.5f] Wrapped year input commits every keystroke: the first digit unmounts the input and triggers full-log refetches
+- A-052 [medium, 6.5f] Wrapped streak, daily and hourly bucketing in the report timezone is untested
+- A-053 [medium, 6.5d] Burn alert: a sub-100% projection is never tested
+- A-054 [medium, 7] Legacy dashboard served at / embeds data unescaped: </script> breakout and innerHTML sinks for project/model names
+- A-055 [medium, 6.5c] CLI heatmap anchors on system date.today() instead of the report timezone's today
+- A-056 [medium, 6.5e] GETs that persist findings (/api/findings, /api/alerts), dismiss and a second sync return 500 'database is locked' while a sync holds the write lock
+- A-057 [medium, 6.5c] Windows cp1252 stdout crash is broader than Deferred says: default `ccburn`/`ccburn report` fails on any data when stdout is redirected
+- A-058 [medium, 6.5c] IANA timezones such as the README's `Asia/Tokyo` fail on Windows because tzdata is not a dependency
+- A-059 [medium, 6.5c] Session titles ignore `summary` records, though PLAN 7.2 says to prefer them
+- A-060 [medium, 6.5c] PLAN 7.2 Verify has no suite test for the first-user-message fallback
+- A-061 [medium, 6.5e] README Privacy section is false: prompt text is stored and more than one network call exists
+- A-062 [medium, 6.5g] Muted text token --tm fails WCAG AA contrast in the light theme but carries local-only labels
+- A-063 [low, 6.5c] Flat cache-write fallback silently assumes 5m TTL (undocumented) and a partial split drops tokens
+- A-064 [low, 6.5b] cloud ingest module does not implement the common discover()/parse(path) interface; deviation unrecorded
+- A-065 [low, 6.5c] Without cwd, project attribution uses the encoded dir name and nested subagent files get project 'subagents'
+- A-066 [low, 6.5c] Remote pricing rates are not validated: zero, negative or NaN costs accepted as real rates
+- A-067 [low, 6.5c] Every distinct last-prompt text per session is retained, not just the title
+- A-068 [low, 6.5c] Parser/ingest edge rules untested: <synthetic> skip, id-less turns, cloud sessions without usage
+- A-069 [low, 6.5c] A UTF-8 BOM makes sync drop the file's first record
+- A-070 [low, 6.5c] discover() follows NTFS junction loops: 64 paths for 1 file, each parsed separately
+- A-071 [low, 6.5b] First sync holds every changed turn in memory in one transaction: 492 MB peak for 415k responses, with no progress
+- A-072 [low, 6.5e] CSV export does not neutralise spreadsheet formula cells
+- A-073 [low, 6.5e] Shared filter dependency applied inconsistently: from>to only rejected by findings, wrapped ignores from/to, source/metric/cursor unvalidated
+- A-074 [low, 6.5e] /api/blocks lists blocks oldest first with the active one last; spec says active first
+- A-075 [low, 6.5e] breakdown/surface is just an alias of breakdown/source
+- A-076 [low, 6.5e] test_api.py is too shallow and the gate test never runs `ccburn json`
+- A-077 [low, 6.5f] Derived KPI formulas untested: plan multiple, cache hit rate, block hour anchoring
+- A-078 [low, 6.5e] `--refresh` serve flag is dead but still documented
+- A-079 [low, 6.5g] Costs below $0.01 render as $0.00 in the hero, KPIs, sessions, blocks and Wrapped
+- A-080 [low, 6.5g] FastAPI 422 validation errors render as '422 [object Object]'
+- A-081 [low, 6.5g] Footer has no links
+- A-082 [low, 6.5g] Impossible date (from=2026-13-45) passes URL parser, blanks the input and shows a full-page error
+- A-083 [low, 6.5d] Quota meter aria-valuenow is not clamped to aria-valuemax
+- A-084 [low, 6.5g] Error-state heading uses --serious as text colour and falls below AA in both themes
+- A-085 [low, 6.5g] Overview has no h1 and document.title never changes per route
+- A-086 [low, 6.5g] Some tables are not paginated: Overview daily table and Wrapped tables
+- A-087 [low, 6.5g] Footer coverage note says figures include harvested sessions but Overview, Projects and Models are local-only
+- A-088 [low, 6.5g] Sessions embedded on the Models drill-down are headed 'Project sessions'
+- A-089 [low, 6.5g] Hour-of-day Recharts tooltip text uses the series colour and a hard-coded #ccc cursor in both themes
+- A-090 [low, 6.5g] Charts and heat cells lack proper accessible names
+- A-091 [low, 6.5f] A dismissal applies only to the exact filter selection, so a dismissed finding returns under a project filter or explicit date range
+- A-092 [low, 6.5f] Each findings GET re-runs the full analysis and rewrites the snapshot; findings rows grow without bound
+- A-093 [low, 6.5f] 'Not enough history' appears only inside the collapsed Coverage section; the anomaly group reads 'No matching findings.'
+- A-094 [low, 6.5f] Waste rule cache_to_output: the 200k bound is untested
+- A-095 [low, 6.5e] Status fetch 3 s timeout is per socket read, not total
+- A-096 [low, 6.5d] Alert findings.day uses the UTC date, not the report timezone
+- A-097 [low, 6.5f] Wrapped snapshot fixture is thin: one month, one model, zero cache savings
+- A-098 [low, 6.5f] Wrapped dedup of a harvested cloud twin against an unsynced local session is untested
+- A-099 [low, 6.5f] PLAN 7.13 and 7.8 Verify tests are narrower than their clauses
+- A-100 [low, 6.5f] Missing empty states: Wrapped tables and zero-window quota response
+- A-101 [low, 6.5b] The '2.8x overcount' claim holds for input/output only; corpus-wide token overcount is 2.1x
+- A-102 [low, 6.5e] Auto-fetched LiteLLM pricing table (and quota response, harvest body) read with no size cap
+- A-103 [low, 6.5e] Only --host 0.0.0.0 warns; other non-loopback binds are silent and the warning understates write access
+- A-104 [low, 7] CLAUDE.md commands broken: single-test example references a nonexistent test and `pip install -e ".[dev]"` installs no dev tools
+- A-105 [low, 7] FEATURES.md reports 11 implemented features as 'no' and has a stale score
+- A-106 [low, 7] PLAN sections 1, 3 and 5 no longer match the code (argparse not Typer, deleted dashboard.py, pages/, missing endpoints); deviations unrecorded
+- A-107 [low, 7] Deferred lint/format entry is stale and 4 phase-introduced unformatted files are called pre-existing
+- A-108 [low, 6.5e] docs/DATA-SOURCES.md not updated for Phase 5-6 inputs and outbound calls
+- A-109 [low, 6.5g] Frontend unit coverage is 3 tests on filter round-trip; formatting, date and error logic untested
+- A-110 [low, 6.5g] Hard-coded colours outside the token blocks
+- A-111 [low, 6.5g] min-width: 0 missing on several grid children
+- A-112 [low, 6.5g] No test covers the theme toggle or tokens; core-view overflow gated in light mode only
+- A-113 [info, 6.5c] sync_tz identity includes the current UTC offset, so every DST switch forces a full rebucket and re-parse
+- A-114 [info, 6.5b] files.turn_count stores pre-dedup assistant lines, not responses
+- A-115 [info, 6.5e] /api/hourly returns a 24-bucket hour-of-day vector, not a matrix (unverified spec reading)
+- A-116 [info, 6.5f] Session count semantics differ: ccburn counts only sessions with at least one kept, deduped, non-synthetic turn
+- A-117 [info, 6.5g] FilterBar ignores a failed unfiltered-summary (options) query
+- A-118 [info, 7] npm audit severities not recorded in Deferred (1 critical, 1 high in dev deps)
+- A-119 [info, 6.5f] Cache saving also converts cache writes to reads (beyond the spec formula); spec fixture still matches
+- A-120 [info, 6.5f] Anomaly uses raw (unscaled) MAD: matches spec text but gives 6-10% false positives on stable spend
+- A-121 [info, 6.5e] tool_reads.path_hash is an unsalted sha256(session\0path) with the session id in the same row, so guessed paths can be confirmed
+- A-122 [info, 6.5f] Peak-window finding says 'report timezone' without naming it
+- A-123 [info, 6.5f] Analysis severity and 'Show dismissed' controls live in component state, not the URL
+- A-124 [info, 6.5b] Wrapped headline (stored) differs from /api/summary for the same range once transcripts are pruned
+- A-125 [info, 6.5f] ccburn does not match the Claude desktop app's stats: desktop sums every JSONL line with no dedup and its snapshot ends 2026-09-15 19:13 JST
+- A-126 [info, 7] Legacy page 'Generated' timestamp is naive system-local time shown next to the report timezone
+- A-127 [info, 7] npm audit: react-router 6.30.6 has 2 moderate advisories (not reachable in this SPA)
+- A-128 [info, 7] PLAN 7.1 and 7.2 are not assigned to any phase
