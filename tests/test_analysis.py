@@ -68,12 +68,13 @@ def test_anomaly_trigger_and_flat_fixture(spike, expected):
         )
         for i in range(31)
     ]
-    findings, enough = anomaly.detect(rows, None, date(2026, 9, 1))
-    assert enough
+    findings, status = anomaly.detect(rows, None, date(2026, 9, 1))
+    assert status["evaluated"] > 0
     assert len(findings) == expected
     if findings:
         assert findings[0].metrics["baseline_days"] == 28
-        assert findings[0].metrics["threshold_usd"] == 1
+        # Flat baseline: MAD is 0, so the 10 % floor sets the spread (A-042).
+        assert findings[0].metrics["threshold_usd"] == pytest.approx(1.3)
 
 
 def test_anomaly_excludes_current_day_from_baseline_and_requires_14_days():
@@ -81,12 +82,17 @@ def test_anomaly_excludes_current_day_from_baseline_and_requires_14_days():
         turn(day=(date(2026, 8, 1) + timedelta(days=i)).isoformat(), cost=1)
         for i in range(14)
     ]
-    assert anomaly.detect(rows, None, date(2026, 9, 1)) == ([], False)
+    found, status = anomaly.detect(rows, None, date(2026, 9, 1))
+    assert found == [] and status["evaluated"] == 0 and status["short_history"] == 14
     rows.append(turn(day="2026-08-15", cost=10))
-    result, enough = anomaly.detect(rows, date(2026, 8, 15), date(2026, 8, 15))
-    assert enough and len(result) == 1
+    result, status = anomaly.detect(rows, date(2026, 8, 15), date(2026, 8, 15))
+    assert status["evaluated"] == 1 and len(result) == 1
+    # An unpriced day leaves the baseline (13 priced days: too short) instead of
+    # blocking detection; the notes say which it was.
     rows[0]["cost"] = None
-    assert anomaly.detect(rows, None, date(2026, 8, 15)) == ([], False)
+    found, status = anomaly.detect(rows, None, date(2026, 8, 15))
+    assert found == [] and status["unpriced"] == 1 and status["evaluated"] == 0
+    assert "not enough history" in " ".join(anomaly.notes(status))
 
 
 @pytest.mark.parametrize("case,expected", [("trigger", True), ("quiet", False)])
@@ -325,12 +331,10 @@ def test_findings_stable_dismissed_resolved_and_restored():
         assert next(f for f in again if f["id"] == cache["id"])["dismissed"]
         conn.execute("UPDATE turns SET input=10")
         assert not analyze(conn, UTC, now=NOW)["findings"]
-        assert (
-            conn.execute(
-                "SELECT active FROM findings WHERE id=?", (cache["id"],)
-            ).fetchone()[0]
-            == 0
-        )
+        # The resolved snapshot row is pruned; the dismissal itself survives.
+        assert conn.execute(
+            "SELECT COUNT(*) FROM findings WHERE id=?", (cache["id"],)).fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM dismissals").fetchone()[0] == 1
         conn.execute("UPDATE turns SET input=1000000")
         assert next(
             f for f in analyze(conn, UTC, now=NOW)["findings"] if f["id"] == cache["id"]

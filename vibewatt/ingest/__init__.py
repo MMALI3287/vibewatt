@@ -36,8 +36,9 @@ def discover(cfg: dict | None = None) -> list[tuple[str, Path]]:
     return [(name, path) for name, mod in SOURCES.items() for path in mod.discover(cfg)]
 
 
-def parse(source: str, path: Path, drops: Counter | None = None) -> Iterator[Turn]:
-    return SOURCES[source].parse(path, drops)
+def parse(source: str, path: Path, drops: Counter | None = None,
+          raw: dict | None = None) -> Iterator[Turn]:
+    return SOURCES[source].parse(path, drops, raw)
 
 
 def walk(root: Path, pattern: str) -> list[Path]:

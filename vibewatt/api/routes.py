@@ -11,7 +11,6 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 
 from .. import cli as climod
 from .. import store
-from ..analysis import analyze
 from ..analysis.models import Kind, Severity
 from . import schemas
 from .dependencies import Filters, get_filters
@@ -67,25 +66,56 @@ def concierge(request: Request, project: str = Query(..., min_length=1, max_leng
         return build(conn, request.app.state.cfg, project)
 
 
-@router.get("/findings", response_model=schemas.AnalysisOut)
-@router.post("/analysis", response_model=schemas.AnalysisOut)
-def findings(
-    request: Request, filters: Filters = Depends(get_filters),
-    kind: Kind | None = None, severity: Severity | None = None,
-    include_dismissed: bool = False,
-):
+def _findings(request: Request, filters: Filters, kind, severity, include_dismissed,
+              force: bool):
+    from ..analysis import current
+
     with store.connect() as conn:
-        result = analyze(
-            conn, request.app.state.tz, date_from=filters.date_from, date_to=filters.date_to,
+        result = current(
+            conn, request.app.state.tz, force=force,
+            date_from=filters.date_from, date_to=filters.date_to,
             source=filters.source, project=_raw_projects(request, conn, filters),
             model=filters.model,
             overrides=request.app.state.cfg.get("pricing_overrides"),
         )
+    result = dict(result)
     result["findings"] = [f for f in result["findings"]
                           if (include_dismissed or not f["dismissed"])
                           and (not kind or f["kind"] == kind)
                           and (not severity or f["severity"] == severity)]
     return result
+
+
+@router.get("/findings", response_model=schemas.AnalysisOut)
+def findings(
+    request: Request, filters: Filters = Depends(get_filters),
+    kind: Kind | None = None, severity: Severity | None = None,
+    include_dismissed: bool = False,
+):
+    """The stored snapshot; recomputed only after the store changes (A-092)."""
+    request.app.state.ensure_synced()
+    return _findings(request, filters, kind, severity, include_dismissed, force=False)
+
+
+@router.post("/analysis", response_model=schemas.AnalysisOut)
+def run_analysis(
+    request: Request, filters: Filters = Depends(get_filters),
+    kind: Kind | None = None, severity: Severity | None = None,
+    include_dismissed: bool = False,
+):
+    """Recompute now, whatever the snapshot says."""
+    return _findings(request, filters, kind, severity, include_dismissed, force=True)
+
+
+@router.get("/findings/{finding_id}", response_model=schemas.FindingOut,
+            responses={404: {"description": "No such finding"}})
+def finding_detail(finding_id: str):
+    """One finding, for the deep-linkable finding modal (A-046)."""
+    with store.connect() as conn:
+        found = store.finding(conn, finding_id)
+    if found is None:
+        raise HTTPException(404, "finding not found")
+    return found
 
 
 @router.post("/findings/{finding_id}/dismiss", response_model=schemas.DismissFindingOut)
@@ -258,6 +288,18 @@ def quota_endpoint(request: Request, filters: Filters = Depends(get_filters)):
             "SELECT ts, key, scope, utilization, resets_at, source FROM quota_samples"
             " WHERE ts >= ? ORDER BY ts DESC LIMIT 500", (since,))]
     return _quota_out(q, forecasts, recent)
+
+
+@router.get("/reconciliation", response_model=schemas.ReconciliationOut)
+def reconciliation(request: Request, filters: Filters = Depends(get_filters)):
+    """Why these numbers differ from Claude's own Stats (A-116, A-125).
+
+    Date filters apply. Source, project and model do not: the Stats have none.
+    """
+    request.app.state.ensure_synced()
+    with store.connect() as conn:
+        return store.reconciliation(conn, request.app.state.tz, filters.date_from,
+                                    filters.date_to)
 
 
 @router.get("/health", response_model=schemas.HealthOut)

@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { getWrapped } from "../api/client";
 import { useFilters } from "../lib/filters";
@@ -9,10 +10,20 @@ export function Wrapped() {
   const [filters] = useFilters();
   const rawYear = params.get("year");
   const year = rawYear ? Number(rawYear) : undefined;
-  const valid = year === undefined || (Number.isInteger(year) && year >= 1 && year <= 9998);
+  const valid = year === undefined || (Number.isInteger(year) && year >= 1970 && year <= 9998);
+  // The previous year stays on screen while the next one loads, so the year
+  // input is never unmounted mid-typing (A-051).
   const query = useQuery({ queryKey: ["wrapped", year, filters.source, filters.project, filters.model],
-    queryFn: () => getWrapped(year, filters), enabled: valid });
-  if (!valid) return <section className="state" role="alert"><h1>Invalid year</h1><p>Choose a year from 1 to 9998.</p>
+    queryFn: () => getWrapped(year, filters), enabled: valid, placeholderData: keepPreviousData });
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    const next = new URLSearchParams(params);
+    if (draft) next.set("year", draft);
+    setParams(next);
+    setDraft(null);
+  };
+  if (!valid) return <section className="state" role="alert"><h1>Invalid year</h1><p>Choose a year from 1970 to 9998.</p>
     <button onClick={() => { const next = new URLSearchParams(params); next.delete("year"); setParams(next); }}>Use current year</button></section>;
   if (query.isPending) return <section className="state" aria-busy="true">Loading year in review…</section>;
   if (query.isError) return <section className="state state-error" role="alert"><h1>Could not load Wrapped</h1>
@@ -31,8 +42,10 @@ export function Wrapped() {
   }
   return <section className="wrapped-page">
     <h1>{data.year} Wrapped</h1>
-    <label>Year <input aria-label="Wrapped year" type="number" min="1" max="9998" value={data.year}
-      onChange={event => { if (event.target.value) { const next = new URLSearchParams(params); next.set("year", event.target.value); setParams(next); } }} /></label>
+    <label>Year <input aria-label="Wrapped year" type="number" min="1970" max="9998"
+      value={draft ?? String(data.year)} onChange={event => setDraft(event.target.value)}
+      onBlur={commit} onKeyDown={event => { if (event.key === "Enter") commit(); }} /></label>
+    {query.isFetching && <p role="status" className="muted">Loading {year ?? "the current year"}…</p>}
     <p>The year uses {data.timezone}. Source, project and model filters apply. Date-range filters are replaced by the selected calendar year.</p>
     {data.stored_sessions === 0 && <p role="status">No stored usage for this year and selection. Sync local logs or choose another year.</p>}
     {data.unpriced_turns > 0 && <p className="notice">{data.unpriced_turns} unpriced responses are excluded from cost. Cost totals are incomplete.</p>}
@@ -54,9 +67,11 @@ export function Wrapped() {
       <button onClick={download}>Download share card</button><p>The card contains aggregate figures only, without project names or session titles.</p>
     </section>
     <section className="card"><h2>Top projects by tokens</h2><div className="table-wrap"><table><thead><tr><th>Project</th><th>Tokens</th><th>Cost</th></tr></thead>
-      <tbody>{data.top_projects.map((p, index) => <tr key={index}><td>{p.name}</td><td>{fmtCompact(p.tokens)}</td><td>{fmtUsd(p.cost_usd)}</td></tr>)}</tbody></table></div></section>
+      <tbody>{data.top_projects.length === 0 ? <tr><td colSpan={3}>No project usage this year.</td></tr> :
+        data.top_projects.map((p, index) => <tr key={index}><td>{p.name}</td><td>{fmtCompact(p.tokens)}</td><td>{fmtUsd(p.cost_usd)}</td></tr>)}</tbody></table></div></section>
     <section className="card"><h2>Model mix over time</h2><div className="table-wrap"><table><thead><tr><th>Month</th><th>Model</th><th>Tokens</th><th>Cost</th></tr></thead>
-      <tbody>{data.model_months.map(p => <tr key={`${p.month}|${p.model}`}><td>{p.month}</td><td>{p.model}</td><td>{fmtCompact(p.tokens)}</td><td>{fmtUsd(p.cost_usd)}</td></tr>)}</tbody></table></div></section>
+      <tbody>{data.model_months.length === 0 ? <tr><td colSpan={4}>No model usage this year.</td></tr> :
+        data.model_months.map(p => <tr key={`${p.month}|${p.model}`}><td>{p.month}</td><td>{p.model}</td><td>{fmtCompact(p.tokens)}</td><td>{fmtUsd(p.cost_usd)}</td></tr>)}</tbody></table></div></section>
     <details className="card"><summary>Coverage and interpretation</summary>{data.notes.map(note => <p key={note}>{note}</p>)}</details>
   </section>;
 }

@@ -89,6 +89,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/findings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Findings
+         * @description The stored snapshot; recomputed only after the store changes (A-092).
+         */
+        get: operations["findings_api_findings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/analysis": {
         parameters: {
             query?: never;
@@ -98,23 +118,29 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Findings */
-        post: operations["findings_api_analysis_post"];
+        /**
+         * Run Analysis
+         * @description Recompute now, whatever the snapshot says.
+         */
+        post: operations["run_analysis_api_analysis_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/findings": {
+    "/api/findings/{finding_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Findings */
-        get: operations["findings_api_findings_get"];
+        /**
+         * Finding Detail
+         * @description One finding, for the deep-linkable finding modal (A-046).
+         */
+        get: operations["finding_detail_api_findings__finding_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -293,6 +319,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reconciliation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reconciliation
+         * @description Why these numbers differ from Claude's own Stats (A-116, A-125).
+         *
+         *     Date filters apply. Source, project and model do not: the Stats have none.
+         */
+        get: operations["reconciliation_api_reconciliation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -418,6 +466,11 @@ export interface components {
             findings: components["schemas"]["FindingOut"][];
             /** Notes */
             notes: string[];
+            /**
+             * Anomaly Notes
+             * @default []
+             */
+            anomaly_notes: string[];
             /** Analyzed At */
             analyzed_at: string;
         };
@@ -497,6 +550,17 @@ export interface components {
             dropped_records: {
                 [key: string]: number;
             };
+        };
+        /** DedupedFiguresOut */
+        DedupedFiguresOut: {
+            /** Responses */
+            responses: number;
+            /** Input Output Tokens */
+            input_output_tokens: number;
+            /** All Tokens */
+            all_tokens: number;
+            /** Sessions */
+            sessions: number;
         };
         /** DismissFindingIn */
         DismissFindingIn: {
@@ -650,6 +714,19 @@ export interface components {
             /** Source */
             source: string;
         };
+        /** ReconciliationOut */
+        ReconciliationOut: {
+            /** Source */
+            source: string;
+            deduped: components["schemas"]["DedupedFiguresOut"];
+            stats_equivalent: components["schemas"]["StatsFiguresOut"];
+            /** Token Ratio */
+            token_ratio: number | null;
+            /** Reasons */
+            reasons: string[];
+            /** Session Definition */
+            session_definition: string;
+        };
         /** ServiceStatusOut */
         ServiceStatusOut: {
             /** Indicator */
@@ -748,6 +825,15 @@ export interface components {
             first_day: string | null;
             /** Last Day */
             last_day: string | null;
+        };
+        /** StatsFiguresOut */
+        StatsFiguresOut: {
+            /** Messages */
+            messages: number;
+            /** Tokens */
+            tokens: number;
+            /** Sessions */
+            sessions: number;
         };
         /** StoreCloudOut */
         StoreCloudOut: {
@@ -1125,7 +1211,7 @@ export interface operations {
             };
         };
     };
-    findings_api_analysis_post: {
+    findings_api_findings_get: {
         parameters: {
             query?: {
                 kind?: ("anomaly" | "cache" | "tip" | "waste" | "peak" | "context") | null;
@@ -1164,7 +1250,7 @@ export interface operations {
             };
         };
     };
-    findings_api_findings_get: {
+    run_analysis_api_analysis_post: {
         parameters: {
             query?: {
                 kind?: ("anomaly" | "cache" | "tip" | "waste" | "peak" | "context") | null;
@@ -1191,6 +1277,44 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AnalysisOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finding_detail_api_findings__finding_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                finding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingOut"];
+                };
+            };
+            /** @description No such finding */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -1540,6 +1664,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QuotaOut"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reconciliation_api_reconciliation_get: {
+        parameters: {
+            query?: {
+                from?: string | null;
+                to?: string | null;
+                source?: "all" | "claude-code" | "cowork" | "web";
+                project?: string | null;
+                model?: string | null;
+                metric?: "cost" | "tokens";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReconciliationOut"];
                 };
             };
             /** @description Validation Error */

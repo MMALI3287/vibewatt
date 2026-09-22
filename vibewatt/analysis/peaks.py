@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, tzinfo
+from datetime import date, datetime, tzinfo
 
 from ..config import clock_zone
 from .models import Finding, timestamp
@@ -42,6 +42,9 @@ def detect(
             "Saturday",
             "Sunday",
         )[weekday]
+        # Name the zone, not just "the report timezone" (A-122).
+        shown = clock_zone(tz)
+        zone = getattr(shown, "key", None) or datetime.now(shown).strftime("UTC%z")
         findings.append(
             Finding(
                 "peak",
@@ -49,9 +52,9 @@ def detect(
                 "info",
                 f"{label}:{weekday}:{hour}",
                 max(dates).isoformat(),
-                f"Limits encountered on {name} around {hour:02d}:00",
+                f"Limits encountered on {name} around {hour:02d}:00 ({zone})",
                 "Account-wide samples reached 100% in at least two distinct reset windows on "
-                "different dates at this weekday/hour in the report timezone. Repeated polling "
+                f"different dates at this weekday/hour in {zone}. Repeated polling "
                 "counts once per reset window. This describes observed history, not a prediction.",
                 coverage="account",
                 metrics={

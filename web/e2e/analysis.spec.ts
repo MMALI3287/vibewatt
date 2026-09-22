@@ -76,3 +76,22 @@ for (const width of [1440, 1024, 768, 390]) {
     }
   });
 }
+
+test("finding details deep-link and survive reload; severity lives in the URL", async ({ page }) => {
+  // A-046: a route-backed finding modal. A-123: severity and dismissed in the URL.
+  await page.goto("/analysis?source=claude-code&project=demo&severity=info&dismissed=1");
+  await expect(page.getByLabel("Severity")).toHaveValue("info");
+  await page.reload();
+  await expect(page.getByLabel("Severity")).toHaveValue("info");
+  await expect(page.getByRole("checkbox", { name: "Show dismissed" })).toBeChecked();
+  await page.goto("/analysis?source=claude-code&project=demo");
+  await page.locator("summary").filter({ hasText: "Token-waste checks" }).click();
+  const finding = page.getByRole("article", { name: "Repeated file reads" });
+  await finding.getByRole("link", { name: "Details" }).click();
+  await expect(page).toHaveURL(/\/analysis\/findings\/[0-9a-f]+/);
+  await expect(page.getByRole("dialog")).toContainText("Repeated file reads");
+  await page.reload();
+  await expect(page.getByRole("dialog")).toContainText("Repeated file reads");
+  await page.getByRole("button", { name: "Close finding" }).click();
+  await expect(page).toHaveURL(/\/analysis\?/);
+});

@@ -28,12 +28,7 @@ def analyze(
     """Persist a filter-specific snapshot; metric changes do not change evidence."""
     today = (now or datetime.now(tz)).astimezone(tz).date()
     end = min(date_to, today) if date_to else today
-    scope = hashlib.sha256(
-        json.dumps(
-            [str(date_from), str(date_to), source, project, model],
-            separators=(",", ":"),
-        ).encode()
-    ).hexdigest()
+    scope = scope_of(date_from, date_to, source, project, model)
 
     def facets(row: dict, source_key: str = "source") -> bool:
         return (
@@ -56,7 +51,7 @@ def analyze(
         item["day"] = local_day(item["ts"], tz)
         if item["day"] and facets(item):
             turns.append(item)
-    findings, enough = anomaly.detect(turns, date_from, end)
+    findings, anomaly_status = anomaly.detect(turns, date_from, end)
     sessions: dict[str, list[dict]] = defaultdict(list)
     for row in turns:
         if in_range(row["day"]):
@@ -97,14 +92,12 @@ def analyze(
         ),
         (
             "Savings are separate scenarios and overlap. Do not add them together. "
-            "Dismissals apply to this filter selection and survive refreshes."
+            "Dismissing a session finding hides it under every filter; other findings "
+            "stay dismissed for this filter selection."
         ),
     ]
-    if not enough:
-        notes.append(
-            "Not enough history for anomaly detection: a fully priced day needs at "
-            "least 14 preceding calendar days of observed history (up to 28)."
-        )
+    anomaly_notes = anomaly.notes(anomaly_status)
+    notes.extend(anomaly_notes)
     if source != "all" or project is not None or model:
         notes.append(
             "Peak-window checks are unavailable with source, project or model filters: "
@@ -146,13 +139,55 @@ def analyze(
             ).encode()
         ).hexdigest()
         payload.append(data)
-    saved = store.save_findings(conn, scope, payload)
-    priority = {"urgent": 0, "warning": 1, "info": 2}
-    saved.sort(
-        key=lambda f: (priority[f["severity"]], -(f["savings_usd"] or 0), f["id"])
-    )
-    return {
-        "findings": saved,
+    saved = store.save_findings(conn, scope, payload, prune=True)
+    result = {
+        "findings": _ordered(saved),
         "notes": notes,
+        "anomaly_notes": anomaly_notes,
         "analyzed_at": (now or datetime.now(tz)).isoformat(),
+    }
+    # The snapshot a GET serves until the store changes (A-092).
+    conn.execute(
+        "INSERT OR REPLACE INTO meta VALUES (?, ?)",
+        (f"analysis:{scope}", json.dumps({
+            "generation": store.generation(conn), "day": today.isoformat(),
+            "notes": notes, "anomaly_notes": anomaly_notes,
+            "analyzed_at": result["analyzed_at"]})),
+    )
+    return result
+
+
+def _ordered(findings: list[dict]) -> list[dict]:
+    priority = {"urgent": 0, "warning": 1, "info": 2}
+    return sorted(findings, key=lambda f: (priority[f["severity"]], -(f["savings_usd"] or 0),
+                                           f["id"]))
+
+
+def scope_of(date_from, date_to, source, project, model) -> str:
+    return hashlib.sha256(
+        json.dumps([str(date_from), str(date_to), source, project, model],
+                   separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def current(conn: sqlite3.Connection, tz: tzinfo, *, force: bool = False, **filters) -> dict:
+    """The stored snapshot for these filters, recomputed only when needed.
+
+    A snapshot stays valid until the store's generation or the day changes.
+    Toggling visibility or dismissing a finding therefore costs a read, not a
+    full analysis; `force` (POST /api/analysis) always recomputes.
+    """
+    scope = scope_of(filters.get("date_from"), filters.get("date_to"),
+                     filters.get("source", "all"), filters.get("project"),
+                     filters.get("model"))
+    row = conn.execute("SELECT value FROM meta WHERE key = ?", (f"analysis:{scope}",)).fetchone()
+    meta = json.loads(row[0]) if row else None
+    today = (filters.get("now") or datetime.now(tz)).astimezone(tz).date().isoformat()
+    if force or not meta or meta["generation"] != store.generation(conn) or meta["day"] != today:
+        return analyze(conn, tz, **filters)
+    return {
+        "findings": _ordered(store.active_findings(conn, scope)),
+        "notes": meta["notes"],
+        "anomaly_notes": meta["anomaly_notes"],
+        "analyzed_at": meta["analyzed_at"],
     }
