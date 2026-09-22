@@ -11,7 +11,8 @@
       "output": 15,
       "thinking": 0,
       "web_searches": 0,
-      "cost_usd": 0.000675
+      "cost_usd": 0.000675,
+      "unpriced": 0
     },
     "by_day": {
       "2026-09-15": {
@@ -23,7 +24,8 @@
         "output": 15,
         "thinking": 0,
         "web_searches": 0,
-        "cost_usd": 0.000675
+        "cost_usd": 0.000675,
+        "unpriced": 0
       }
     },
     "by_model": {
@@ -36,7 +38,8 @@
         "output": 15,
         "thinking": 0,
         "web_searches": 0,
-        "cost_usd": 0.000675
+        "cost_usd": 0.000675,
+        "unpriced": 0
       }
     },
     "by_source": {
@@ -49,7 +52,8 @@
         "output": 10,
         "thinking": 0,
         "web_searches": 0,
-        "cost_usd": 0.0004
+        "cost_usd": 0.0004,
+        "unpriced": 0
       },
       "cowork": {
         "responses": 1,
@@ -60,7 +64,8 @@
         "output": 5,
         "thinking": 0,
         "web_searches": 0,
-        "cost_usd": 0.000275
+        "cost_usd": 0.000275,
+        "unpriced": 0
       }
     },
     "by_project": {
@@ -73,7 +78,8 @@
         "output": 10,
         "thinking": 0,
         "web_searches": 0,
-        "cost_usd": 0.0004
+        "cost_usd": 0.0004,
+        "unpriced": 0
       },
       "space": {
         "responses": 1,
@@ -84,7 +90,8 @@
         "output": 5,
         "thinking": 0,
         "web_searches": 0,
-        "cost_usd": 0.000275
+        "cost_usd": 0.000275,
+        "unpriced": 0
       }
     },
     "by_day_model": {
@@ -97,7 +104,8 @@
         "output": 15,
         "thinking": 0,
         "web_searches": 0,
-        "cost_usd": 0.000675
+        "cost_usd": 0.000675,
+        "unpriced": 0
       }
     },
     "by_hour": {
@@ -110,7 +118,8 @@
         "output": 5,
         "thinking": 0,
         "web_searches": 0,
-        "cost_usd": 0.000275
+        "cost_usd": 0.000275,
+        "unpriced": 0
       },
       "20": {
         "responses": 1,
@@ -121,7 +130,8 @@
         "output": 5,
         "thinking": 0,
         "web_searches": 0,
-        "cost_usd": 0.000175
+        "cost_usd": 0.000175,
+        "unpriced": 0
       },
       "21": {
         "responses": 1,
@@ -132,7 +142,8 @@
         "output": 5,
         "thinking": 0,
         "web_searches": 0,
-        "cost_usd": 0.000225
+        "cost_usd": 0.000225,
+        "unpriced": 0
       }
     },
     "sessions": 2,

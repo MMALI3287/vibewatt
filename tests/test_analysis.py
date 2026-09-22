@@ -410,12 +410,13 @@ def test_v3_migration_preserves_existing_data_and_adds_metadata_checkpoints(tmp_
     store._v2_files_and_quota_samples(conn)
     conn.execute("INSERT INTO meta VALUES ('schema','3')")
     conn.execute("INSERT INTO files VALUES ('retained',1,1,'ts',1)")
+    conn.execute("CREATE TABLE prompts (session TEXT NOT NULL, ts TEXT, text TEXT NOT NULL, PRIMARY KEY (session, text))")  # pre-schema-6 table
     conn.execute("INSERT INTO prompts VALUES ('s','ts','keep')")
     conn.commit()
     conn.close()
     with store.connect(path) as conn:
         assert store.schema_version(conn) == store.SCHEMA_VERSION
-        assert conn.execute("SELECT text FROM prompts").fetchone()[0] == "keep"
+        assert conn.execute("SELECT text FROM titles").fetchone()[0] == "keep"
         # v5 forgets file checkpoints so every file is re-read under the 6.5b dedup rule.
         assert conn.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM tool_read_files").fetchone()[0] == 0

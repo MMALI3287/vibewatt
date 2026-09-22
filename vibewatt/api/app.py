@@ -14,13 +14,13 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from .. import config as configmod
 from .. import pricing
-from ..cli import build_report, resolve_tz, serialize, sync_store
+from ..cli import build_report, report_zone, serialize, sync_store
 from .routes import _quota_out, router
 
 
 def create_app(cfg: dict | None = None) -> FastAPI:
     cfg = cfg or configmod.load()
-    tz = resolve_tz(cfg.get("timezone"))
+    tz = report_zone(cfg)
 
     lock = threading.Lock()
     stop = threading.Event()

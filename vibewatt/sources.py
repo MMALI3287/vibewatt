@@ -12,10 +12,11 @@ the message/usage payload identical, so normalizing the envelope is enough.
 from __future__ import annotations
 
 import json
+from collections import Counter
+from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator
 
 CLAUDE_CODE = "claude-code"
 COWORK = "cowork"
@@ -58,15 +59,99 @@ def _project_name(source: str, path: Path, cwd: str | None) -> str:
     if source == COWORK:
         # .../<account>/<space>/<local_id>/audit.jsonl
         return path.parent.parent.name or "cowork"
+    # projects/<encoded project>/<session>/subagents/agent.jsonl belongs to the
+    # project, not to a folder called "subagents" (A-065).
+    parts = path.parts
+    if "projects" in parts:
+        index = len(parts) - 1 - parts[::-1].index("projects")
+        if index + 2 < len(parts):
+            return parts[index + 1]
     return path.parent.name
 
 
-def read_file(source: str, path: Path) -> Iterator[Turn]:
-    try:
-        handle = path.open("r", encoding="utf-8", errors="replace")
-    except OSError:
-        return
-    with handle:
+def _int(value) -> int:
+    # bool is an int subclass; a true/false token count is a malformed record.
+    if value is None:
+        return 0
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError(f"not a token count: {value!r}")
+    return int(value)
+
+
+def _turn(source: str, path: Path, rec: dict, cwd: str | None) -> Turn | str:
+    """One assistant record as a Turn, or the reason it is skipped."""
+    msg = rec.get("message")
+    if not isinstance(msg, dict):
+        return "no_message"
+    usage = msg.get("usage")
+    if not isinstance(usage, dict):
+        return "no_usage"
+    ts = _parse_ts(rec.get("timestamp") or rec.get("_audit_timestamp"))
+    if ts is None:
+        return "bad_timestamp"
+    model = msg.get("model")
+    if model == "<synthetic>":
+        return "synthetic"
+    if not isinstance(model, str) or not model:
+        return "no_model"
+
+    # Cache writes are billed at two TTL rates. A record with only the flat
+    # total is assumed to be 5 m, the API default when no TTL is requested.
+    # A split that sums to less than the total puts the remainder on 5 m too,
+    # so no written token is dropped (A-063).
+    split = usage.get("cache_creation")
+    total_write = _int(usage.get("cache_creation_input_tokens"))
+    c5m = c1h = 0
+    if isinstance(split, dict):
+        c5m = _int(split.get("ephemeral_5m_input_tokens"))
+        c1h = _int(split.get("ephemeral_1h_input_tokens"))
+    c5m += max(0, total_write - c5m - c1h)
+
+    details = usage.get("output_tokens_details")
+    server = usage.get("server_tool_use")
+    geo = usage.get("inference_geo")
+    session = str(rec.get("sessionId") or rec.get("session_id") or path.stem)
+    return Turn(
+        source=source,
+        ts=ts,
+        model=model,
+        input=_int(usage.get("input_tokens")),
+        cache_5m=c5m,
+        cache_1h=c1h,
+        cache_read=_int(usage.get("cache_read_input_tokens")),
+        output=_int(usage.get("output_tokens")),
+        thinking=_int(details.get("thinking_tokens")) if isinstance(details, dict) else 0,
+        web_searches=(_int(server.get("web_search_requests"))
+                      if isinstance(server, dict) else 0),
+        fast=usage.get("speed") == "fast",
+        # Only "us" changes the price (1.1x). "global", "not_available" and any
+        # other value bill at the standard rate.
+        geo="us" if geo == "us" else None,
+        sidechain=bool(rec.get("isSidechain")),
+        project=_project_name(source, path, cwd),
+        session=session,
+        key=response_key(
+            str(msg.get("id") or ""),
+            # Cowork's audit.jsonl spells it request_id.
+            str(rec.get("requestId") or rec.get("request_id") or ""),
+            session,
+            ts,
+        ),
+        version=str(rec["version"]) if rec.get("version") else None,
+    )
+
+
+def read_file(source: str, path: Path, drops: Counter | None = None) -> Iterator[Turn]:
+    """Every billable response line in one file, not deduped.
+
+    Raises OSError when the file cannot be opened, so a sync does not record a
+    locked file as read (A-024). A malformed record is skipped and counted in
+    `drops` by reason; it never aborts the file (A-023).
+    """
+    drops = drops if drops is not None else Counter()
+    # utf-8-sig drops a leading BOM, which otherwise hides the first record (A-069).
+    with path.open("r", encoding="utf-8-sig", errors="replace") as handle:
+        cwd: str | None = None
         for line in handle:
             line = line.strip()
             if not line:
@@ -74,63 +159,26 @@ def read_file(source: str, path: Path) -> Iterator[Turn]:
             try:
                 rec = json.loads(line)
             except json.JSONDecodeError:
+                drops["bad_json"] += 1
                 continue
-            if not isinstance(rec, dict) or rec.get("type") != "assistant":
+            if not isinstance(rec, dict):
+                drops["not_an_object"] += 1
                 continue
-            msg = rec.get("message")
-            if not isinstance(msg, dict):
+            # Carry the last cwd forward: some records omit it (A-065).
+            if isinstance(rec.get("cwd"), str) and rec["cwd"]:
+                cwd = rec["cwd"]
+            if rec.get("type") != "assistant":
                 continue
-            usage = msg.get("usage")
-            if not isinstance(usage, dict):
+            try:
+                turn = _turn(source, path, rec, cwd)
+            except (TypeError, ValueError, AttributeError, OverflowError):
+                drops["bad_field"] += 1
                 continue
-
-            ts = _parse_ts(rec.get("timestamp") or rec.get("_audit_timestamp"))
-            model = msg.get("model")
-            if ts is None or not model or model == "<synthetic>":
+            if isinstance(turn, str):
+                if turn != "synthetic":  # a local stand-in, not a malformed record
+                    drops[turn] += 1
                 continue
-
-            # Cache writes are billed at two different rates. Fall back to the
-            # flat total only when the per-TTL split is absent.
-            split = usage.get("cache_creation") or {}
-            total_write = int(usage.get("cache_creation_input_tokens") or 0)
-            if isinstance(split, dict) and split:
-                c5m = int(split.get("ephemeral_5m_input_tokens") or 0)
-                c1h = int(split.get("ephemeral_1h_input_tokens") or 0)
-                if c5m + c1h == 0 and total_write:
-                    c5m = total_write
-            else:
-                c5m, c1h = total_write, 0
-
-            details = usage.get("output_tokens_details") or {}
-            server = usage.get("server_tool_use") or {}
-            geo = usage.get("inference_geo")
-
-            session = str(rec.get("sessionId") or rec.get("session_id") or path.stem)
-            yield Turn(
-                source=source,
-                ts=ts,
-                model=model,
-                input=int(usage.get("input_tokens") or 0),
-                cache_5m=c5m,
-                cache_1h=c1h,
-                cache_read=int(usage.get("cache_read_input_tokens") or 0),
-                output=int(usage.get("output_tokens") or 0),
-                thinking=int((details or {}).get("thinking_tokens") or 0),
-                web_searches=int((server or {}).get("web_search_requests") or 0),
-                fast=usage.get("speed") == "fast",
-                geo=geo if geo in ("us", "global") else None,
-                sidechain=bool(rec.get("isSidechain")),
-                project=_project_name(source, path, rec.get("cwd")),
-                session=session,
-                key=response_key(
-                    str(msg.get("id") or ""),
-                    # Cowork's audit.jsonl spells it request_id.
-                    str(rec.get("requestId") or rec.get("request_id") or ""),
-                    session,
-                    ts,
-                ),
-                version=str(rec["version"]) if rec.get("version") else None,
-            )
+            yield turn
 
 
 def response_key(msg_id: str, request_id: str, session: str, ts: datetime) -> tuple[str, str]:
@@ -193,56 +241,80 @@ def dedupe(turns) -> tuple[list[Turn], int]:
 
 
 def load(files: list[tuple[str, Path]]) -> tuple[list[Turn], int]:
-    """Read and dedupe every file. Returns (turns, lines collapsed)."""
-    return dedupe(turn for source, path in files for turn in read_file(source, path))
+    """Read and dedupe every readable file. Returns (turns, lines collapsed)."""
+
+    def lines():
+        for source, path in files:
+            try:
+                yield from read_file(source, path)
+            except OSError:
+                continue
+
+    return dedupe(lines())
 
 
-def read_prompts(files: list[tuple[str, Path]]) -> list[dict]:
-    """Recover the prompt text Claude Code records per session.
+# Title sources, best first. Claude Code writes custom-title when the user
+# names a session and ai-title when it names one itself; `summary` records no
+# longer exist (A-059).
+TITLE_RANK = {"custom-title": 4, "ai-title": 3, "last-prompt": 2, "first-user": 1}
+_TITLE_FIELD = {"custom-title": "customTitle", "ai-title": "aiTitle",
+                "last-prompt": "lastPrompt"}
 
-    Claude Code writes a `last-prompt` record carrying the user's prompt. That
-    is the honest source for "what you worked on": it needs no API call, no
-    OAuth and no model, and it is already on disk. Falls back to the session's
-    first user message when no such record exists.
+
+def _first_user_text(rec: dict) -> str:
+    content = (rec.get("message") or {}).get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        for blk in content:
+            if isinstance(blk, dict) and blk.get("type") == "text":
+                return str(blk.get("text", ""))
+    return ""
+
+
+def read_titles(files: list[tuple[str, Path]]) -> list[dict]:
+    """One title per session: the best kind seen, the latest of that kind.
+
+    Only the title is kept. Earlier prompts are not retained (A-067).
     """
-    found: list[dict] = []
+    best: dict[str, dict] = {}
     for source, path in files:
-        first_user: dict | None = None
         try:
-            handle = path.open("r", encoding="utf-8", errors="replace")
+            handle = path.open("r", encoding="utf-8-sig", errors="replace")
         except OSError:
             continue
         with handle:
             for line in handle:
-                line = line.strip()
-                if not line or '"last-prompt"' not in line and '"user"' not in line:
+                if '"type"' not in line or not any(
+                    k in line for k in ('"custom-title"', '"ai-title"', '"last-prompt"', '"user"')
+                ):
                     continue
                 try:
                     rec = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if not isinstance(rec, dict):
+                    continue
                 kind = rec.get("type")
+                if kind == "user":
+                    kind = "first-user"
+                if kind not in TITLE_RANK:
+                    continue
                 session = str(rec.get("sessionId") or rec.get("session_id") or path.stem)
-                if kind == "last-prompt":
-                    text = (rec.get("lastPrompt") or "").strip()
-                    if text:
-                        found.append({"session": session, "ts": rec.get("timestamp"),
-                                      "text": text[:500]})
-                elif kind == "user" and first_user is None:
-                    msg = rec.get("message") or {}
-                    content = msg.get("content")
-                    text = ""
-                    if isinstance(content, str):
-                        text = content
-                    elif isinstance(content, list):
-                        for blk in content:
-                            if isinstance(blk, dict) and blk.get("type") == "text":
-                                text = blk.get("text", "")
-                                break
-                    text = text.strip()
-                    if text and not text.startswith("<"):
-                        first_user = {"session": session,
-                                      "ts": rec.get("timestamp"), "text": text[:500]}
-        if first_user and not any(f["session"] == first_user["session"] for f in found):
-            found.append(first_user)
-    return found
+                seen = best.get(session)
+                if kind == "first-user":
+                    if seen is not None:
+                        continue
+                    text = _first_user_text(rec).strip()
+                    if text.startswith("<"):  # command and hook wrappers, not prose
+                        continue
+                else:
+                    raw = rec.get(_TITLE_FIELD[kind])
+                    text = raw.strip() if isinstance(raw, str) else ""
+                if not text:
+                    continue
+                if seen is None or TITLE_RANK[kind] >= TITLE_RANK[seen["kind"]]:
+                    best[session] = {"session": session, "kind": kind,
+                                     "rank": TITLE_RANK[kind], "ts": rec.get("timestamp"),
+                                     "text": text[:500]}
+    return list(best.values())

@@ -19,6 +19,9 @@ class BucketOut(BaseModel):
     thinking: int
     web_searches: int
     cost_usd: float
+    # Responses on a model with no known rate. cost_usd excludes them, so a row
+    # with unpriced > 0 is a lower bound, not a price (A-026).
+    unpriced: int = 0
 
 
 class ActiveBlockOut(BaseModel):

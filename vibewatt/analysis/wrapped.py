@@ -8,6 +8,8 @@ from collections import defaultdict
 from datetime import date, timedelta, tzinfo
 
 from .. import cli, store
+from ..aggregate import from_store
+from ..config import clock_zone
 from ..pricing import MILLION, rate_for
 from .models import local_day, timestamp, total_tokens
 
@@ -24,15 +26,17 @@ def build(
 ) -> dict:
     """Preserve summary parity without treating retained/cloud usage as live logs."""
     start, end = date(year, 1, 1), date(year, 12, 31)
-    report, *_ = cli.build_report(
-        {**cfg, "quota": False},
-        tz,
-        date_from=start,
-        date_to=end,
-        source=source,
-        project=project,
-        model=model,
+    # The caller's connection, not a second one: a nested connection deadlocks
+    # behind the caller's open write transaction.
+    report = from_store(
+        conn, tz, source=source, date_from=start, date_to=end, project=project,
+        model=model, include_sidechains=cfg.get("include_sidechains", True),
+        session_hours=cfg.get("session_length_hours", 5),
+        overrides=cfg.get("pricing_overrides"),
     )
+    cli.apply_aliases(report, cfg.get("project_aliases") or {})
+    if cfg.get("mask_projects"):
+        cli.mask_projects(report)
     rows = []
     all_local_ids = set(report.sessions)
     for raw in conn.execute("SELECT * FROM turns ORDER BY ts, msg_id, request_id"):
@@ -86,7 +90,7 @@ def build(
         tokens, cost = total_tokens(row), row["cost"] or 0.0
         add(row["project"], row["model"], row["day"], tokens, cost)
         stamp = timestamp(row["ts"])
-        hourly[stamp.astimezone(tz).hour] += tokens
+        hourly[stamp.astimezone(clock_zone(tz)).hour] += tokens
         item = local_sessions.setdefault(
             row["session"],
             {

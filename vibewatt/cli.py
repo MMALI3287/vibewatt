@@ -29,6 +29,14 @@ def resolve_tz(name: str | None):
         raise SystemExit(f"unknown timezone {name!r}: {exc}")
 
 
+def report_zone(cfg: dict):
+    """The report timezone, with the day boundary moved to `day_start_hour`."""
+    try:
+        return configmod.day_zone(resolve_tz(cfg.get("timezone")), cfg.get("day_start_hour"))
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+
 def _bucket_dict(b) -> dict:
     return {
         "responses": b.turns,
@@ -40,6 +48,8 @@ def _bucket_dict(b) -> dict:
         "thinking": b.thinking,
         "web_searches": b.web_searches,
         "cost_usd": round(b.cost, 6),
+        # Responses whose model has no known rate; cost_usd leaves them out (A-026).
+        "unpriced": b.unpriced,
     }
 
 
@@ -77,10 +87,13 @@ def to_csv(report) -> str:
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(["date", "model", "responses", "input", "cache_write_5m",
-                     "cache_write_1h", "cache_read", "output", "cost_usd"])
+                     "cache_write_1h", "cache_read", "output", "cost_usd",
+                     "unpriced_responses"])
     for (day, model), b in sorted(report.by_day_model.items()):
+        # An unpriced row has no cost at all, not a cost of zero.
+        cost = "" if b.unpriced and not b.cost else f"{b.cost:.6f}"
         writer.writerow([day, model, b.turns, b.input, b.cache_5m,
-                         b.cache_1h, b.cache_read, b.output, f"{b.cost:.6f}"])
+                         b.cache_1h, b.cache_read, b.output, cost, b.unpriced])
     return out.getvalue()
 
 
@@ -270,6 +283,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--since", metavar="YYYY-MM-DD")
     p.add_argument("--days", type=int, metavar="N")
     p.add_argument("--tz", help="timezone for day buckets (default: local)")
+    p.add_argument("--day-start-hour", type=int, metavar="H",
+                   help="hour (0-23) a day starts at, so late nights count as one day")
     p.add_argument("--weeks", type=int, help="heatmap width in weeks")
     p.add_argument("--session-hours", type=int, help="rate-limit window length (default 5)")
     p.add_argument("--no-sidechains", action="store_true", help="exclude subagent turns")
@@ -290,11 +305,27 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _utf8_streams() -> None:
+    # Windows gives a redirected stdout the ANSI code page, which cannot encode
+    # the heatmap's block glyph, so every `vibewatt > file` crashed (A-057).
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        if stream.isatty():
+            reconfigure(errors="replace")
+        else:
+            reconfigure(encoding="utf-8", errors="replace")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _utf8_streams()
     args = build_parser().parse_args(argv)
     cfg = configmod.load()
     if args.tz:
         cfg["timezone"] = args.tz
+    if args.day_start_hour is not None:
+        cfg["day_start_hour"] = args.day_start_hour
     if args.weeks:
         cfg["weeks"] = args.weeks
     if args.session_hours:
@@ -331,7 +362,7 @@ def main(argv: list[str] | None = None) -> int:
         uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
         return 0
 
-    tz = resolve_tz(cfg.get("timezone"))
+    tz = report_zone(cfg)
 
     if args.command == "doctor":
         from .doctor import run as doctor_run
@@ -435,7 +466,8 @@ def main(argv: list[str] | None = None) -> int:
         print(file=out)
         print(block_text, file=out)
     print(file=out)
-    print(terminal.heatmap(report, weeks=cfg.get("weeks", 53), color=color), file=out)
+    print(terminal.heatmap(report, weeks=cfg.get("weeks", 53), color=color,
+                           today=report.today), file=out)
     print(file=out)
     print(terminal.table("model", report.by_model, color), file=out)
     if len(report.by_source) > 1:

@@ -141,9 +141,13 @@ def run(cfg: dict, tz) -> int:
             imported = conn.execute(
                 "SELECT COUNT(*) n, MIN(day) lo, MAX(day) hi FROM history_days").fetchone()
             last = conn.execute("SELECT value FROM meta WHERE key = 'last_sync'").fetchone()
+            dropped = store.dropped_records(conn)
         say(f"    {store.db_path()}")
         say(f"    {row['n']:,} response(s)  {row['lo']} .. {row['hi']}")
         say(f"    last sync {last[0] if last else 'never'}")
+        if dropped:
+            reasons = ", ".join(f"{reason} {n}" for reason, n in sorted(dropped.items()))
+            say(f"    records skipped as malformed: {reasons}")
         if imported["n"]:
             say(f"    history.json import: {imported['n']} day/model row(s), "
                 f"{imported['lo']} .. {imported['hi']} (fills only what the store lacks)")

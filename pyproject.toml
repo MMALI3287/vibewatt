@@ -18,6 +18,8 @@ classifiers = [
 dependencies = [
   "fastapi>=0.115",
   "uvicorn>=0.30",
+  # Windows ships no IANA database, so ZoneInfo("Asia/Tokyo") fails without it (A-058).
+  "tzdata>=2024.1; sys_platform == 'win32'",
 ]
 
 [project.urls]
