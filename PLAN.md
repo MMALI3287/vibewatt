@@ -53,7 +53,8 @@ evidence in `docs/AUDIT-2026-09-22.md`, one line each in section 11, scheduled
 as Phase 6.5a-g below. The table above is partly stale (`dashboard.py` was
 removed in Phase 2; the CLI is argparse, not Typer); Phase 7 refreshes it.
 
-Numbers proven on real data: content-block dedup avoids a **2.8x** overcount;
+Numbers proven on real data: content-block dedup avoids a **2.8x** overcount of
+input/output (2.1x across all token types, A-101);
 per-TTL cache pricing moves the cache-write line **38%**; five cloud sessions
 carried **$120 of web usage** absent from every local log.
 
@@ -86,7 +87,7 @@ Assistant records carry:
   "type": "assistant",
   "timestamp": "2026-09-15T01:00:36.274Z",
   "requestId": "req_011Cf4KYnyKMKo5dkip4znUW",
-  "apiBlockIndex": 0,          // repeats per content block — dedup on this
+  "apiBlockIndex": 0,          // one line per content block; usage repeats
   "isSidechain": false,        // true = subagent turn
   "cwd": "/home/user/project", // project attribution
   "sessionId": "...",
@@ -118,7 +119,20 @@ Other record types worth reading:
 - `summary` → appears after compaction, better title when present.
 
 Cowork uses the same `message.usage` payload with a renamed envelope:
-`session_id`, `_audit_timestamp`, `_audit_hmac`, `client_platform: "desktop_app"`.
+`session_id`, `request_id`, `_audit_timestamp`, `_audit_hmac`,
+`client_platform: "desktop_app"`.
+
+**Dedup rule (amended 2026-09-22, Phase 6.5b).** Every line of one response
+repeats its `usage`; the first line of a streamed response is a placeholder
+(`output_tokens` 1-3). Key on `(message.id, requestId)` (Cowork spells it `request_id`) and keep the
+per-field maximum: the first line of a streamed response carries placeholder
+`output_tokens`. Drop a sidechain line whose `message.id` is on a main-thread
+line. Without a `requestId`, key on `(session, message.id, timestamp)`. The
+result must not depend on file order. Code: `sources.dedupe()` and
+`store.upsert_turns()`.
+Measured on real data: the old first-line rule stored 5.62M output tokens, the
+per-field maximum stores 6.98M (+24%). An independent re-implementation
+over the same logs matches the store exactly (8,094 responses, 43 days).
 
 ### 2.3 Cloud session API
 
@@ -497,6 +511,34 @@ replay, a gateway without `requestId`, files arriving in both orders, and
 Cowork dual copies. Pruning any subset of files never lowers any day's total.
 A real-data oracle run matches the store exactly. Every report endpoint
 answers in < 300 ms on a 1M-turn store.
+**Status (2026-09-22): done** on `fix/phase-6-5b-dedup-store`. Record:
+- Dedup: `sources.dedupe()`/`merge()` and `store.upsert_turns()` (rule in 2.2).
+  Schema 5 adds `turns.version`, `turns.hour`, `rollup` and `history_days`, and
+  forgets file checkpoints so every file is re-read under the new rule. A
+  pre-6.5b row keyed `(message.id, "")` is absorbed by the keyed row replacing it.
+- Store as the only source: `aggregate.from_store()` builds every report from
+  `rollup` (grain: UTC hour, local day and hour, source, project, model,
+  session, sidechain). Blocks are rebuilt exactly from hourly first/last
+  timestamps. `serve` syncs at startup and every `sync_interval_seconds`
+  (default 60) in a background thread, caches reports per filter until the
+  store's `generation` changes and warms the unfiltered report after a sync.
+  Report endpoints no longer read quota (A-025); `/api/quota` does.
+- **Removed `vibewatt/history.py`**, the `history` config key and the
+  `--no-history` flag. Why: the store keeps every turn after its log is pruned,
+  so the per-day rollup was a second, weaker copy. It lost partly pruned
+  days (A-001), priced unknown models at $0 (A-002) and double counted on a
+  timezone change (A-008). `store.import_history()` copies an existing
+  `history.json` into `history_days` once; reports add only the per-field
+  excess over the store, so it can never double count. The file is left on disk.
+- `files.turn_count` counts responses (A-114). Sync reads files in batches of
+  200 and reports progress (A-071).
+- Deviation (A-064): `ingest.cloud` keeps a payload-shaped `parse(payload)`
+  with no `discover()`. Cloud sessions have no local file, so the common
+  file interface does not apply.
+- Gate evidence: `tests/test_dedup_store.py` (18 tests). Real-data oracle:
+  8,094 responses, 318,999 input, 6,983,384 output tokens, 0 mismatched days.
+  `scripts/bench_store.py --turns 1000000`: worst first hit 237 ms
+  (`/api/blocks`), unfiltered report warmed after sync in 519 ms.
 
 #### Phase 6.5c: Parser robustness, pricing lookup, timezone and day boundary
 **Do:**
@@ -708,7 +750,7 @@ Every one of these produced a wrong number or a broken page during earlier work.
 1. Summing JSONL lines instead of deduping responses → 2-3x overcount. **Amended
    2026-09-22:** keeping the *first* line per key undercounts output 7.6-16%,
    because earlier lines carry streaming placeholder `output_tokens`. Keep the
-   per-field maximum. Full rule in Phase 6.5b.
+   per-field maximum. Full rule in section 2.2.
 2. One flat cache-write multiplier → 38% error on that line.
 3. `date.today()` instead of the report timezone → wrong streaks and MTD.
 4. Pricing an unknown model at zero → silent undercount. ccusage 20.0.20 does this for current models.

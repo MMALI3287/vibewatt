@@ -414,7 +414,8 @@ def test_v3_migration_preserves_existing_data_and_adds_metadata_checkpoints(tmp_
     conn.commit()
     conn.close()
     with store.connect(path) as conn:
-        assert store.schema_version(conn) == 4
+        assert store.schema_version(conn) == store.SCHEMA_VERSION
         assert conn.execute("SELECT text FROM prompts").fetchone()[0] == "keep"
-        assert conn.execute("SELECT path FROM files").fetchone()[0] == "retained"
+        # v5 forgets file checkpoints so every file is re-read under the 6.5b dedup rule.
+        assert conn.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 0
         assert conn.execute("SELECT COUNT(*) FROM tool_read_files").fetchone()[0] == 0

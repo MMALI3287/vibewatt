@@ -247,6 +247,221 @@ def plan_comparison(report: "Report", plan_usd: float | None) -> dict | None:
     }
 
 
+# --- reports from the store ---------------------------------------------------
+
+_SUMS = (
+    "SUM(responses) turns, SUM(input) input, SUM(cache_5m) cache_5m,"
+    " SUM(cache_1h) cache_1h, SUM(cache_read) cache_read, SUM(output) output,"
+    " SUM(thinking) thinking, SUM(web_search) web_searches,"
+    " COALESCE(SUM(cost), 0) cost, SUM(unpriced) unpriced"
+)
+_BUCKET_FIELDS = ("turns", "input", "cache_5m", "cache_1h", "cache_read", "output",
+                  "thinking", "web_searches", "cost", "unpriced")
+
+
+_CELL_SUMS = (
+    "SUM(turns) turns, SUM(input) input, SUM(cache_5m) cache_5m,"
+    " SUM(cache_1h) cache_1h, SUM(cache_read) cache_read, SUM(output) output,"
+    " SUM(thinking) thinking, SUM(web_searches) web_searches,"
+    " COALESCE(SUM(cost), 0) cost, SUM(unpriced) unpriced"
+)
+REPORT_PARTS = frozenset({
+    "by_day", "by_model", "by_source", "by_project", "by_day_model", "by_hour",
+    "by_cell", "subagent", "sessions", "blocks",
+})
+
+
+def _bucket(row) -> Bucket:
+    b = Bucket()
+    for f in _BUCKET_FIELDS:
+        setattr(b, f, row[f] or (0.0 if f == "cost" else 0))
+    return b
+
+
+def _merge_into(target: Bucket, extra: Bucket) -> Bucket:
+    for f in _BUCKET_FIELDS:
+        setattr(target, f, getattr(target, f) + getattr(extra, f))
+    return target
+
+
+def from_store(
+    conn,
+    tz=None,
+    *,
+    source: str = "all",
+    date_from: date | None = None,
+    date_to: date | None = None,
+    project: str | None = None,
+    model: str | None = None,
+    include_sidechains: bool = True,
+    session_hours: int = 5,
+    overrides: dict | None = None,
+    parts: frozenset[str] | None = None,
+) -> Report:
+    """Build a Report from the rollup table. No log file is read.
+
+    Days come from the store, bucketed in the timezone of the last sync; the
+    caller syncs with the report timezone first. `parts` limits the work to
+    the Report fields an endpoint serves (see REPORT_PARTS); None builds all.
+    """
+    want = REPORT_PARTS if parts is None else parts
+    report = Report()
+    report.today = datetime.now(tz).date()
+    where, args = ["1=1"], []
+    if source and source != "all":
+        where.append("source = ?")
+        args.append(source)
+    if project:
+        where.append("project = ?")
+        args.append(project)
+    if model:
+        where.append("model = ?")
+        args.append(model)
+    if date_from:
+        where.append("day >= ?")
+        args.append(date_from.isoformat())
+    if date_to:
+        where.append("day <= ?")
+        args.append(date_to.isoformat())
+    base = " AND ".join(where)
+    kept = base if include_sidechains else base + " AND sidechain = 0"
+
+    # One scan of the rollup drops the session and UTC-hour grain; every
+    # breakdown then groups the much smaller temp table.
+    conn.execute("DROP TABLE IF EXISTS temp.cells")
+    conn.execute(
+        f"CREATE TEMP TABLE cells AS SELECT day, hour, source, project, model, {_SUMS}"
+        f" FROM rollup WHERE {kept} GROUP BY day, hour, source, project, model", args)
+
+    def rows(cols: str):
+        group = f" GROUP BY {cols}" if cols else ""
+        select = f"{cols}, {_CELL_SUMS}" if cols else _CELL_SUMS
+        return conn.execute(f"SELECT {select} FROM cells{group}")
+
+    total = rows("").fetchone()
+    if total["turns"]:
+        report.total = _bucket(total)
+    if "by_day" in want:
+        for r in rows("day"):
+            report.by_day[date.fromisoformat(r["day"])] = _bucket(r)
+    for r in rows("model"):
+        if "by_model" in want:
+            report.by_model[r["model"]] = _bucket(r)
+        if r["unpriced"]:
+            report.unknown_models.add(r["model"])
+    if "by_source" in want:
+        for r in rows("source"):
+            report.by_source[r["source"]] = _bucket(r)
+    if "by_project" in want:
+        for r in rows("project"):
+            report.by_project[r["project"]] = _bucket(r)
+    if "by_day_model" in want:
+        for r in rows("day, model"):
+            report.by_day_model[(date.fromisoformat(r["day"]), r["model"])] = _bucket(r)
+    if "by_hour" in want:
+        for r in rows("hour"):
+            if r["hour"] is not None:
+                report.by_hour[r["hour"]] = _bucket(r)
+    if "by_cell" in want:
+        for r in rows("day, source, project, model"):
+            report.by_cell[(date.fromisoformat(r["day"]), r["source"], r["project"],
+                            r["model"])] = _bucket(r)
+    conn.execute("DROP TABLE temp.cells")
+    if "subagent" in want:
+        sub = conn.execute(
+            f"SELECT {_SUMS} FROM rollup WHERE {base} AND sidechain = 1", args).fetchone()
+        if sub["turns"]:
+            report.subagent = _bucket(sub)
+    if "sessions" in want:
+        report.sessions = {r[0] for r in conn.execute(
+            f"SELECT DISTINCT session FROM rollup WHERE {kept}", args)}
+    if "blocks" in want:
+        report.blocks = _blocks_from_hours(
+            conn.execute(
+                f"SELECT hr, MIN(first_ts) first_ts, MAX(last_ts) last_ts,"
+                f" GROUP_CONCAT(DISTINCT model) models, {_SUMS}"
+                f" FROM rollup WHERE {kept} GROUP BY hr ORDER BY hr", args),
+            session_hours,
+        )
+    if (not source or source == "all") and not project:
+        _add_history(conn, report, date_from, date_to, model, overrides)
+    return report
+
+
+def _blocks_from_hours(hour_rows, hours: int) -> list[Block]:
+    """build_blocks() over hourly rows. Exact, not an approximation.
+
+    A block ends on an hour boundary, so every turn in one UTC hour falls on
+    the same side of it. A gap of `hours` cannot open inside one hour either.
+    Comparing each hour's first turn with the previous hour's last turn is
+    therefore the same test build_blocks() applies turn by turn.
+    """
+    length = timedelta(hours=hours)
+    blocks: list[Block] = []
+    current: Block | None = None
+    for r in hour_rows:
+        first = datetime.fromisoformat(r["first_ts"])
+        last = datetime.fromisoformat(r["last_ts"])
+        if current is None or first >= current.end or (
+            current.last_activity is not None and first - current.last_activity >= length
+        ):
+            start = first.replace(minute=0, second=0, microsecond=0)
+            current = Block(start=start, end=start + length)
+            blocks.append(current)
+        _merge_into(current.bucket, _bucket(r))
+        current.models.update((r["models"] or "").split(","))
+        current.last_activity = last
+    return blocks
+
+
+def _add_history(conn, report: Report, date_from, date_to, model, overrides) -> None:
+    """Add what the retired history.json recorded beyond the store, per day and model.
+
+    The store never loses a turn, so this only ever fills days the logs were
+    pruned from before the store existed. Taking the excess per field means a
+    day half pruned before the first sync gets exactly its missing part. A
+    model that cannot be priced today stays unpriced, never $0.
+    """
+    where, args = ["1=1"], []
+    if date_from:
+        where.append("day >= ?")
+        args.append(date_from.isoformat())
+    if date_to:
+        where.append("day <= ?")
+        args.append(date_to.isoformat())
+    if model:
+        where.append("model = ?")
+        args.append(model)
+    cond = " AND ".join(where)
+    history = conn.execute(f"SELECT * FROM history_days WHERE {cond}", args).fetchall()
+    if not history:
+        return
+    live = {(r["day"], r["model"]): r for r in conn.execute(
+        f"SELECT day, model, {_SUMS} FROM rollup WHERE {cond} GROUP BY day, model", args)}
+    pairs = (("responses", "turns"), ("input", "input"), ("cache_5m", "cache_5m"),
+             ("cache_1h", "cache_1h"), ("cache_read", "cache_read"), ("output", "output"),
+             ("thinking", "thinking"), ("web_search", "web_searches"))
+    for h in history:
+        have = live.get((h["day"], h["model"]))
+        extra = Bucket()
+        for hist_field, field_name in pairs:
+            stored = have[field_name] if have else 0
+            setattr(extra, field_name, max(0, (h[hist_field] or 0) - (stored or 0)))
+        if not (extra.turns or extra.total_tokens):
+            continue
+        if rate_for(h["model"], overrides=overrides) is None:
+            extra.unpriced = max(1, extra.turns)
+            report.unknown_models.add(h["model"])
+        else:
+            extra.cost = max(0.0, (h["cost"] or 0.0) - ((have["cost"] if have else 0.0) or 0.0))
+        day = date.fromisoformat(h["day"])
+        _merge_into(report.by_day[day], extra)
+        _merge_into(report.by_day_model[(day, h["model"])], extra)
+        _merge_into(report.by_model[h["model"]], extra)
+        _merge_into(report.total, extra)
+        report.restored_days.add(day)
+
+
 METRICS = {
     "cost": ("cost", lambda b: b.cost),
     "total": ("total tokens", lambda b: b.total_tokens),
