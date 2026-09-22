@@ -91,7 +91,10 @@ export function FilterBar() {
       <button type="button" onClick={() => update(DEFAULT_FILTERS)}>
         Reset
       </button>
-      {facets.isError && <span role="alert">Stored filter choices unavailable. <button type="button" onClick={() => facets.refetch()}>Retry choices</button></span>}
+      {(facets.isError || options.isError) && <span role="alert">
+        Some filter choices could not load; the current selection still applies.{" "}
+        <button type="button" onClick={() => { void facets.refetch(); void options.refetch(); }}>Retry choices</button>
+      </span>}
     </form>
   );
 }

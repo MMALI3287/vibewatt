@@ -11,13 +11,29 @@ export const api = createClient<paths>({ baseUrl: "" });
 
 export class ApiError extends Error {}
 
+/**
+ * A readable message from an API error body. FastAPI's 422 detail is a list of
+ * {loc, msg}; String() of it rendered "[object Object]" (A-080).
+ */
+export function errorMessage(status: number, body: unknown, statusText: string): string {
+  const detail = typeof body === "object" && body !== null && "detail" in body
+    ? (body as { detail: unknown }).detail : undefined;
+  if (Array.isArray(detail)) {
+    const parts = detail.map((item) => {
+      if (typeof item !== "object" || item === null) return String(item);
+      const { loc, msg } = item as { loc?: unknown; msg?: unknown };
+      const where = Array.isArray(loc) ? loc.filter((p) => p !== "query" && p !== "body").join(".") : "";
+      return where ? `${where}: ${String(msg)}` : String(msg);
+    });
+    return `${status} ${parts.join("; ")}`;
+  }
+  if (typeof detail === "string") return `${status} ${detail}`;
+  return `${status} ${statusText}`.trim();
+}
+
 function unwrap<T>(res: { data?: T; error?: unknown; response: Response }): T {
   if (res.error !== undefined || res.data === undefined) {
-    const detail =
-      typeof res.error === "object" && res.error !== null && "detail" in res.error
-        ? String((res.error as { detail: unknown }).detail)
-        : res.response.statusText;
-    throw new ApiError(`${res.response.status} ${detail}`);
+    throw new ApiError(errorMessage(res.response.status, res.error, res.response.statusText));
   }
   return res.data;
 }

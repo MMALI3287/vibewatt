@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import { dismissFinding, getFinding, getFindings, type Finding } from "../api/client";
 import { useFilters } from "../lib/filters";
 import { fmtUsd } from "../lib/format";
+import { useTitle } from "../lib/title";
 
 const KINDS: { kind: Finding["kind"]; label: string }[] = [
   { kind: "anomaly", label: "Cost anomalies" },
@@ -17,6 +18,7 @@ const SEVERITIES = ["all", "urgent", "warning", "info"] as const;
 type SeverityChoice = (typeof SEVERITIES)[number];
 
 export function Analysis() {
+  useTitle("Analysis");
   const [filters] = useFilters();
   const [params, setParams] = useSearchParams();
   // Both controls live in the URL, so a reload or a shared link keeps them (A-123).

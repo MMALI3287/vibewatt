@@ -1,3 +1,4 @@
+import { useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { getBlocks, type Summary } from "../api/client";
@@ -32,17 +33,7 @@ export function UsageCharts({ summary, filters }: { summary: Summary; filters: F
       <h2>Daily {metric} heatmap · local logs</h2>
       <p className="muted">Use Metric above to switch cost and tokens. Each column is a week, Sunday first. Stronger blue means more usage.</p>
       {!days.length ? <p>No daily usage for these filters.</p> : <>
-        <div className="heatmap-wrap"><div className="heatmap">
-          {days.map((row, index) => {
-            const level = row.value && peak ? Math.max(1, Math.ceil(5 * (row.value / peak) ** 0.25)) : 0;
-            return <span key={row.day} tabIndex={0} className="heat-cell" style={{
-              background: `var(--l${level})`,
-              gridRow: index === 0 ? new Date(`${row.day}T00:00:00Z`).getUTCDay() + 1 : undefined,
-            }} aria-label={`${row.day}: ${format(row.value, metric)}`}>
-              <span role="tooltip">{row.day}: {format(row.value, metric)}</span>
-            </span>;
-          })}
-        </div></div>
+        <Heatmap days={days} peak={peak} metric={metric} />
         <p className="muted">{days[0].day} to {days[days.length - 1].day}</p>
         <details><summary>Heatmap table</summary><DataTable rows={days} label="Daily usage" columns={[
           { accessorKey: "day", header: "Day" },
@@ -53,12 +44,15 @@ export function UsageCharts({ summary, filters }: { summary: Summary; filters: F
     <section className="card" aria-label="Hour-of-day usage">
       <h2>Hour-of-day {metric} · local logs</h2>
       <p className="muted">Hours use the report timezone. Retained daily rollups do not contain hourly detail.</p>
-      <div className="hour-chart">
+      <div className="hour-chart" role="img"
+        aria-label={`Hour-of-day ${metric} bar chart. Values are in the Hourly table below.`}>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={hours} margin={{ left: 0, right: 10, top: 10, bottom: 0 }}>
             <XAxis dataKey="hour" stroke="var(--ts)" minTickGap={28} />
             <YAxis stroke="var(--ts)" tickFormatter={v => format(Number(v), metric)} width={64} />
-            <Tooltip formatter={v => format(Number(v), metric)} contentStyle={{ background: "var(--s0)", color: "var(--tp)", borderColor: "var(--bd)" }} />
+            <Tooltip formatter={v => format(Number(v), metric)} cursor={{ fill: "var(--s2)" }}
+              contentStyle={{ background: "var(--s0)", color: "var(--tp)", borderColor: "var(--bd)" }}
+              itemStyle={{ color: "var(--tp)" }} labelStyle={{ color: "var(--tp)" }} />
             <Bar dataKey="value" name={metric === "tokens" ? "Tokens" : "Cost"} fill="var(--l4)" isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
@@ -70,6 +64,40 @@ export function UsageCharts({ summary, filters }: { summary: Summary; filters: F
     </section>
     <Blocks filters={filters} />
   </>;
+}
+
+/**
+ * One tab stop for the whole grid, arrow keys between days (A-040). Each column
+ * is a week, so Left and Right move a week and Up and Down a day.
+ */
+function Heatmap({ days, peak, metric }: { days: { day: string; value: number }[]; peak: number; metric: Metric }) {
+  const [active, setActive] = useState(days.length - 1);
+  const cells = useRef<(HTMLSpanElement | null)[]>([]);
+  const move = (event: KeyboardEvent) => {
+    const step = { ArrowLeft: -7, ArrowRight: 7, ArrowUp: -1, ArrowDown: 1, Home: -Infinity, End: Infinity }[event.key];
+    if (step === undefined) return;
+    event.preventDefault();
+    const next = Math.min(days.length - 1, Math.max(0, active + step));
+    setActive(next);
+    cells.current[next]?.focus();
+  };
+  const current = Math.min(active, days.length - 1);
+  return <div className="heatmap-wrap">
+    <div className="heatmap" role="grid" aria-label={`Daily ${metric}, one cell per day. Use arrow keys to move between days.`} onKeyDown={move}>
+      <div role="row" className="heatmap-row">
+        {days.map((row, index) => {
+          const level = row.value && peak ? Math.max(1, Math.ceil(5 * (row.value / peak) ** 0.25)) : 0;
+          return <span key={row.day} ref={el => { cells.current[index] = el; }} role="gridcell"
+            tabIndex={index === current ? 0 : -1} className="heat-cell" onFocus={() => setActive(index)} style={{
+              background: `var(--l${level})`,
+              gridRow: index === 0 ? new Date(`${row.day}T00:00:00Z`).getUTCDay() + 1 : undefined,
+            }} aria-label={`${row.day}: ${format(row.value, metric)}`}>
+            <span role="tooltip">{row.day}: {format(row.value, metric)}</span>
+          </span>;
+        })}
+      </div>
+    </div>
+  </div>;
 }
 
 function Blocks({ filters }: { filters: Filters }) {
