@@ -49,16 +49,42 @@ class SummaryOut(BaseModel):
     active_block: ActiveBlockOut | None = None
 
 
+class BandOut(BaseModel):
+    p10: float
+    p50: float
+    p90: float
+
+
 class WindowOut(BaseModel):
+    key: str
     label: str
+    scope: str
+    source: str
     utilization: float
     resets_at: str | None
+    # Used % minus elapsed % of the window; positive is ahead of an even spend.
+    pace_delta: float | None = None
+    elapsed_pct: float | None = None
+    # Where this window ends at reset, from this account's past windows.
+    band: BandOut | None = None
+    note: str | None = None
+
+
+class QuotaSampleOut(BaseModel):
+    ts: str
+    key: str
+    scope: str
+    utilization: float
+    resets_at: str | None
+    source: str
 
 
 class QuotaOut(BaseModel):
     source: str
     fetched_at: str
     windows: list[WindowOut]
+    recent: list[QuotaSampleOut] = []
+    notes: list[str] = []
 
 
 class SessionOut(BaseModel):

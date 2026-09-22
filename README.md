@@ -81,7 +81,7 @@ Anything vibewatt cannot see, it says so rather than reporting zero.
 **Live**
 - Plan utilization meters (5-hour and 7-day) with reset countdowns
 - Current rate-limit window: spent so far, burn rate, projection to window close
-- `vibewatt statusline` for Claude Code's statusLine hook, tmux or Starship
+- `vibewatt statusline` for Claude Code's statusLine: records plan utilization for free
 - `vibewatt serve` exposes `GET /api/usage` for any bar or widget
 
 **Durability**
@@ -204,9 +204,19 @@ per project. Point `VIBEWATT_CONFIG` at a file to override.
 }
 ```
 
-`statusline_cache_path` points at a rate-limit dump written by your Claude Code
-statusLine hook. When present it is used instead of calling the usage endpoint: it is
-seconds-fresh while a session runs and costs no API call.
+Plan utilization comes from, in order: `vibewatt statusline` (below), the Claude
+desktop app's own usage history (read only) and the usage endpoint as a fallback
+called at most every 10 minutes. To feed it live and for free, make vibewatt your
+Claude Code status line in `~/.claude/settings.json`:
+
+```json
+{ "statusLine": { "type": "command", "command": "vibewatt statusline" } }
+```
+
+It prints your plan windows and records a sample. To keep an existing status line,
+put that command in `statusline_chain` in vibewatt's config; its output is shown
+first. `statusline_cache_path` still reads a saved dump if it was written in the
+last 10 minutes.
 
 ## Privacy
 

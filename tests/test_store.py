@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from conftest import JST
 
@@ -24,7 +24,7 @@ def test_fresh_store_is_at_current_schema(tmp_path):
             r[0]
             for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
-        assert store.schema_version(conn) == store.SCHEMA_VERSION == 6
+        assert store.schema_version(conn) == store.SCHEMA_VERSION == 7
     assert {
         "meta",
         "turns",
@@ -52,7 +52,9 @@ def test_v1_store_migrates_forward_without_losing_rows(tmp_path):
         assert store.schema_version(conn) == store.SCHEMA_VERSION
         assert conn.execute("SELECT text FROM titles").fetchone()[0] == "kept"
         conn.execute("INSERT INTO files VALUES ('p', 1.0, 1, 't', 0, NULL)")
-        conn.execute("INSERT INTO quota_samples VALUES ('t', '5-hour', 1.0, NULL)")
+        conn.execute(
+            "INSERT INTO quota_samples VALUES ('t', 'five_hour', '5-hour', 'account', 1.0, NULL, 'x')"
+        )
 
 
 def test_sync_skips_unchanged_files(tmp_path, logs):
@@ -122,11 +124,11 @@ def test_sync_survives_a_file_vanishing(tmp_path, logs):
 def _quota(when: datetime) -> quota.Quota:
     windows = [
         quota.Window(
-            label="5-hour",
+            key="five_hour",
             utilization=60.0,
-            resets_at=datetime(2026, 9, 15, 12, tzinfo=timezone.utc),
+            resets_at=when + timedelta(hours=1),
         ),
-        quota.Window(label="7-day", utilization=40.0, resets_at=None),
+        quota.Window(key="seven_day", utilization=40.0, resets_at=None),
     ]
     return quota.Quota(windows, "statusline", when)
 
@@ -142,20 +144,21 @@ def test_same_quota_reading_is_stored_once(tmp_path):
 
 
 def test_quota_read_persists_samples(monkeypatch):
-    reading = _quota(datetime(2026, 9, 15, 11, tzinfo=timezone.utc))
+    reading = _quota(datetime.now(timezone.utc))
     monkeypatch.setattr(quota, "read_token", lambda: "token")
     monkeypatch.setattr(quota, "fetch", lambda *a, **k: reading)
 
     q, note = quota.read({"quota": True})
 
-    assert q is reading and note == ""
+    assert note == ""
+    assert [(w.key, w.utilization) for w in q.windows] == [("five_hour", 60.0), ("seven_day", 40.0)]
     with store.connect() as conn:
         labels = {r[0] for r in conn.execute("SELECT label FROM quota_samples")}
     assert labels == {"5-hour", "7-day"}
 
 
 def test_quota_read_survives_a_broken_store(monkeypatch):
-    reading = _quota(datetime(2026, 9, 15, 11, tzinfo=timezone.utc))
+    reading = _quota(datetime.now(timezone.utc))
     monkeypatch.setattr(quota, "read_token", lambda: "token")
     monkeypatch.setattr(quota, "fetch", lambda *a, **k: reading)
 
@@ -255,11 +258,11 @@ def test_zones_sharing_a_name_but_not_an_offset_are_different(tmp_path, logs):
 def test_interrupted_v3_migration_recovers_stranded_samples(tmp_path):
     # Crash after the keyed table was created but before the old one was copied.
     path = tmp_path / "db.sqlite"
-    with store.connect(path) as conn:
-        pass
     raw = sqlite3.connect(path)
+    raw.executescript(store.SCHEMA)
+    store._v2_files_and_quota_samples(raw)  # the keyed schema-2 table, as v3 created it
     raw.executescript(
-        "UPDATE meta SET value = '2' WHERE key = 'schema';"
+        "INSERT INTO meta VALUES ('schema', '2');"
         "CREATE TABLE quota_samples_unkeyed (ts TEXT, label TEXT, utilization REAL, resets_at TEXT);"
         "INSERT INTO quota_samples_unkeyed VALUES ('t', '5-hour', 1.0, NULL);"
     )
