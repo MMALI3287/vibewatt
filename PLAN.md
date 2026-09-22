@@ -176,8 +176,8 @@ Access, in preference order:
 
 Claude Code deletes transcripts older than `cleanupPeriodDays` (default **30**) at
 **every startup**. `0` disables transcript writing entirely — it is a trap, not a
-fix. Recommend 3650. `vibewatt/history.py` and the SQLite store preserve rollups
-from first run forward but cannot recover what was already deleted.
+fix. Recommend 3650. The SQLite store keeps every turn from its first sync
+forward but cannot recover what was already deleted.
 
 **Corrected 2026-09-22 (audit):** since Claude Code 2.1.89 `cleanupPeriodDays: 0`
 fails settings validation instead of silently disabling writing; older versions
@@ -189,6 +189,32 @@ permanently loses partially pruned days (A-001). Phase 6.5b makes the store the
 only source of headline numbers.
 
 ---
+
+### 2.5 Plan utilization sources (amended 2026-09-22, Phase 6.5d)
+
+Order of preference. Every reading becomes a row in `quota_samples`
+`(ts, key, label, scope, utilization, resets_at, source)`. Readers take the
+newest sample per window from the store.
+
+1. **`vibewatt statusline`**, set as Claude Code's `statusLine` command. Claude
+   Code pipes documented JSON on stdin at every refresh:
+   `rate_limits.{five_hour,seven_day,spend_limit}.{used_percentage,resets_at}`,
+   `resets_at` in Unix seconds. The block is present only for Pro/Max (or behind a
+   spend-limited gateway), only after the session's first response. A window
+   is dropped once its reset passes. Free, live, no network.
+2. **Desktop `plan-usage-history.json`**, read only
+   (`%APPDATA%\Claude`, `~/Library/Application Support/Claude`,
+   `~/.config/Claude`). Version 2: `{version, samples: [{t (ms), org, u: {fh, sd}}]}`,
+   a sample every 15 minutes in whole percents and **no reset times**. Imported
+   only for known versions, deduped on `(org, t)`. With one org, account-wide
+   samples and that org are the same series.
+3. **`/api/oauth/usage`**, a fallback only: at most one call per 10 minutes, and
+   none while a sample under 10 minutes old exists. A 429 backs off 10 minutes,
+   doubling to 6 hours. Only the background sync and the CLI may call it, never a
+   page request. Windows are parsed generically.
+
+Resets are detected from the data (a new `resets_at`, a drop of more than 2
+points, or a gap longer than the window), never from an assumed schedule.
 
 ## 3. Target architecture
 
@@ -626,6 +652,35 @@ daily, streak and heatmap views.
 **Gate:** a burst-sampled series crossing 100% fires exactly once. A noisy
 flat series fires nothing. The band never goes below the current value.
 Statusline fixtures from Claude Code 2.1.80+ ingest correctly.
+**Status (2026-09-22): done** on `fix/phase-6-5d-quota-forecast`. Record:
+- Sources and sample schema: section 2.5. Schema 7 rebuilds `quota_samples`
+  keyed on `(ts, key, scope)` with a `source`; old rows are kept as
+  `source = 'legacy'`.
+- **Replaced the two-sample burn rule** (`analysis/alerts.py`). Why: burst,
+  whole-percent samples made its slope zero or wild, so it almost never fired
+  (A-006) and fired on noise (A-048). `analysis/forecast.py` gives each window a
+  pace delta and a P10-P90 band from how much every past window of the same
+  kind still grew after the same elapsed fraction (at least 4 past windows),
+  capped at 100 % for rolling windows. A quota alert is keyed on its window
+  episode and fires once, when a window reaches 100 % or the median projection
+  does.
+- Spikes look back 24 hours with a baseline of the 50 priced responses before
+  each (A-050); the active block comes from the rollup. Alert days use the
+  report timezone (A-096).
+- **Changed `vibewatt statusline`**: it no longer builds a report (month to
+  date, block cost). Why: that re-read the store for every refresh of Claude
+  Code's status bar; the command now records the plan windows from stdin,
+  prints them and chains `statusline_chain`, well under 50 ms.
+- `statusline_cache_path` dumps older than 10 minutes are ignored (A-013). A
+  window whose reset has passed is dropped rather than shown as 0 %.
+- `/api/quota` never calls the endpoint and returns pace, band, notes and the
+  last 7 days of samples. Meters moved from `Hero` into `PlanMeters`, shown by
+  Overview in every state (A-036), with `aria-valuenow` clamped (A-083).
+- Real data: 594 desktop samples imported; the 7-day reset detected at
+  2026-09-21 13:57 UTC matches the 99 % to 0 % drop in the file; the 5-hour
+  window has 21 past windows and a band.
+- Tests: `tests/test_alerts.py` (22), e2e
+  `plan utilization stays visible when filters match no local usage`.
 
 #### Phase 6.5e: Local security and API contract *(decided)*
 **Do:**

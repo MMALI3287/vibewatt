@@ -108,3 +108,10 @@ test("sessions handles empty results and API errors", async ({ page }) => {
   await page.goto("/sessions/missing");
   await expect(page.getByRole("dialog")).toContainText("404");
 });
+
+test("plan utilization stays visible when filters match no local usage", async ({ page }) => {
+  // A-036: the meters are account-wide, so an empty local view must not hide them.
+  await page.goto("/?from=2030-01-01");
+  await expect(page.getByRole("heading", { name: "No usage for these filters" })).toBeVisible();
+  await expect(page.getByLabel("Plan utilization (account-wide)")).toBeVisible();
+});

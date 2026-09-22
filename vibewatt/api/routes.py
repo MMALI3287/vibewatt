@@ -103,19 +103,25 @@ def _report(request: Request, filters: Filters, parts: frozenset[str] | None = N
     )
 
 
-def _quota_out(q) -> schemas.QuotaOut | None:
+def _quota_out(q, forecasts: list[dict] | None = None,
+               recent: list[dict] | None = None) -> schemas.QuotaOut | None:
     if q is None:
         return None
+    by_series = {(f["key"], f["scope"]): f for f in forecasts or []}
+    windows = []
+    for w in q.windows:
+        f = by_series.get((w.key, w.scope), {})
+        windows.append(schemas.WindowOut(
+            key=w.key, label=w.label, scope=w.scope, source=w.source,
+            utilization=w.utilization,
+            resets_at=(w.resets_at.isoformat() if w.resets_at
+                       else f.get("resets_at")),
+            pace_delta=f.get("pace_delta"), elapsed_pct=f.get("elapsed_pct"),
+            band=f.get("band"), note=f.get("note"),
+        ))
     return schemas.QuotaOut(
-        source=q.source,
-        fetched_at=q.fetched_at.isoformat(),
-        windows=[
-            schemas.WindowOut(
-                label=w.label, utilization=w.utilization,
-                resets_at=w.resets_at.isoformat() if w.resets_at else None,
-            )
-            for w in q.windows
-        ],
+        source=q.source, fetched_at=q.fetched_at.isoformat(), windows=windows,
+        recent=recent or [], notes=q.notes,
     )
 
 
@@ -209,10 +215,23 @@ def blocks(request: Request, filters: Filters = Depends(get_filters)):
 
 @router.get("/quota", response_model=schemas.QuotaOut | None)
 def quota_endpoint(request: Request, filters: Filters = Depends(get_filters)):
-    from .. import quota
+    from datetime import timedelta, timezone
 
-    q, _ = quota.read(request.app.state.cfg)
-    return _quota_out(q)
+    from .. import quota
+    from ..analysis.forecast import forecast
+
+    # Never calls the endpoint: a page load must not spend the account's
+    # rate limit. The background sync does that, throttled.
+    q, _ = quota.read(request.app.state.cfg, allow_fetch=False)
+    if q is None:
+        return None
+    since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    with store.connect() as conn:
+        forecasts = forecast(conn)
+        recent = [dict(r) for r in conn.execute(
+            "SELECT ts, key, scope, utilization, resets_at, source FROM quota_samples"
+            " WHERE ts >= ? ORDER BY ts DESC LIMIT 500", (since,))]
+    return _quota_out(q, forecasts, recent)
 
 
 @router.get("/health", response_model=schemas.HealthOut)

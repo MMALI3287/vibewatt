@@ -333,12 +333,15 @@ def test_burn_alert_needs_projection_over_100(tmp_path):
     with store.connect(tmp_path / "a.db") as conn:
         for minutes, util in ((-10, 50), (-5, 51)):  # projects to ~88%
             conn.execute(
-                "INSERT INTO quota_samples VALUES (?,?,?,?)",
+                "INSERT INTO quota_samples VALUES (?,?,?,?,?,?,?)",
                 (
                     (now + timedelta(minutes=minutes)).isoformat(),
                     "five_hour",
+                    "5-hour",
+                    "account",
                     util,
                     reset,
+                    "statusline",
                 ),
             )
         assert [

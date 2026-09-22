@@ -46,9 +46,15 @@ def create_app(cfg: dict | None = None) -> FastAPI:
         return hit[1]
 
     def sync_once() -> None:
+        from .. import quota, store
+
         with lock:
             sync_store(cfg, tz)
             app.state.synced = True
+            if cfg.get("quota", True):
+                with store.connect() as conn:
+                    # The only place the server may call the endpoint, throttled.
+                    quota.refresh(conn, cfg, allow_fetch=True)
         # Warm the Overview's unfiltered report so the first view after a sync
         # does not pay for building it.
         report(source="all", date_from=None, date_to=None, project=None, model=None,
