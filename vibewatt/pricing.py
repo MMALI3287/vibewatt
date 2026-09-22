@@ -18,6 +18,8 @@ Built-in rates: https://platform.claude.com/docs/en/about-claude/pricing
 from __future__ import annotations
 
 import json
+import math
+import re
 import time
 import urllib.error
 import urllib.request
@@ -75,23 +77,26 @@ WEB_SEARCH_PER_CALL = 10.0 / 1000
 _remote: dict[str, Rate] | None = None
 
 
+# Bedrock inference profiles (global., us., eu., apac., jp., au., us-gov., ...)
+# and the bare "anthropic." provider prefix (A-012).
+_PROVIDER = re.compile(r"^(?:[a-z]{2,6}(?:-[a-z]+)?\.)?anthropic[./]")
+_SUFFIXES = (
+    re.compile(r"\[1m\]$"),          # Claude Code's 1M-context marker
+    re.compile(r"@.*$"),              # Vertex snapshot: claude-opus-4-5@20251101
+    re.compile(r"-v\d+(?::\d+)?$"),   # Bedrock version: -v1:0
+    re.compile(r"-\d{8}$"),           # dated snapshot: -20250929
+    re.compile(r"-latest$"),
+)
+
+
 def normalize(model: str | None) -> str | None:
-    """Strip a cloud-provider prefix and any trailing snapshot suffix."""
+    """The family id a rate is keyed on: provider prefix and snapshot suffixes gone."""
     if not model:
         return None
-    m = model.strip().lower()
-    for prefix in ("us.anthropic.", "eu.anthropic.", "apac.anthropic.", "anthropic."):
-        if m.startswith(prefix):
-            m = m[len(prefix):]
-            break
-    return m.split("@", 1)[0]
-
-
-def _longest_prefix(table: dict[str, Rate], model: str) -> Rate | None:
-    for key in sorted(table, key=len, reverse=True):
-        if model.startswith(key):
-            return table[key]
-    return None
+    m = _PROVIDER.sub("", model.strip().lower())
+    for suffix in _SUFFIXES:
+        m = suffix.sub("", m)
+    return m or None
 
 
 def _cache_path():
@@ -127,8 +132,20 @@ def _fetch_remote(timeout: float = 10.0) -> dict | None:
     return payload
 
 
+def _per_million(value, *, positive: bool) -> float:
+    rate = float(value) * MILLION
+    if not math.isfinite(rate) or rate < 0 or (positive and rate == 0):
+        raise ValueError(f"not a usable rate: {value!r}")
+    return rate
+
+
 def _parse_remote(payload: dict) -> dict[str, Rate]:
-    """Convert per-token costs into our per-million Rate shape."""
+    """Convert per-token costs into our per-million Rate shape.
+
+    An entry with a zero, negative, NaN or missing input/output cost is
+    dropped, never used: a zero rate is exactly the silent undercount the
+    unpriced flag exists to prevent (A-066).
+    """
     out: dict[str, Rate] = {}
     for name, entry in payload.items():
         if not isinstance(entry, dict):
@@ -136,17 +153,19 @@ def _parse_remote(payload: dict) -> dict[str, Rate]:
         if entry.get("litellm_provider") != "anthropic":
             continue
         try:
-            inp = float(entry["input_cost_per_token"]) * MILLION
-            outp = float(entry["output_cost_per_token"]) * MILLION
+            inp = _per_million(entry["input_cost_per_token"], positive=True)
+            outp = _per_million(entry["output_cost_per_token"], positive=True)
+            write = entry.get("cache_creation_input_token_cost")
+            read = entry.get("cache_read_input_token_cost")
+            w5 = _per_million(write, positive=False) if write is not None else inp * 1.25
+            rd = _per_million(read, positive=False) if read is not None else inp * 0.1
         except (KeyError, TypeError, ValueError):
             continue
-        write = entry.get("cache_creation_input_token_cost")
-        read = entry.get("cache_read_input_token_cost")
-        w5 = float(write) * MILLION if write is not None else inp * 1.25
-        rd = float(read) * MILLION if read is not None else inp * 0.1
-        # Community tables carry a single cache-write figure, which is the 5m
-        # rate. The 1h rate is a fixed 2x of base input.
-        out[normalize(name)] = Rate(inp, w5, inp * 2.0, rd, outp)
+        key = normalize(name)
+        if key:
+            # Community tables carry a single cache-write figure, which is the
+            # 5m rate. The 1h rate is a fixed 2x of base input.
+            out[key] = Rate(inp, w5, inp * 2.0, rd, outp)
     return out
 
 
@@ -167,7 +186,13 @@ def rate_for(
     geo: str | None = None,
     overrides: dict | None = None,
 ) -> Rate | None:
-    """Return the billing rate for a model, or None when nothing knows it."""
+    """Return the billing rate for a model, or None when nothing knows it.
+
+    Lookup is by exact family id. An id no table knows is unpriced, never
+    priced at an older sibling's rate: Opus 4.5 launched at a third of Opus 4's
+    price, so a prefix match would have overpriced it 3x (A-011). Fast mode on
+    a model with no published fast rate is unpriced too.
+    """
     m = normalize(model)
     if not m:
         return None
@@ -186,11 +211,13 @@ def rate_for(
                     float(entry.get("output", float(base) * 5.0)),
                 )
     if rate is None and fast:
-        rate = _longest_prefix(FAST_MODE, m)
+        rate = FAST_MODE.get(m)
+        if rate is None:
+            return None
     if rate is None:
-        rate = _longest_prefix(BUILTIN, m)
+        rate = BUILTIN.get(m)
     if rate is None and _remote:
-        rate = _longest_prefix(_remote, m)
+        rate = _remote.get(m)
     if rate is None:
         return None
     if geo == "us":

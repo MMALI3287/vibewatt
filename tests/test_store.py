@@ -24,12 +24,12 @@ def test_fresh_store_is_at_current_schema(tmp_path):
             r[0]
             for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
-        assert store.schema_version(conn) == store.SCHEMA_VERSION == 5
+        assert store.schema_version(conn) == store.SCHEMA_VERSION == 6
     assert {
         "meta",
         "turns",
         "sessions",
-        "prompts",
+        "titles",
         "files",
         "quota_samples",
         "findings",
@@ -43,14 +43,15 @@ def test_v1_store_migrates_forward_without_losing_rows(tmp_path):
     raw = sqlite3.connect(path)
     raw.executescript(store.SCHEMA)
     raw.execute("INSERT INTO meta VALUES ('schema', '1')")
+    raw.execute("CREATE TABLE prompts (session TEXT NOT NULL, ts TEXT, text TEXT NOT NULL, PRIMARY KEY (session, text))")  # pre-schema-6 table
     raw.execute("INSERT INTO prompts VALUES ('s', NULL, 'kept')")
     raw.commit()
     raw.close()
 
     with store.connect(path) as conn:
         assert store.schema_version(conn) == store.SCHEMA_VERSION
-        assert conn.execute("SELECT text FROM prompts").fetchone()[0] == "kept"
-        conn.execute("INSERT INTO files VALUES ('p', 1.0, 1, 't', 0)")
+        assert conn.execute("SELECT text FROM titles").fetchone()[0] == "kept"
+        conn.execute("INSERT INTO files VALUES ('p', 1.0, 1, 't', 0, NULL)")
         conn.execute("INSERT INTO quota_samples VALUES ('t', '5-hour', 1.0, NULL)")
 
 
@@ -105,7 +106,7 @@ def test_sync_buckets_days_in_the_report_timezone(tmp_path, logs):
 def test_sync_records_prompts(tmp_path, logs):
     with store.connect(tmp_path / "db.sqlite") as conn:
         result = store.sync_files(conn, ingest.discover(), JST, _cost)
-        texts = [r[0] for r in conn.execute("SELECT text FROM prompts")]
+        texts = [r[0] for r in conn.execute("SELECT text FROM titles")]
     assert result.prompts >= 1
     assert "fix the sync" in texts
 
@@ -207,7 +208,7 @@ def test_changing_timezone_rebuckets_unchanged_files(tmp_path, logs):
         again = store.sync_files(conn, files, JST, _cost)
 
     assert (utc_day, jst_day) == ("2026-09-15", "2026-09-16")
-    assert result.parsed == 2
+    assert result.parsed == 0  # rebucketed in place, no file re-read (A-113)
     assert again.parsed == 0
 
 

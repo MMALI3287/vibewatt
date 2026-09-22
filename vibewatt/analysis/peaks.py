@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date, tzinfo
 
+from ..config import clock_zone
 from .models import Finding, timestamp
 
 
@@ -25,7 +26,8 @@ def detect(
         stamp = timestamp(row["ts"]).astimezone(tz)
         if (start and stamp.date() < start) or (end and stamp.date() > end):
             continue
-        groups[(row["label"], stamp.weekday(), stamp.hour)].append(row)
+        clock = timestamp(row["ts"]).astimezone(clock_zone(tz))
+        groups[(row["label"], clock.weekday(), clock.hour)].append(row)
     findings = []
     for (label, weekday, hour), rows in sorted(groups.items()):
         dates = {timestamp(r["ts"]).astimezone(tz).date() for r in rows}

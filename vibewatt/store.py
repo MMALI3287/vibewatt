@@ -21,9 +21,9 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone, tzinfo
 from pathlib import Path
 
-from .config import copy_sqlite, data_dir
+from .config import clock_zone, copy_sqlite, data_dir, zone_id
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -79,12 +79,15 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS sessions_started ON sessions(started);
 
--- Prompt titles recovered from last-prompt records, for "what you worked on".
-CREATE TABLE IF NOT EXISTS prompts (
-  session   TEXT NOT NULL,
+-- One title per session for "what you worked on": the best kind seen
+-- (custom-title > ai-title > last-prompt > first user message). Only the
+-- title is kept, never the prompts before it.
+CREATE TABLE IF NOT EXISTS titles (
+  session   TEXT PRIMARY KEY,
+  kind      TEXT NOT NULL,
+  rank      INTEGER NOT NULL,
   ts        TEXT,
-  text      TEXT NOT NULL,
-  PRIMARY KEY (session, text)
+  text      TEXT NOT NULL
 );
 
 """
@@ -221,12 +224,32 @@ def _v5_dedup_and_rollup(conn) -> None:
     """)
 
 
+def _v6_titles_and_drops(conn) -> None:
+    # Phase 6.5c. prompts kept every distinct last-prompt text of a session
+    # (A-067); titles keeps one. The latest stored prompt becomes the title and
+    # the prompts table is dropped. Files are re-read once so custom and AI
+    # titles and per-file drop counts are picked up.
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(files)")}
+    if "dropped" not in cols:
+        conn.execute("ALTER TABLE files ADD COLUMN dropped TEXT")
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'prompts'"
+    ).fetchone():
+        conn.execute(
+            "INSERT OR REPLACE INTO titles (session, kind, rank, ts, text)"
+            " SELECT session, 'last-prompt', 2, ts, text FROM prompts"
+            " ORDER BY ts IS NOT NULL, ts, text")
+        conn.execute("DROP TABLE prompts")
+    conn.execute("DELETE FROM files")
+
+
 # Forward-only. Append a step and bump SCHEMA_VERSION; never drop a user's table.
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _v2_files_and_quota_samples,
     3: _v3_key_quota_samples_and_resync,
     4: _v4_analysis,
     5: _v5_dedup_and_rollup,
+    6: _v6_titles_and_drops,
 }
 assert max(MIGRATIONS) == SCHEMA_VERSION
 
@@ -328,13 +351,14 @@ def upsert_turns(conn, turns, tz, cost_of) -> set[str]:
         if skip:
             continue
         local = merged.ts.astimezone(tz)
+        clock_hour = merged.ts.astimezone(clock_zone(tz)).hour
         hours.add(_hr(merged.ts))
         writes.append((
             merged.key[0], merged.key[1], merged.ts.astimezone(timezone.utc).isoformat(),
             local.date().isoformat(), merged.source, merged.project, merged.session,
             merged.model, merged.input, merged.cache_5m, merged.cache_1h, merged.cache_read,
             merged.output, merged.thinking, merged.web_searches, int(merged.sidechain),
-            int(merged.fast), merged.geo, cost_of(merged), merged.version, local.hour,
+            int(merged.fast), merged.geo, cost_of(merged), merged.version, clock_hour,
         ))
     conn.executemany("DELETE FROM turns WHERE msg_id = ? AND request_id = ?", sorted(deletes))
     conn.executemany(
@@ -426,7 +450,8 @@ class SyncResult:
     skipped: int = 0
     turns: int = 0
     duplicates: int = 0
-    prompts: int = 0
+    prompts: int = 0          # session titles written; the API field keeps its name
+    unreadable: int = 0       # files that could not be opened; retried next sync
 
 
 def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of, *,
@@ -439,30 +464,31 @@ def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of, *,
     read in batches so a first sync of a large tree keeps memory bounded, and
     `progress(done, total)` is called after each batch.
     """
+    from collections import Counter
+
     from .ingest import parse
-    from .sources import dedupe, read_prompts
+    from .sources import dedupe, read_titles
 
     result = SyncResult()
-    # turns.day and turns.hour are bucketed in the sync's timezone. On a change,
-    # every stored turn is re-bucketed from its UTC ts, including turns whose
-    # transcript has since been pruned, and files are forgotten so prompts are
-    # re-read too. The offset is part of the identity because zone names like
-    # "CST" are ambiguous.
-    now = datetime.now(tz)
-    tz_id = f"{getattr(tz, 'key', None) or now.tzname() or tz}|{now.utcoffset()}"
+    # turns.day and turns.hour are bucketed in the sync's timezone and day
+    # start. On a change every stored turn is re-bucketed from its UTC ts,
+    # including turns whose transcript has since been pruned. A named zone keeps
+    # its identity across DST, so a DST switch no longer re-reads every file
+    # (A-113); a fixed offset includes the offset, since "CST" is ambiguous.
+    tz_id = zone_id(tz)
     row = conn.execute("SELECT value FROM meta WHERE key = 'sync_tz'").fetchone()
     full_rebuild = row is None or row[0] != tz_id
     if full_rebuild:
         if row is not None:
             updates = []
+            clock = clock_zone(tz)
             for r in conn.execute("SELECT msg_id, request_id, ts FROM turns"):
-                local = datetime.fromisoformat(r["ts"]).astimezone(tz)
-                updates.append(
-                    (local.date().isoformat(), local.hour, r["msg_id"], r["request_id"]))
+                stamp = datetime.fromisoformat(r["ts"])
+                updates.append((stamp.astimezone(tz).date().isoformat(),
+                                stamp.astimezone(clock).hour, r["msg_id"], r["request_id"]))
             conn.executemany(
                 "UPDATE turns SET day = ?, hour = ? WHERE msg_id = ? AND request_id = ?",
                 updates)
-        conn.execute("DELETE FROM files")
         conn.execute("INSERT OR REPLACE INTO meta VALUES ('sync_tz', ?)", (tz_id,))
     known = {r["path"]: (r["mtime"], r["size"])
              for r in conn.execute("SELECT path, mtime, size FROM files")}
@@ -498,22 +524,32 @@ def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of, *,
     for i in range(0, len(changed), batch_files):
         batch = changed[i:i + batch_files]
         lines = []
-        per_file: list[tuple[str, float, int, int]] = []
+        per_file: list[tuple[str, float, int, int, str | None]] = []
+        read: list[tuple[str, Path]] = []
         for source, path, st in batch:
-            file_lines = list(parse(source, path))
+            drops: Counter = Counter()
+            try:
+                file_lines = list(parse(source, path, drops))
+            except OSError:
+                # Locked or vanished: no checkpoint, so the next sync retries it.
+                result.unreadable += 1
+                continue
             lines.extend(file_lines)
+            read.append((source, path))
             # turn_count is responses, not lines: one response spans several lines.
-            per_file.append((str(path), st.st_mtime, st.st_size, len(dedupe(file_lines)[0])))
+            per_file.append((str(path), st.st_mtime, st.st_size, len(dedupe(file_lines)[0]),
+                             json.dumps(dict(drops), sort_keys=True) if drops else None))
         turns, dropped = dedupe(lines)
         result.duplicates += dropped
         result.turns += len(turns)
         hours |= upsert_turns(conn, turns, tz, cost_of)
-        result.prompts += upsert_prompts(conn, read_prompts([(s_, p_) for s_, p_, _ in batch]))
+        result.prompts += upsert_titles(conn, read_titles(read))
         stamp = datetime.now(timezone.utc).isoformat()
         conn.executemany(
-            "INSERT OR REPLACE INTO files VALUES (?,?,?,?,?)",
-            [(path, mtime, size, stamp, n) for path, mtime, size, n in per_file])
-        result.parsed += len(batch)
+            "INSERT OR REPLACE INTO files (path, mtime, size, parsed_at, turn_count, dropped)"
+            " VALUES (?,?,?,?,?,?)",
+            [(path, mtime, size, stamp, n, d) for path, mtime, size, n, d in per_file])
+        result.parsed += len(read)
         if progress:
             progress(result.parsed, len(changed))
 
@@ -530,10 +566,25 @@ def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of, *,
     return result
 
 
-def upsert_prompts(conn, prompts) -> int:
-    rows = [(p["session"], p.get("ts"), p["text"]) for p in prompts if p.get("text")]
-    conn.executemany("INSERT OR REPLACE INTO prompts VALUES (?,?,?)", rows)
+def upsert_titles(conn, titles) -> int:
+    """Keep a session's title unless a better or equal kind arrives."""
+    rows = [(t["session"], t["kind"], t["rank"], t.get("ts"), t["text"])
+            for t in titles if t.get("text")]
+    conn.executemany(
+        "INSERT INTO titles (session, kind, rank, ts, text) VALUES (?,?,?,?,?)"
+        " ON CONFLICT(session) DO UPDATE SET kind = excluded.kind, rank = excluded.rank,"
+        " ts = excluded.ts, text = excluded.text WHERE excluded.rank >= titles.rank",
+        rows)
     return len(rows)
+
+
+def dropped_records(conn) -> dict[str, int]:
+    """Records skipped across all read files, by reason."""
+    totals: dict[str, int] = {}
+    for (blob,) in conn.execute("SELECT dropped FROM files WHERE dropped IS NOT NULL"):
+        for reason, n in json.loads(blob).items():
+            totals[reason] = totals.get(reason, 0) + int(n)
+    return totals
 
 
 _SURFACE = {
@@ -656,7 +707,7 @@ def sessions(
         " ORDER BY started DESC", cloud_args).fetchall()
 
     titles = {r["session"]: r["text"] for r in
-              conn.execute("SELECT session, text FROM prompts ORDER BY ts, text")}
+              conn.execute("SELECT session, text FROM titles")}
 
     rows = []
     local_ids = {r[0] for r in conn.execute("SELECT DISTINCT session FROM turns")}
@@ -728,7 +779,7 @@ def session_detail(conn, session_id: str) -> dict | None:
         (session_id,)).fetchall()
     if turns:
         title = conn.execute(
-            "SELECT text FROM prompts WHERE session = ? ORDER BY ts DESC LIMIT 1",
+            "SELECT text FROM titles WHERE session = ?",
             (session_id,)).fetchone()
         first, last = turns[0], turns[-1]
         tokens = sum(t["input"] + t["cache_5m"] + t["cache_1h"] + t["cache_read"] + t["output"]
@@ -772,7 +823,7 @@ def summary(conn) -> dict:
     by_surface = [dict(r) for r in conn.execute(
         "SELECT surface, COUNT(*) n, SUM(cost) cost FROM sessions WHERE harvested=1"
         " GROUP BY surface ORDER BY cost DESC")]
-    prompts = one("SELECT COUNT(*) n FROM prompts")
+    prompts = one("SELECT COUNT(*) n FROM titles")  # the API key predates titles
     last = one("SELECT value FROM meta WHERE key='last_harvest'")
     return {"turns": turns, "cloud": cloud, "cloud_by_surface": by_surface,
             "prompts": prompts, "last_harvest": last.get("value")}

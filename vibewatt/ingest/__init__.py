@@ -12,6 +12,9 @@ replayed into several files. Cloud sessions have no local file and live in
 
 from __future__ import annotations
 
+import fnmatch
+import os
+from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
@@ -33,5 +36,26 @@ def discover(cfg: dict | None = None) -> list[tuple[str, Path]]:
     return [(name, path) for name, mod in SOURCES.items() for path in mod.discover(cfg)]
 
 
-def parse(source: str, path: Path) -> Iterator[Turn]:
-    return SOURCES[source].parse(path)
+def parse(source: str, path: Path, drops: Counter | None = None) -> Iterator[Turn]:
+    return SOURCES[source].parse(path, drops)
+
+
+def walk(root: Path, pattern: str) -> list[Path]:
+    """Files under root matching pattern, each real file once.
+
+    Directory symlinks and NTFS junctions are not followed: a junction loop
+    listed one file 64 times and each copy was parsed (A-070).
+    """
+    isjunction = getattr(os.path, "isjunction", lambda _p: False)
+    found: dict[str, Path] = {}
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        dirnames[:] = sorted(
+            d for d in dirnames
+            if not (os.path.islink(os.path.join(dirpath, d))
+                    or isjunction(os.path.join(dirpath, d)))
+        )
+        for name in sorted(filenames):
+            if fnmatch.fnmatch(name, pattern):
+                path = Path(dirpath) / name
+                found.setdefault(os.path.normcase(os.path.realpath(path)), path)
+    return list(found.values())

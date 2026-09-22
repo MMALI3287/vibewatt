@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -21,12 +22,14 @@ def roots() -> list[Path]:
 
 
 def discover(cfg: dict | None = None) -> list[Path]:
+    from . import walk
+
     files: list[Path] = []
     for root in roots():
         if root.is_dir():
-            files.extend(sorted(root.rglob("*.jsonl")))
+            files.extend(walk(root, "*.jsonl"))
     return files
 
 
-def parse(path: Path) -> Iterator[Turn]:
-    return read_file(CLAUDE_CODE, path)
+def parse(path: Path, drops: Counter | None = None) -> Iterator[Turn]:
+    return read_file(CLAUDE_CODE, path, drops)

@@ -6,6 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 
+from .config import clock_zone
 from .pricing import MILLION, WEB_SEARCH_PER_CALL, rate_for
 from .sources import Turn
 
@@ -221,7 +222,7 @@ def build(
         report.by_source[turn.source].add(turn, cost)
         report.by_project[turn.project].add(turn, cost)
         report.by_day_model[(day, turn.model)].add(turn, cost)
-        report.by_hour[local.hour].add(turn, cost)
+        report.by_hour[turn.ts.astimezone(clock_zone(tz)).hour].add(turn, cost)
         report.by_cell[(day, turn.source, turn.project, turn.model)].add(turn, cost)
         report.sessions.add(turn.session)
     report.blocks = build_blocks(kept, hours=session_hours, overrides=overrides)

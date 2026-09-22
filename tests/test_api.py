@@ -182,7 +182,7 @@ def test_sessions_preserve_unpriced_turns_and_full_search_titles(logs):
     title = "A long title " * 10 + "searchable ending"
     with store.connect() as conn:
         conn.execute("UPDATE turns SET cost = NULL WHERE session = 's1'")
-        conn.execute("UPDATE prompts SET text = ? WHERE session = 's1'", (title,))
+        conn.execute("UPDATE titles SET text = ? WHERE session = 's1'", (title,))
     row = client.get("/api/sessions?q=searchable ending").json()[0]
     assert row["title"] == title
     assert row["unpriced_turns"] == 2

@@ -56,10 +56,12 @@ def money(n: float) -> str:
     return f"${n:,.2f}" if n >= 0.01 or n == 0 else f"${n:.4f}"
 
 
-def heatmap(report: Report, weeks: int = 53, color: bool = True, ramp: list[str] | None = None) -> str:
+def heatmap(report: Report, weeks: int = 53, color: bool = True, ramp: list[str] | None = None,
+            today: date | None = None) -> str:
     """GitHub-style grid: columns are weeks, rows are weekdays, latest at the right."""
     ramp = ramp or DARK_RAMP
-    today = date.today()
+    # The report's own today, in its timezone and day boundary (A-055).
+    today = today or report.today or date.today()
     # Anchor the final column to this week, starting weeks on Monday.
     end = today + timedelta(days=(6 - today.weekday()))
     start = end - timedelta(weeks=weeks) + timedelta(days=1)

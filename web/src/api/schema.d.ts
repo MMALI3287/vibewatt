@@ -526,6 +526,11 @@ export interface components {
             web_searches: number;
             /** Cost Usd */
             cost_usd: number;
+            /**
+             * Unpriced
+             * @default 0
+             */
+            unpriced: number;
         };
         /** ConciergeOut */
         ConciergeOut: {
