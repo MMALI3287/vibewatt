@@ -6,14 +6,15 @@ import { Overview } from "./pages/Overview";
 import { Placeholder } from "./pages/Placeholder";
 import { Sessions, SessionModal } from "./pages/Sessions";
 import { Breakdown } from "./pages/Breakdown";
-import { Analysis } from "./pages/Analysis";
+import { Analysis, FindingModal } from "./pages/Analysis";
 import { Wrapped } from "./pages/Wrapped";
 import { Phase6Panels } from "./components/Phase6Panels";
 
 export function App() {
   const location = useLocation();
   const state = location.state as { backgroundLocation?: Location } | null;
-  const background = location.pathname.startsWith("/sessions/") ? state?.backgroundLocation : undefined;
+  const modal = location.pathname.startsWith("/sessions/") || location.pathname.startsWith("/analysis/findings/");
+  const background = modal ? state?.backgroundLocation : undefined;
   return (
     <div className="app">
       <Header />
@@ -26,11 +27,13 @@ export function App() {
           <Route path="/projects" element={<Breakdown dimension="project" />} />
           <Route path="/models" element={<Breakdown dimension="model" />} />
           <Route path="/analysis" element={<Analysis />} />
+          <Route path="/analysis/findings/:id" element={<Analysis />} />
           <Route path="/wrapped" element={<Wrapped />} />
           <Route path="*" element={<Placeholder title="Not found" />} />
         </Routes>
         <Routes>
           <Route path="/sessions/:id" element={<SessionModal hasBackground={Boolean(background)} />} />
+          <Route path="/analysis/findings/:id" element={<FindingModal hasBackground={Boolean(background)} />} />
           <Route path="*" element={null} />
         </Routes>
         <Phase6Panels />

@@ -18,14 +18,14 @@ import threading
 from collections import defaultdict
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
-from itertools import pairwise
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone, tzinfo
+from itertools import pairwise
 from pathlib import Path
 
 from .config import clock_zone, copy_sqlite, data_dir, zone_id
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -287,6 +287,31 @@ def _v8_keyed_path_hash(conn) -> None:
     conn.execute("DELETE FROM tool_read_files")
 
 
+def _v9_dismissals(conn) -> None:
+    # Phase 6.5f: dismissals outlive a snapshot and apply across filters for
+    # session findings (A-091). Existing dismissals are carried over.
+    conn.execute("CREATE TABLE IF NOT EXISTS dismissals (key TEXT PRIMARY KEY, at TEXT)")
+    # Line counts as Claude's own Stats count them, for the reconciliation
+    # panel. Filled by re-reading every file once.
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS raw_lines (
+      path TEXT NOT NULL, source TEXT NOT NULL, hr TEXT NOT NULL, session TEXT NOT NULL,
+      messages INTEGER NOT NULL, tokens INTEGER NOT NULL,
+      PRIMARY KEY (path, hr, session)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS raw_lines_hr ON raw_lines(hr)")
+    conn.execute("DELETE FROM files")
+    for row in conn.execute("SELECT scope, detail_json, created_at FROM findings"
+                            " WHERE dismissed = 1").fetchall():
+        item = json.loads(row[1])
+        if "rule" in item:
+            conn.execute("INSERT OR IGNORE INTO dismissals VALUES (?, ?)",
+                         (dismissal_key(item, row[0]), row[2]))
+    # Snapshots left inactive by earlier versions are not history anyone reads.
+    conn.execute("DELETE FROM findings WHERE active = 0 AND dismissed = 0"
+                 " AND scope != 'phase6-alerts'")
+
+
 # Forward-only. Append a step and bump SCHEMA_VERSION; never drop a user's table.
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _v2_files_and_quota_samples,
@@ -296,6 +321,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     6: _v6_titles_and_drops,
     7: _v7_quota_windows,
     8: _v8_keyed_path_hash,
+    9: _v9_dismissals,
 }
 assert max(MIGRATIONS) == SCHEMA_VERSION
 
@@ -602,12 +628,18 @@ def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of, *,
         read: list[tuple[str, Path]] = []
         for source, path, st in batch:
             drops: Counter = Counter()
+            raw: dict = {}
             try:
-                file_lines = list(parse(source, path, drops))
+                file_lines = list(parse(source, path, drops, raw))
             except OSError:
                 # Locked or vanished: no checkpoint, so the next sync retries it.
                 result.unreadable += 1
                 continue
+            conn.execute("DELETE FROM raw_lines WHERE path = ?", (str(path),))
+            conn.executemany(
+                "INSERT INTO raw_lines VALUES (?,?,?,?,?,?)",
+                [(str(path), source, hr, session, n, tokens)
+                 for (hr, session), (n, tokens) in raw.items()])
             lines.extend(file_lines)
             read.append((source, path))
             # turn_count is responses, not lines: one response spans several lines.
@@ -942,6 +974,76 @@ def summary(conn) -> dict:
             "last_sync": synced.get("value")}
 
 
+RECONCILIATION_REASONS = [
+    (
+        "Claude's Stats count every log line. Claude Code writes one line per content block "
+        "and repeats the response's usage on each, so a response's tokens are counted "
+        "several times. vibewatt counts each response once."
+    ),
+    (
+        "Stats count input and output tokens only. vibewatt's totals also include cache "
+        "reads and writes, which are most of the tokens and most of the cost."
+    ),
+    (
+        "Stats count messages: your lines and Claude's lines, outside subagents. vibewatt "
+        "counts responses: one per API call, subagents included."
+    ),
+    (
+        "Stats tokens include subagent work in the same total."
+    ),
+    (
+        "Stats cover Claude Code only (not Cowork) and may be a snapshot from when the "
+        "app last refreshed."
+    ),
+]
+
+SESSION_DEFINITION = (
+    "A session is one Claude Code or Cowork session id with at least one billable "
+    "response kept after dedup. Sessions with only your messages, or only local "
+    "stand-in responses, are not counted, so this can be lower than Claude's own count."
+)
+
+
+def reconciliation(conn, tz, date_from: date | None = None, date_to: date | None = None) -> dict:
+    """vibewatt's deduped figures next to the figures Claude's Stats would show.
+
+    Claude Code only, because the Stats exclude Cowork. The Stats-equivalent
+    figures are bucketed by UTC hour, so a day boundary in a zone with a
+    half-hour offset can be off by those minutes.
+    """
+    source = "claude-code"
+    stats = {"messages": 0, "tokens": 0, "sessions": 0}
+    sessions: set[str] = set()
+    for hr, session, messages, tokens in conn.execute(
+        "SELECT hr, session, SUM(messages), SUM(tokens) FROM raw_lines WHERE source = ?"
+        " GROUP BY hr, session", (source,)
+    ):
+        day = datetime.fromisoformat(f"{hr}:00:00+00:00").astimezone(tz).date()
+        if (date_from and day < date_from) or (date_to and day > date_to):
+            continue
+        stats["messages"] += messages
+        stats["tokens"] += tokens
+        sessions.add(session)
+    stats["sessions"] = len(sessions)
+    where, args = ["source = ?"], [source]
+    if date_from:
+        where.append("day >= ?")
+        args.append(date_from.isoformat())
+    if date_to:
+        where.append("day <= ?")
+        args.append(date_to.isoformat())
+    row = conn.execute(
+        "SELECT COALESCE(SUM(responses), 0), COALESCE(SUM(input + output), 0),"
+        " COALESCE(SUM(input + cache_5m + cache_1h + cache_read + output), 0),"
+        f" COUNT(DISTINCT session) FROM rollup WHERE {' AND '.join(where)}", args).fetchone()
+    deduped = {"responses": row[0], "input_output_tokens": row[1], "all_tokens": row[2],
+               "sessions": row[3]}
+    ratio = stats["tokens"] / deduped["input_output_tokens"] if deduped["input_output_tokens"] else None
+    return {"source": source, "deduped": deduped, "stats_equivalent": stats,
+            "token_ratio": ratio, "reasons": RECONCILIATION_REASONS,
+            "session_definition": SESSION_DEFINITION}
+
+
 def coverage(conn, min_gap_days: int = 7) -> dict:
     """What the store covers: files per source and spans with no local turn."""
     from .sources import CLAUDE_CODE, COWORK
@@ -968,9 +1070,40 @@ def coverage(conn, min_gap_days: int = 7) -> dict:
     return {"sources": sources, "gaps": gaps, "dropped_records": dropped_records(conn)}
 
 
-def save_findings(conn: sqlite3.Connection, scope: str, findings: list[dict]) -> list[dict]:
-    """Replace the active snapshot while keeping history and user dismissals."""
+def dismissal_key(finding: dict, scope: str) -> str:
+    """A session finding is dismissed wherever it appears; others per selection (A-091)."""
+    if finding.get("session_id"):
+        return f"{finding['rule']}|{finding['subject']}"
+    return f"{finding['rule']}|{finding['subject']}|{scope}"
+
+
+def _with_dismissals(conn, rows) -> list[dict]:
+    dismissed = {r[0] for r in conn.execute("SELECT key FROM dismissals")}
+    out = []
+    for r in rows:
+        item = json.loads(r["detail_json"])
+        key = dismissal_key(item, r["scope"]) if "rule" in item else None
+        out.append(dict(item, dismissed=bool(r["dismissed"]) or key in dismissed,
+                        created_at=r["created_at"]))
+    return out
+
+
+def active_findings(conn, scope: str) -> list[dict]:
+    return _with_dismissals(conn, conn.execute(
+        "SELECT * FROM findings WHERE scope = ? AND active = 1", (scope,)))
+
+
+def save_findings(conn: sqlite3.Connection, scope: str, findings: list[dict], *,
+                  prune: bool = False) -> list[dict]:
+    """Replace the active snapshot. Dismissals live in their own table.
+
+    With `prune`, rows of earlier snapshots are deleted instead of kept
+    inactive: every filter selection used to leave a snapshot behind for good
+    (A-092). Alerts keep theirs, because a fired alert must stay known.
+    """
     now = datetime.now(timezone.utc).isoformat()
+    if prune:
+        conn.execute("DELETE FROM findings WHERE scope = ?", (scope,))
     conn.execute("UPDATE findings SET active = 0 WHERE scope = ?", (scope,))
     for finding in findings:
         conn.execute(
@@ -980,11 +1113,26 @@ def save_findings(conn: sqlite3.Connection, scope: str, findings: list[dict]) ->
             (finding["id"], scope, finding["kind"], finding["severity"], finding["day"],
              finding["subject"], json.dumps(finding), now),
         )
-    rows = conn.execute("SELECT * FROM findings WHERE scope = ? AND active = 1", (scope,))
-    return [dict(json.loads(r["detail_json"]), dismissed=bool(r["dismissed"]), created_at=r["created_at"])
-            for r in rows]
+    return active_findings(conn, scope)
 
 
 def dismiss_finding(conn: sqlite3.Connection, finding_id: str, dismissed: bool) -> bool:
-    result = conn.execute("UPDATE findings SET dismissed = ? WHERE id = ?", (int(dismissed), finding_id))
-    return result.rowcount > 0
+    row = conn.execute("SELECT * FROM findings WHERE id = ?", (finding_id,)).fetchone()
+    if row is None:
+        return False
+    item = json.loads(row["detail_json"])
+    if "rule" in item:
+        key = dismissal_key(item, row["scope"])
+        if dismissed:
+            conn.execute("INSERT OR REPLACE INTO dismissals VALUES (?, ?)",
+                         (key, datetime.now(timezone.utc).isoformat()))
+        else:
+            conn.execute("DELETE FROM dismissals WHERE key = ?", (key,))
+    conn.execute("UPDATE findings SET dismissed = ? WHERE id = ?", (int(dismissed), finding_id))
+    return True
+
+
+def finding(conn: sqlite3.Connection, finding_id: str) -> dict | None:
+    rows = _with_dismissals(conn, conn.execute(
+        "SELECT * FROM findings WHERE id = ?", (finding_id,)))
+    return rows[0] if rows else None

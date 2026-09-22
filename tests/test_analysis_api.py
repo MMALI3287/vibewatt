@@ -85,4 +85,5 @@ def test_empty_analysis_has_coverage_and_makes_no_network_calls(monkeypatch):
     client = TestClient(create_app({"offline": True, "quota": False}))
     body = client.get("/api/findings").json()
     assert body["findings"] == []
-    assert any("Not enough history" in note for note in body["notes"])
+    # Nothing to evaluate is "no activity", not a false "not enough history" (A-043).
+    assert "Anomaly detection: no local activity in this range." in body["anomaly_notes"]

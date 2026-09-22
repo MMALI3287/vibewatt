@@ -74,10 +74,10 @@ def test_reads_during_a_sync_never_fail(logs, monkeypatch):  # A-056
     real = ingest.parse
     entered = threading.Event()
 
-    def slow(source, path, drops=None):
+    def slow(*args):
         entered.set()
         time.sleep(1.5)
-        return real(source, path, drops)
+        return real(*args)
 
     monkeypatch.setattr(ingest, "parse", slow)
     worker = threading.Thread(target=lambda: c.post("/api/sync"))

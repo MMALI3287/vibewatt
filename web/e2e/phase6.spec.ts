@@ -48,3 +48,22 @@ test("Wrapped loading and error states", async ({ page }) => {
   release();
   await expect(page.getByRole("heading", { name: "Could not load Wrapped" })).toBeVisible({ timeout: 15000 });
 });
+
+test("Wrapped year accepts a typed four-digit year", async ({ page }) => {
+  // A-051: typing used to commit the first digit and unmount the input.
+  await page.goto("/wrapped?year=2026");
+  const input = page.getByLabel("Wrapped year");
+  await input.fill("2025");
+  await input.press("Enter");
+  await expect(page).toHaveURL(/year=2025/);
+  await expect(input).toHaveValue("2025");
+  await expect(page.getByText("No project usage this year.")).toBeVisible();
+});
+
+test("Overview explains why numbers differ from Claude's Stats", async ({ page }) => {
+  await page.goto("/");
+  await page.getByText("Why these numbers differ from Claude's Stats").click();
+  const table = page.getByRole("table", { name: "vibewatt compared with Claude's Stats" });
+  await expect(table).toContainText("Input + output tokens");
+  await expect(page.getByText("Session:", { exact: false })).toBeVisible();
+});

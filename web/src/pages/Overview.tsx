@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getSummary, type Bucket, type Summary } from "../api/client";
 import { Hero } from "../components/Hero";
 import { PlanMeters } from "../components/PlanMeters";
+import { Reconciliation } from "../components/Reconciliation";
 import { UsageCharts } from "../components/UsageCharts";
 import { DEFAULT_FILTERS, serializeFilters, useFilters, type Metric } from "../lib/filters";
 import { bucketTokens, fmtCompact, fmtInt, fmtPct, fmtUsd } from "../lib/format";
@@ -82,6 +83,7 @@ export function Overview() {
         </p>
       )}
       <Kpis s={s} />
+      <Reconciliation filters={filters} />
       <DailyChart s={s} metric={filters.metric} />
       <ModelTable s={s} metric={filters.metric} />
       <UsageCharts summary={s} filters={filters} />
