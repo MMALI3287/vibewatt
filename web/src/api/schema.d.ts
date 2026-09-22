@@ -489,6 +489,15 @@ export interface components {
             /** Analyzed At */
             analyzed_at: string;
         };
+        /** BandOut */
+        BandOut: {
+            /** P10 */
+            p10: number;
+            /** P50 */
+            p50: number;
+            /** P90 */
+            p90: number;
+        };
         /** BlockOut */
         BlockOut: {
             /** Start */
@@ -638,6 +647,31 @@ export interface components {
             fetched_at: string;
             /** Windows */
             windows: components["schemas"]["WindowOut"][];
+            /**
+             * Recent
+             * @default []
+             */
+            recent: components["schemas"]["QuotaSampleOut"][];
+            /**
+             * Notes
+             * @default []
+             */
+            notes: string[];
+        };
+        /** QuotaSampleOut */
+        QuotaSampleOut: {
+            /** Ts */
+            ts: string;
+            /** Key */
+            key: string;
+            /** Scope */
+            scope: string;
+            /** Utilization */
+            utilization: number;
+            /** Resets At */
+            resets_at: string | null;
+            /** Source */
+            source: string;
         };
         /** ServiceStatusOut */
         ServiceStatusOut: {
@@ -844,12 +878,25 @@ export interface components {
         };
         /** WindowOut */
         WindowOut: {
+            /** Key */
+            key: string;
             /** Label */
             label: string;
+            /** Scope */
+            scope: string;
+            /** Source */
+            source: string;
             /** Utilization */
             utilization: number;
             /** Resets At */
             resets_at: string | null;
+            /** Pace Delta */
+            pace_delta?: number | null;
+            /** Elapsed Pct */
+            elapsed_pct?: number | null;
+            band?: components["schemas"]["BandOut"] | null;
+            /** Note */
+            note?: string | null;
         };
         /** WrappedModelMonthOut */
         WrappedModelMonthOut: {

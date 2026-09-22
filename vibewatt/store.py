@@ -23,7 +23,7 @@ from pathlib import Path
 
 from .config import clock_zone, copy_sqlite, data_dir, zone_id
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -243,6 +243,39 @@ def _v6_titles_and_drops(conn) -> None:
     conn.execute("DELETE FROM files")
 
 
+_LEGACY_QUOTA_KEYS = {
+    "5-hour": "five_hour", "7-day": "seven_day",
+    "5-hour (Opus)": "five_hour_opus", "7-day (Opus)": "seven_day_opus",
+}
+
+
+def _v7_quota_windows(conn) -> None:
+    # Phase 6.5d: a sample is one window from one source, keyed on the window
+    # (five_hour, seven_day, ...) and its scope (the account, or a desktop org)
+    # instead of a display label, so several sources feed one series.
+    conn.execute("ALTER TABLE quota_samples RENAME TO quota_samples_v2")
+    conn.execute("""
+    CREATE TABLE quota_samples (
+      ts          TEXT NOT NULL,
+      key         TEXT NOT NULL,
+      label       TEXT NOT NULL,
+      scope       TEXT NOT NULL,
+      utilization REAL NOT NULL,
+      resets_at   TEXT,
+      source      TEXT NOT NULL,
+      PRIMARY KEY (ts, key, scope)
+    )""")
+    conn.execute("CREATE INDEX IF NOT EXISTS quota_samples_series"
+                 " ON quota_samples(key, scope, ts)")
+    rows = [
+        (r[0], _LEGACY_QUOTA_KEYS.get(r[1], r[1].lower().replace(" ", "_")), r[1],
+         "account", r[2], r[3], "legacy")
+        for r in conn.execute("SELECT ts, label, utilization, resets_at FROM quota_samples_v2")
+    ]
+    conn.executemany("INSERT OR IGNORE INTO quota_samples VALUES (?,?,?,?,?,?,?)", rows)
+    conn.execute("DROP TABLE quota_samples_v2")
+
+
 # Forward-only. Append a step and bump SCHEMA_VERSION; never drop a user's table.
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _v2_files_and_quota_samples,
@@ -250,6 +283,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     4: _v4_analysis,
     5: _v5_dedup_and_rollup,
     6: _v6_titles_and_drops,
+    7: _v7_quota_windows,
 }
 assert max(MIGRATIONS) == SCHEMA_VERSION
 
@@ -432,16 +466,9 @@ def import_history(conn) -> int:
 
 def upsert_quota_samples(conn, quota) -> int:
     """Record one sample per window. Returns rows newly written."""
-    if quota is None or not quota.windows:
-        return 0
-    ts = quota.fetched_at.astimezone(timezone.utc).isoformat()
-    rows = [
-        (ts, w.label, float(w.utilization), w.resets_at.isoformat() if w.resets_at else None)
-        for w in quota.windows
-    ]
-    before = conn.total_changes
-    conn.executemany("INSERT OR IGNORE INTO quota_samples VALUES (?,?,?,?)", rows)
-    return conn.total_changes - before
+    from .quota import record
+
+    return record(conn, quota)
 
 
 @dataclass

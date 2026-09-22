@@ -389,7 +389,8 @@ def test_cloud_context_retains_api_cost_and_peak_filters():
             ],
         )
         conn.executemany(
-            "INSERT INTO quota_samples VALUES (:ts,:label,:utilization,:resets_at)",
+            "INSERT INTO quota_samples (ts, key, label, scope, utilization, resets_at, source)"
+            " VALUES (:ts, 'five_hour', :label, 'account', :utilization, :resets_at, 'test')",
             samples(),
         )
         result = analyze(conn, UTC, now=NOW)

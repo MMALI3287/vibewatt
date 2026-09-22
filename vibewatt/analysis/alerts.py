@@ -26,12 +26,15 @@ def _number(value: object) -> bool:
     return isinstance(value, (int, float)) and math.isfinite(value) and value >= 0
 
 
-def _alert(kind: str, key: str, title: str, detail: str, now: datetime) -> dict:
+SPIKE_LOOKBACK = timedelta(hours=24)
+
+
+def _alert(kind: str, key: str, title: str, detail: str, day: str) -> dict:
     return {
         "id": hashlib.sha256(f"{_SCOPE}:{kind}:{key}".encode()).hexdigest(),
         "kind": kind,
         "severity": "warning",
-        "day": now.date().isoformat(),
+        "day": day,
         "subject": key,
         "title": title,
         "detail": detail,
@@ -48,94 +51,65 @@ def evaluate(
 ) -> dict:
     """Return active alerts and the number first observed in this transaction.
 
-    Costs are the stored sync-time prices. Quota percentages are never inferred
-    from local dollars or tokens. Findings preserve fired identities indefinitely.
+    A quota alert belongs to one window episode, so it fires once however many
+    samples arrive (A-006, A-048). It fires when a window reaches 100 %, or when
+    this account's own history puts the median projection at reset at 100 % or
+    more. A spike alert covers the last 24 hours only (A-050). Alert days are
+    in the report timezone (A-096).
     """
+    from ..aggregate import from_store
+    from .forecast import forecast
+
     instant = (now or datetime.now(tz)).astimezone(timezone.utc)
+    day = instant.astimezone(tz).date().isoformat()
     candidates = []
-    labels: dict[str, list[tuple[datetime, dict]]] = {}
-    for row in conn.execute("SELECT * FROM quota_samples"):
-        sample = dict(row)
-        stamp = _time(sample["ts"])
-        if stamp and stamp <= instant:
-            labels.setdefault(sample["label"], []).append((stamp, sample))
-    for label, samples in labels.items():
-        samples.sort(key=lambda pair: pair[0])
-        if len(samples) < 2:
+    for window in forecast(conn, instant):
+        key = f"{window['key']}:{window['scope']}:{window['episode_start']}"
+        band = window["band"]
+        if window["used"] >= 100:
+            detail = (f"Account-wide utilization reached {window['used']:.0f}% before the "
+                      f"reset at {window['resets_at']}.")
+        elif band and band["p50"] >= 100:
+            detail = (f"At {window['used']:.0f}% with {window['elapsed_pct']:.0f}% of the window "
+                      f"gone, this account's past windows put the reset at "
+                      f"{band['p10']:.0f}-{band['p90']:.0f}% (median {band['p50']:.0f}%).")
+        else:
             continue
-        latest_time, latest = samples[-1]
-        previous_time, previous = samples[-2]
-        reset = _time(latest["resets_at"])
-        if (
-            not reset
-            or reset <= instant
-            or reset != _time(previous["resets_at"])
-            or latest_time <= previous_time
-            or not _number(latest["utilization"])
-            or not _number(previous["utilization"])
-            or latest["utilization"] > 100
-            or previous["utilization"] > 100
-        ):
+        candidates.append(_alert("burn", key, f"{window['label']} may reach its limit",
+                                 detail, day))
+
+    # Spikes: responses in the last 24 hours against the 50 priced responses
+    # before each one. Older spikes are history, not active alerts.
+    since = (instant - SPIKE_LOOKBACK).isoformat()
+    prior = [r[0] for r in conn.execute(
+        "SELECT cost FROM turns WHERE ts < ? AND cost IS NOT NULL AND cost >= 0"
+        " ORDER BY ts DESC LIMIT 50", (since,))][::-1]
+    baseline: deque[float] = deque(prior, maxlen=50)
+    for row in conn.execute(
+        "SELECT msg_id, request_id, ts, cost FROM turns WHERE ts >= ? AND ts <= ?"
+        " ORDER BY ts, msg_id, request_id", (since, instant.isoformat())
+    ):
+        if not _number(row["cost"]):
             continue
-        slope = (latest["utilization"] - previous["utilization"]) / (
-            latest_time - previous_time
-        ).total_seconds()
-        projected = (
-            latest["utilization"] + slope * (reset - latest_time).total_seconds()
-        )
-        if slope > 0 and projected > 100:
-            candidates.append(
-                _alert(
-                    "burn",
-                    f"{label}:{reset.isoformat()}",
-                    f"{label} may reach its limit",
-                    f"Account-wide utilization projects to {projected:.1f}% at reset "
-                    f"({reset.isoformat()}) from the last two quota samples.",
-                    instant,
-                )
-            )
-    rows = []
-    for row in conn.execute("SELECT * FROM turns"):
-        item = dict(row)
-        stamp = _time(item["ts"])
-        if stamp and stamp <= instant:
-            rows.append((stamp, item))
-    rows.sort(key=lambda pair: (pair[0], pair[1]["msg_id"], pair[1]["request_id"]))
-    baseline: deque[float] = deque(maxlen=50)
+        if len(baseline) == 50 and row["cost"] > 5 * median(baseline):
+            candidates.append(_alert(
+                "spike", repr((row["msg_id"], row["request_id"])),
+                "Unusually expensive local response",
+                f"Local response cost ${row['cost']:.4f} exceeds 5x the previous "
+                f"50 priced responses' median (${median(baseline):.4f}).", day))
+        baseline.append(row["cost"])
+
     active = None
-    block_start = None
-    block_end = None
-    tokens = 0
-    cost = 0.0
-    for stamp, row in rows:
-        if _number(row["cost"]):
-            if len(baseline) == 50 and row["cost"] > 5 * median(baseline):
-                candidates.append(
-                    _alert(
-                        "spike",
-                        repr((row["msg_id"], row["request_id"])),
-                        "Unusually expensive local response",
-                        f"Local response cost ${row['cost']:.4f} exceeds 5x the previous "
-                        f"50 priced responses' median (${median(baseline):.4f}).",
-                        instant,
-                    )
-                )
-            baseline.append(row["cost"])
-        if block_end is None or stamp >= block_end:
-            block_start = stamp.replace(minute=0, second=0, microsecond=0)
-            block_end = block_start + timedelta(hours=max(1, session_hours))
-            tokens, cost = 0, 0.0
-        tokens += sum(
-            row[k] for k in ("input", "cache_5m", "cache_1h", "cache_read", "output")
-        )
-        if _number(row["cost"]):
-            cost += row["cost"]
-    if block_start is not None and instant < block_end:
-        minutes = max(1.0, (instant - block_start).total_seconds() / 60)
-        active = {
-            "tokens_per_minute": tokens / minutes,
-            "cost_per_minute": cost / minutes,
-        }
+    report = from_store(conn, tz, session_hours=session_hours, overrides=overrides,
+                        parts=frozenset({"blocks"}))
+    for block in reversed(report.blocks):
+        if block.start <= instant < block.end:
+            minutes = max(1.0, (instant - block.start).total_seconds() / 60)
+            active = {
+                "tokens_per_minute": block.bucket.total_tokens / minutes,
+                "cost_per_minute": block.bucket.cost / minutes,
+            }
+            break
     with conn:
         # Serialize identity checks so concurrent dashboard requests cannot both fire.
         if not conn.in_transaction:
@@ -156,7 +130,7 @@ def evaluate(
         "active_block": active,
         "notes": [
             (
-                "Quota forecasts are account-wide. Response spikes and block burn rates are local-only. "
+                "Quota alerts are account-wide. Response spikes and block burn rates are local-only. "
                 "Block cost uses priced stored responses only; unknown model costs are excluded."
             )
         ],

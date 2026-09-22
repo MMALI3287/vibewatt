@@ -127,17 +127,49 @@ def apply_aliases(report, aliases: dict) -> None:
     report.by_project.update(merged)
 
 
-def statusline(report, q) -> str:
-    """One compact line for a Claude Code statusLine hook or a tmux bar."""
+def statusline(cfg, tz, raw: str) -> str:
+    """The `statusLine` command: record the plan windows Claude Code pipes in.
+
+    Claude Code sends its statusline JSON on stdin at every refresh. This
+    records a throttled quota sample, runs the user's own statusline command
+    (`statusline_chain`) with the same input and prints one line. No network,
+    no report building: it has to finish well inside Claude Code's refresh.
+    """
+    import sqlite3
+    import subprocess
+
+    from . import store
+
+    try:
+        blob = json.loads(raw) if raw.strip() else None
+    except json.JSONDecodeError:
+        blob = None
+    reading = quota.from_statusline_json(blob)
     parts = []
-    if q is not None:
-        for w in q.windows[:2]:
-            parts.append(f"{w.label} {w.utilization:.0f}%")
-    active = report.active_block
-    if active is not None:
-        parts.append(f"{terminal.money(active.bucket.cost)} this window")
-        parts.append(f"{terminal.human(active.tokens_per_minute)}/min")
-    parts.append(f"{terminal.money(report.month_to_date().cost)} MTD")
+    if reading is not None:
+        if cfg.get("quota", True):
+            try:
+                with store.connect() as conn:
+                    quota.record(conn, reading, throttle=quota.STATUSLINE_THROTTLE)
+            except (sqlite3.Error, OSError):
+                pass  # a busy store must never blank the status line
+        for w in reading.windows:
+            text = f"{w.label} {w.utilization:.0f}%"
+            if w.resets_at is not None:
+                text += f" (resets {w.resets_at.astimezone(configmod.clock_zone(tz)):%H:%M})"
+            parts.append(text)
+    chain = cfg.get("statusline_chain")
+    if chain:
+        try:
+            # The user's own command from their own config, run through a shell
+            # exactly as Claude Code runs a statusLine command. Claude Code's
+            # JSON goes in on stdin and is never interpolated into the command.
+            done = subprocess.run(chain, shell=True, input=raw, capture_output=True,
+                                  text=True, timeout=5, check=False)
+            first = done.stdout.strip().splitlines()[:1]
+            parts = first + parts
+        except (OSError, subprocess.SubprocessError):
+            pass
     return "  |  ".join(parts)
 
 
@@ -378,6 +410,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "sessions":
         return sessions_report(args, cfg, tz)
 
+    if args.command == "statusline":
+        raw = "" if sys.stdin is None or sys.stdin.isatty() else sys.stdin.read()
+        print(statusline(cfg, tz, raw))
+        return 0
+
     pricing.refresh(offline=cfg.get("offline", False))
 
     cutoff = None
@@ -417,10 +454,6 @@ def main(argv: list[str] | None = None) -> int:
         target = args.out or "vibewatt-report.html"
         write(build_dataset(report, cfg, quota=q, duplicates=duplicates), target)
         print(f"wrote {target}")
-        return 0
-
-    if args.command == "statusline":
-        print(statusline(report, q))
         return 0
 
     color = terminal.use_color() and not args.no_color
