@@ -213,4 +213,4 @@ def test_weekly_summary_never_sends_stored_titles(monkeypatch, logs):  # A-099
 
 def test_session_definition_is_documented():  # A-116
     assert "billable response" in store.SESSION_DEFINITION
-    assert Path(__file__).parents[1].joinpath("PLAN.md").read_text(encoding="utf-8")
+    assert Path(__file__).parents[1].joinpath("docs", "PLAN.md").read_text(encoding="utf-8")

@@ -7,4 +7,15 @@ node_modules/
 vibewatt/static/
 web/test-results/
 web/playwright-report/
+
+# Personal agent and tool configuration. Shared rules live in AGENTS.md.
+.claude/
+.codex/
+.agents/
+docs/CODEX-SETUP.md
+.remember/
+
+# Local environments
+.venv/
+.env
 *.tsbuildinfo
