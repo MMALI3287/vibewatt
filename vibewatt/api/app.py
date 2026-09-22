@@ -1,6 +1,4 @@
-"""FastAPI app factory. Mounts every `/api/*` route from `routes.py` plus the
-pre-React dashboard (`/`, `/api/dataset`, `/api/usage`) so `vibewatt serve` keeps
-working until the phase 3 frontend replaces it."""
+"""FastAPI API and package-relative React dashboard serving."""
 
 from __future__ import annotations
 
@@ -8,15 +6,18 @@ import json
 import logging
 import threading
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from .. import config as configmod
 from .. import pricing
 from ..cli import build_report, report_zone, serialize, sync_store
 from .routes import _quota_out, router
 
+STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
 
 def create_app(cfg: dict | None = None, *, extra_hosts: set[str] | None = None) -> FastAPI:
     """`extra_hosts` adds a non-loopback bind name to the Host allowlist."""
@@ -121,13 +122,21 @@ def create_app(cfg: dict | None = None, *, extra_hosts: set[str] | None = None) 
         return JSONResponse(json.loads(json.dumps(build_dataset(report, cfg, quota=q,
                                                                   duplicates=duplicates))))
 
-    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-    @app.get("/index.html", response_class=HTMLResponse, include_in_schema=False)
-    def legacy_page() -> str:
-        from ..ui import build_dataset, build_page
+    if (STATIC_DIR / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
-        ensure_synced()
-        report, q, _, duplicates, _ = build_report(cfg, tz)
-        return build_page(build_dataset(report, cfg, quota=q, duplicates=duplicates))
+    @app.get("/{path:path}", include_in_schema=False)
+    def dashboard(path: str) -> FileResponse:
+        # API mistakes and absent assets must never receive an HTML success response.
+        if path.split("/", 1)[0] in {"api", "assets"}:
+            raise HTTPException(404, "Not found")
+        if "\\" in path or ".." in path.split("/"):
+            raise HTTPException(404, "Not found")
+        index = STATIC_DIR / "index.html"
+        if not index.is_file():
+            raise HTTPException(
+                503, "Dashboard build missing. Run npm ci and npm run build in web/."
+            )
+        return FileResponse(index, headers={"Cache-Control": "no-cache"})
 
     return app

@@ -1,14 +1,18 @@
+import { lazy, Suspense } from "react";
 import { Route, Routes, useLocation, type Location } from "react-router-dom";
 import { FilterBar } from "./components/FilterBar";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
-import { Overview } from "./pages/Overview";
 import { Placeholder } from "./pages/Placeholder";
-import { Sessions, SessionModal } from "./pages/Sessions";
-import { Breakdown } from "./pages/Breakdown";
-import { Analysis, FindingModal } from "./pages/Analysis";
-import { Wrapped } from "./pages/Wrapped";
 import { Phase6Panels } from "./components/Phase6Panels";
+
+const Overview = lazy(() => import("./pages/Overview").then(m => ({ default: m.Overview })));
+const Sessions = lazy(() => import("./pages/Sessions").then(m => ({ default: m.Sessions })));
+const SessionModal = lazy(() => import("./pages/Sessions").then(m => ({ default: m.SessionModal })));
+const Breakdown = lazy(() => import("./pages/Breakdown").then(m => ({ default: m.Breakdown })));
+const Analysis = lazy(() => import("./pages/Analysis").then(m => ({ default: m.Analysis })));
+const FindingModal = lazy(() => import("./pages/Analysis").then(m => ({ default: m.FindingModal })));
+const Wrapped = lazy(() => import("./pages/Wrapped").then(m => ({ default: m.Wrapped })));
 
 export function App() {
   const location = useLocation();
@@ -22,6 +26,7 @@ export function App() {
       <Header />
       <FilterBar />
       <main className="main" id="main" tabIndex={-1}>
+        <Suspense fallback={<p role="status">Loading view…</p>}>
         <Routes location={background ?? location}>
           <Route path="/" element={<Overview />} />
           <Route path="/sessions" element={<Sessions />} />
@@ -33,11 +38,15 @@ export function App() {
           <Route path="/wrapped" element={<Wrapped />} />
           <Route path="*" element={<Placeholder title="Not found" />} />
         </Routes>
+        </Suspense>
+        {/* Its own boundary: loading the modal chunk must not unmount the page behind it. */}
+        <Suspense fallback={null}>
         <Routes>
           <Route path="/sessions/:id" element={<SessionModal hasBackground={Boolean(background)} />} />
           <Route path="/analysis/findings/:id" element={<FindingModal hasBackground={Boolean(background)} />} />
           <Route path="*" element={null} />
         </Routes>
+        </Suspense>
         <Phase6Panels />
       </main>
       <Footer />
