@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
-USER_AGENT = "ccburn"
+USER_AGENT = "vibewatt"
 
 
 @dataclass

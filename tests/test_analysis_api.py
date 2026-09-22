@@ -5,9 +5,9 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from ccburn import store
-from ccburn.aggregate import cost_of
-from ccburn.api import create_app
+from vibewatt import store
+from vibewatt.aggregate import cost_of
+from vibewatt.api import create_app
 
 
 def client_with_reads():

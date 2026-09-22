@@ -17,12 +17,12 @@ FIXTURES = ROOT / "tests" / "fixtures"
 
 def main() -> None:
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8778
-    tmp = Path(tempfile.mkdtemp(prefix="ccburn-e2e-"))
+    tmp = Path(tempfile.mkdtemp(prefix="vibewatt-e2e-"))
     for key, sub in (("CLAUDE_CONFIG_DIR", "claude"), ("APPDATA", "appdata"),
-                     ("XDG_CONFIG_HOME", "appdata"), ("CCBURN_DATA_DIR", "data"),
+                     ("XDG_CONFIG_HOME", "appdata"), ("VIBEWATT_DATA_DIR", "data"),
                      ("HOME", "home"), ("USERPROFILE", "home")):
         os.environ[key] = str(tmp / sub)
-    os.environ.pop("CCBURN_COWORK_DIR", None)
+    os.environ.pop("VIBEWATT_COWORK_DIR", None)
 
     layout = {
         FIXTURES / "claude_code_session.jsonl": tmp / "claude/projects/demo/session.jsonl",
@@ -35,12 +35,12 @@ def main() -> None:
 
     import uvicorn
 
-    from ccburn import config as configmod
-    from ccburn import store
-    from ccburn.aggregate import cost_of
-    from ccburn.api import create_app
-    from ccburn.ingest import discover
-    from ccburn.ingest.tool_reads import read_tools
+    from vibewatt import config as configmod
+    from vibewatt import store
+    from vibewatt.aggregate import cost_of
+    from vibewatt.api import create_app
+    from vibewatt.ingest import discover
+    from vibewatt.ingest.tool_reads import read_tools
 
     cfg = configmod.load()
     cfg["offline"] = True

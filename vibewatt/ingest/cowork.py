@@ -7,7 +7,8 @@ import platform
 from collections.abc import Iterator
 from pathlib import Path
 
-from ccburn.sources import COWORK, Turn, read_file
+from vibewatt.config import env
+from vibewatt.sources import COWORK, Turn, read_file
 
 _COWORK_DIRS = ("local-agent-mode-sessions", "claude-code-sessions")
 
@@ -23,7 +24,7 @@ def desktop_data_dirs() -> list[Path]:
     else:
         cfg = os.environ.get("XDG_CONFIG_HOME") or (home / ".config")
         roots = [Path(cfg) / "Claude"]
-    extra = os.environ.get("CCBURN_COWORK_DIR")
+    extra = env("COWORK_DIR")
     if extra:
         roots = [Path(p).expanduser() for p in extra.split(os.pathsep)] + roots
     return roots

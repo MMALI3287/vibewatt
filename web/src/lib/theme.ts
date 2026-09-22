@@ -1,11 +1,13 @@
 import { useCallback, useState } from "react";
 
 export type ThemeChoice = "system" | "light" | "dark";
-const KEY = "ccburn-theme";
+const KEY = "vibewatt-theme";
+// Read once so a choice saved before the rename is not lost.
+const LEGACY_KEY = "ccburn-theme";
 
 function read(): ThemeChoice {
   try {
-    const v = localStorage.getItem(KEY);
+    const v = localStorage.getItem(KEY) ?? localStorage.getItem(LEGACY_KEY);
     return v === "light" || v === "dark" ? v : "system";
   } catch {
     return "system";

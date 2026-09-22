@@ -1,4 +1,4 @@
-# ccburn — implementation plan
+# vibewatt — implementation plan
 
 A complete usage, cost and analysis dashboard for Claude Code, Claude Code on the
 web, and Cowork. This document is the spec. It names the files, the interfaces,
@@ -36,17 +36,17 @@ Working and verified against a real account:
 
 | Piece | File | State |
 |---|---|---|
-| Local log parsing, Claude Code + Cowork | `ccburn/sources.py` | done |
-| Pricing incl. per-TTL cache, fast mode, geo | `ccburn/pricing.py` | done |
-| Aggregation, 5h blocks, burn rate | `ccburn/aggregate.py` | done |
-| Account-wide plan utilization | `ccburn/quota.py` | done |
-| Cloud session harvest | `ccburn/store.py` `ccburn/cli.py` | done |
-| SQLite store | `ccburn/store.py` | done |
-| Durable history across log pruning | `ccburn/history.py` | done |
-| Diagnostics | `ccburn/doctor.py` | done |
-| Terminal report | `ccburn/terminal.py` | done |
-| Single-file interactive HTML | `ccburn/ui.py` | done, to be superseded by the React app |
-| Dashboard server | `ccburn/dashboard.py` | done, to be replaced by FastAPI |
+| Local log parsing, Claude Code + Cowork | `vibewatt/sources.py` | done |
+| Pricing incl. per-TTL cache, fast mode, geo | `vibewatt/pricing.py` | done |
+| Aggregation, 5h blocks, burn rate | `vibewatt/aggregate.py` | done |
+| Account-wide plan utilization | `vibewatt/quota.py` | done |
+| Cloud session harvest | `vibewatt/store.py` `vibewatt/cli.py` | done |
+| SQLite store | `vibewatt/store.py` | done |
+| Durable history across log pruning | `vibewatt/history.py` | done |
+| Diagnostics | `vibewatt/doctor.py` | done |
+| Terminal report | `vibewatt/terminal.py` | done |
+| Single-file interactive HTML | `vibewatt/ui.py` | done, to be superseded by the React app |
+| Dashboard server | `vibewatt/dashboard.py` | done, to be replaced by FastAPI |
 
 **Audit 2026-09-22:** phases 1-6 were audited against this plan. 128 findings,
 evidence in `docs/AUDIT-2026-09-22.md`, one line each in section 11, scheduled
@@ -155,14 +155,14 @@ cloud cost uses the API's own `cost_usd` rather than recomputing. Never mix the 
 
 Access, in preference order:
 1. `list_sessions` via the `claude-code-remote` MCP tool (works today; `tags` filter needs an OAuth caller).
-2. `ccburn harvest --file sessions.json` ingesting a saved listing (works today, implemented).
-3. A direct authenticated endpoint — **not yet discovered**. `/api/oauth/usage` is the account-level one and is already used by `ccburn/quota.py`; the per-session listing endpoint is undocumented. Phase 2 spikes this.
+2. `vibewatt harvest --file sessions.json` ingesting a saved listing (works today, implemented).
+3. A direct authenticated endpoint — **not yet discovered**. `/api/oauth/usage` is the account-level one and is already used by `vibewatt/quota.py`; the per-session listing endpoint is undocumented. Phase 2 spikes this.
 
 ### 2.4 Retention
 
 Claude Code deletes transcripts older than `cleanupPeriodDays` (default **30**) at
 **every startup**. `0` disables transcript writing entirely — it is a trap, not a
-fix. Recommend 3650. `ccburn/history.py` and the SQLite store preserve rollups
+fix. Recommend 3650. `vibewatt/history.py` and the SQLite store preserve rollups
 from first run forward but cannot recover what was already deleted.
 
 **Corrected 2026-09-22 (audit):** since Claude Code 2.1.89 `cleanupPeriodDays: 0`
@@ -179,7 +179,7 @@ only source of headline numbers.
 ## 3. Target architecture
 
 ```
-ccburn/                     Python package
+vibewatt/                     Python package
   ingest/                   parsers: claude_code.py, cowork.py, cloud.py, (codex.py, gemini.py later)
   pricing.py                rates, the only place they live
   store.py                  SQLite schema + queries
@@ -209,15 +209,15 @@ docs/                       DATA-SOURCES.md, DESIGN.md
 | Tables | TanStack Table | Sorting, pagination, column visibility, without writing it. |
 | State | TanStack Query + URL search params | Filters belong in the URL so views are shareable and the back button works. |
 
-Packaging stays `pip install ccburn`. The built frontend ships inside the wheel as
-`ccburn/static`, so `ccburn serve` needs no Node at runtime.
+Packaging stays `pip install vibewatt`. The built frontend ships inside the wheel as
+`vibewatt/static`, so `vibewatt serve` needs no Node at runtime.
 
 ---
 
 ## 4. Data model
 
-Extends the existing `ccburn/store.py` schema. Migrations live in
-`ccburn/store.py` keyed on `meta.schema`; bump `SCHEMA_VERSION` and write a
+Extends the existing `vibewatt/store.py` schema. Migrations live in
+`vibewatt/store.py` keyed on `meta.schema`; bump `SCHEMA_VERSION` and write a
 forward migration. Never drop a user's table.
 
 ```sql
@@ -266,7 +266,7 @@ GET  /api/export?format=csv|json
 ```
 
 Filters are shared query params parsed by one dependency in
-`ccburn/api/dependencies.py`, so every endpoint filters identically.
+`vibewatt/api/dependencies.py`, so every endpoint filters identically.
 
 ---
 
@@ -367,11 +367,11 @@ Each names its data source and how to prove it works.
 **Verify:** with the network stubbed to fail, the dashboard still renders and the panel is absent.
 
 ### 7.13 Progress concierge / token saver
-**Scope:** generate a resume brief for a project — last session title, uncommitted changes, unfinished todos — as **text the user copies**. ccburn does not talk to a running Claude session.
+**Scope:** generate a resume brief for a project — last session title, uncommitted changes, unfinished todos — as **text the user copies**. vibewatt does not talk to a running Claude session.
 **Verify:** produces a brief for a fixture project; writes nothing outside its own data dir.
 
 ### 7.14 Other agent CLIs
-**Deferred by the user.** Design `ccburn/ingest/` so a new provider is one module exposing `discover()` and `parse()`. Do not implement Codex or Gemini now, but do not hard-code "claude" into the schema either — `turns.source` is already free text.
+**Deferred by the user.** Design `vibewatt/ingest/` so a new provider is one module exposing `discover()` and `parse()`. Do not implement Codex or Gemini now, but do not hard-code "claude" into the schema either — `turns.source` is already free text.
 
 ---
 
@@ -380,14 +380,14 @@ Each names its data source and how to prove it works.
 Each phase is one session, one PR, one Gate.
 
 ### Phase 1 — Store, ingest split, incremental sync
-**Do:** move parsing into `ccburn/ingest/{claude_code,cowork,cloud}.py` behind a common `discover()/parse()` interface. Add the `files` table and skip unchanged files. Add migrations keyed on `meta.schema`. Backfill `quota_samples` on every quota read.
+**Do:** move parsing into `vibewatt/ingest/{claude_code,cowork,cloud}.py` behind a common `discover()/parse()` interface. Add the `files` table and skip unchanged files. Add migrations keyed on `meta.schema`. Backfill `quota_samples` on every quota read.
 **Out of scope:** any UI change.
-**Gate:** `uv run pytest -q tests/test_ingest.py tests/test_store.py` passes, and `time ccburn sync` on an unchanged tree is under 1 second with `turn_count` unchanged.
+**Gate:** `uv run pytest -q tests/test_ingest.py tests/test_store.py` passes, and `time vibewatt sync` on an unchanged tree is under 1 second with `turn_count` unchanged.
 
 ### Phase 2 — FastAPI backend
 **Do:** implement every endpoint in section 5 with Pydantic models and the shared filter dependency. Keep the CLI working against the same functions. Spike the direct session endpoint; if not found in one session's effort, keep `--file` harvest and record the finding in `docs/DATA-SOURCES.md`.
 **Out of scope:** the frontend.
-**Gate:** `uv run pytest -q tests/test_api.py` passes; `curl localhost:8777/api/summary` returns totals equal to `ccburn json`'s totals for the same filters.
+**Gate:** `uv run pytest -q tests/test_api.py` passes; `curl localhost:8777/api/summary` returns totals equal to `vibewatt json`'s totals for the same filters.
 
 ### Phase 3 — Frontend shell
 **Do:** Vite + React + TS scaffold in `web/`. Header, nav, hero, sticky filter bar, footer, theme toggle, routing, API client generated from OpenAPI, TanStack Query, filters in URL params. Overview page only, wired to real data. Loading, empty and error states.
@@ -405,7 +405,7 @@ remaining correctness gaps. See `docs/PHASE-4.md` for validation and replacement
 tests. Independent review found no remaining correctness gaps.
 **Implementation notes:** see `docs/PHASE-5.md` for rule thresholds, metadata
 backfill and the approved local-context limitation.
-**Do:** `ccburn/analysis/` implementing 7.4, 7.6, 7.7, 7.9, 7.10, 7.11. Write to `findings`. Analysis page with accordions per kind, severity badges, dismiss.
+**Do:** `vibewatt/analysis/` implementing 7.4, 7.6, 7.7, 7.9, 7.10, 7.11. Write to `findings`. Analysis page with accordions per kind, severity badges, dismiss.
 **Out of scope:** the AI summary and service status.
 **Gate:** `uv run pytest -q tests/test_analysis.py` — every rule has a triggering and a non-triggering fixture.
 
@@ -444,6 +444,26 @@ as-is (they are data locations). The GitHub repo rename is done by the user.
 **Gate:** every existing gate passes under the new names. An existing
 `ccburn` store and `CCBURN_DATA_DIR` are picked up and migrated (test).
 `grep -ri ccburn` returns only the fallback, the migration and the changelog.
+**Status (2026-09-22): done** on `chore/phase-6-5a-rename-vibewatt`. Record:
+- Renamed: package `ccburn/` to `vibewatt/`, CLI and project name, web package
+  `vibewatt-web`, store file `ccburn.db` to `vibewatt.db`, env vars
+  `CCBURN_{DATA_DIR,CONFIG,COWORK_DIR}` to `VIBEWATT_*`, dev proxy env
+  `CCBURN_API` to `VIBEWATT_API`, theme key `ccburn-theme` to `vibewatt-theme`.
+- Fallbacks, removed in the release after the first `vibewatt` release:
+  `config.env()` reads `CCBURN_*` with a stderr deprecation note. `config.load()`
+  reads `ccburn/ccburn.json` and `./.ccburn/ccburn.json` when the new file is
+  absent. The web client reads the old theme key and `CCBURN_API`.
+- Migration: `config.data_dir()` copies the old default data dir once when the
+  new one does not exist, and copies `ccburn.db` through the SQLite backup API
+  (so WAL content is kept). `store.db_path()` does the same for a store in a
+  `CCBURN_DATA_DIR`. The old files are never moved or deleted, so a downgrade
+  still works. Tests: `tests/test_rename.py`.
+- Kept on purpose: `docs/AUDIT-2026-09-22.md`, `docs/PHASE-4.md` and
+  `docs/PHASE-5.md` are dated records; their `ccburn/...` paths are evidence of
+  the code as audited, so they were not rewritten. The probes were renamed so
+  they run.
+- PyPI: `vibewatt` was free on 2026-09-22 (PyPI 404, npm 404). A 0.0.1
+  placeholder is built; publishing needs the user's PyPI token.
 
 #### Phase 6.5b: Dedup rule and single source of truth *(decided)*
 **Do:**
@@ -644,7 +664,7 @@ Added 2026-09-22 *(decided unless noted)*:
   to 5.x for openapi-typescript and pin openapi-fetch 0.17.0 exactly. Then
   split chunks with Vite 8 `codeSplitting` and route-level `lazy`. `npm audit`
   must show no high/critical findings in runtime dependencies (A-118, A-127).
-- Remove `ccburn/ui.py` and the `html` command and record why: the React app
+- Remove `vibewatt/ui.py` and the `html` command and record why: the React app
   supersedes them and they carry XSS sinks (A-054, A-126).
 - `requires-python >=3.11` (3.10 reaches end of life on 2026-10-31).
   `fastapi>=0.141.1` (strict JSON content type, `app.frontend()`),
@@ -719,14 +739,14 @@ Append here rather than widening a phase.
 - Localization.
 - Stored `turns.cost` is computed at sync time. Incremental sync skips unchanged
   files, so a pricing-table or `pricing_overrides` change does not reprice old
-  rows. Needs a `ccburn sync --full` or a reprice pass keyed on the pricing version.
+  rows. Needs a `vibewatt sync --full` or a reprice pass keyed on the pricing version.
 - Resolved in Phase 5: `findings` (listed under "new in phase 1" in section 4)
   is created by the schema v4 migration. This replaces the earlier deferral
   because the analysis engine now persists findings.
 - Pre-existing lint debt outside the Phase 1 diff: 23 `ruff check` errors
   (cli.py, doctor.py, dashboard.py, quota.py, sources.py), and `store.py` was
   already unformatted before Phase 1.
-- Bug, predates Phase 1 (reproduced on 2ac5456): `ccburn sessions` with stdout
+- Bug, predates Phase 1 (reproduced on 2ac5456): `vibewatt sessions` with stdout
   redirected on Windows exits 1 with `UnicodeEncodeError: 'charmap' codec` when a
   prompt title has characters outside cp1252. Needs a failing test, then
   `sys.stdout.reconfigure(errors="replace")` or UTF-8 output in the CLI.
@@ -739,9 +759,9 @@ Append here rather than widening a phase.
   hitting several of these per filter change will trigger the account-wide
   quota fetch repeatedly. Worth splitting quota out of `build_report` or
   caching it once the frontend exists to actually feel this.
-- Phase 2 removed `ccburn/dashboard.py` (the stdlib `http.server` dashboard).
+- Phase 2 removed `vibewatt/dashboard.py` (the stdlib `http.server` dashboard).
   Reason: it duplicated the report pipeline FastAPI now serves under `/`,
-  `/api/dataset` and `/api/usage` from `ccburn/api/app.py`, and PLAN.md already
+  `/api/dataset` and `/api/usage` from `vibewatt/api/app.py`, and PLAN.md already
   marked it "to be replaced by FastAPI." Its `--refresh` live-reload script (a
   `setInterval` re-fetch-and-patch) was not ported — no equivalent exists on
   the FastAPI routes today. Phase 3's React app will need its own polling or
@@ -756,8 +776,8 @@ Append here rather than widening a phase.
   `aggregate.py:161,177`, `terminal.py:62`, `ui.py:77`, `doctor.py:45`. Report
   a failing test, then pass the report timezone's date. Ruff now reports 21
   pre-existing errors in total.
-- `ccburn serve` still serves the legacy HTML page at `/`. Serving the React
-  build from `ccburn/static` with an SPA fallback is Phase 7.
+- `vibewatt serve` still serves the legacy HTML page at `/`. Serving the React
+  build from `vibewatt/static` with an SPA fallback is Phase 7.
 - Filtered reports skip the history rollup (fixed in Phase 3, see
   `build_report`), so a filtered view cannot include days whose logs retention
   deleted. The UI says so. Storing history per source/project/model would lift
@@ -774,7 +794,7 @@ Append here rather than widening a phase.
 - Lint entry is stale. The real figures are 21 `ruff check` errors and 15
   unformatted files. `dashboard.py` no longer exists and 4 of the unformatted
   files were introduced in Phases 2-3. Cleared in Phase 7 (A-107).
-- The `ccburn sessions` cp1252 crash is wider than described: the default
+- The `vibewatt sessions` cp1252 crash is wider than described: the default
   report crashes on any redirected stdout (`terminal.py:68` prints a
   non-cp1252 glyph). Scheduled in 6.5c (A-057).
 - `date.today()` in `aggregate.py:161,177`, `ui.py:77` and `doctor.py:45` is
@@ -870,7 +890,7 @@ repro and suggested fix are in `docs/AUDIT-2026-09-22.md`.
 - A-028 [medium, 6.5e] Extreme valid dates overflow in store date boundaries: /api/sessions (from=0001-01-01 or to=9999-12-31) and /api/wrapped?year=1 return 500 east of UTC
 - A-029 [medium, 6.5e] Project filter cannot match names returned when project_aliases or mask_projects is set
 - A-030 [medium, 6.5e] mask_projects is ignored by /api/sessions, /api/session-facets and /api/sessions/{id}, so raw project names leak
-- A-031 [medium, 6.5e] POST /api/harvest and `ccburn harvest` crash or silently accept malformed input
+- A-031 [medium, 6.5e] POST /api/harvest and `vibewatt harvest` crash or silently accept malformed input
 - A-032 [medium, 6.5e] Harvest entries without an id are stored with a NULL key: re-harvest doubles them and /api/sessions returns 500
 - A-033 [medium, 6.5e] OpenAPI is incomplete: several responses untyped and the harvest request body undocumented
 - A-034 [medium, 6.5c] Report-timezone day/hour bucketing and date-range filters in the report pipeline are untested
@@ -896,7 +916,7 @@ repro and suggested fix are in `docs/AUDIT-2026-09-22.md`.
 - A-054 [medium, 7] Legacy dashboard served at / embeds data unescaped: </script> breakout and innerHTML sinks for project/model names
 - A-055 [medium, 6.5c] CLI heatmap anchors on system date.today() instead of the report timezone's today
 - A-056 [medium, 6.5e] GETs that persist findings (/api/findings, /api/alerts), dismiss and a second sync return 500 'database is locked' while a sync holds the write lock
-- A-057 [medium, 6.5c] Windows cp1252 stdout crash is broader than Deferred says: default `ccburn`/`ccburn report` fails on any data when stdout is redirected
+- A-057 [medium, 6.5c] Windows cp1252 stdout crash is broader than Deferred says: default `vibewatt`/`vibewatt report` fails on any data when stdout is redirected
 - A-058 [medium, 6.5c] IANA timezones such as the README's `Asia/Tokyo` fail on Windows because tzdata is not a dependency
 - A-059 [medium, 6.5c] Session titles ignore `summary` records, though PLAN 7.2 says to prefer them
 - A-060 [medium, 6.5c] PLAN 7.2 Verify has no suite test for the first-user-message fallback
@@ -915,7 +935,7 @@ repro and suggested fix are in `docs/AUDIT-2026-09-22.md`.
 - A-073 [low, 6.5e] Shared filter dependency applied inconsistently: from>to only rejected by findings, wrapped ignores from/to, source/metric/cursor unvalidated
 - A-074 [low, 6.5e] /api/blocks lists blocks oldest first with the active one last; spec says active first
 - A-075 [low, 6.5e] breakdown/surface is just an alias of breakdown/source
-- A-076 [low, 6.5e] test_api.py is too shallow and the gate test never runs `ccburn json`
+- A-076 [low, 6.5e] test_api.py is too shallow and the gate test never runs `vibewatt json`
 - A-077 [low, 6.5f] Derived KPI formulas untested: plan multiple, cache hit rate, block hour anchoring
 - A-078 [low, 6.5e] `--refresh` serve flag is dead but still documented
 - A-079 [low, 6.5g] Costs below $0.01 render as $0.00 in the hero, KPIs, sessions, blocks and Wrapped
@@ -955,7 +975,7 @@ repro and suggested fix are in `docs/AUDIT-2026-09-22.md`.
 - A-113 [info, 6.5c] sync_tz identity includes the current UTC offset, so every DST switch forces a full rebucket and re-parse
 - A-114 [info, 6.5b] files.turn_count stores pre-dedup assistant lines, not responses
 - A-115 [info, 6.5e] /api/hourly returns a 24-bucket hour-of-day vector, not a matrix (unverified spec reading)
-- A-116 [info, 6.5f] Session count semantics differ: ccburn counts only sessions with at least one kept, deduped, non-synthetic turn
+- A-116 [info, 6.5f] Session count semantics differ: vibewatt counts only sessions with at least one kept, deduped, non-synthetic turn
 - A-117 [info, 6.5g] FilterBar ignores a failed unfiltered-summary (options) query
 - A-118 [info, 7] npm audit severities not recorded in Deferred (1 critical, 1 high in dev deps)
 - A-119 [info, 6.5f] Cache saving also converts cache writes to reads (beyond the spec formula); spec fixture still matches
@@ -964,7 +984,7 @@ repro and suggested fix are in `docs/AUDIT-2026-09-22.md`.
 - A-122 [info, 6.5f] Peak-window finding says 'report timezone' without naming it
 - A-123 [info, 6.5f] Analysis severity and 'Show dismissed' controls live in component state, not the URL
 - A-124 [info, 6.5b] Wrapped headline (stored) differs from /api/summary for the same range once transcripts are pruned
-- A-125 [info, 6.5f] ccburn does not match the Claude desktop app's stats: desktop sums every JSONL line with no dedup and its snapshot ends 2026-09-15 19:13 JST
+- A-125 [info, 6.5f] vibewatt does not match the Claude desktop app's stats: desktop sums every JSONL line with no dedup and its snapshot ends 2026-09-15 19:13 JST
 - A-126 [info, 7] Legacy page 'Generated' timestamp is naive system-local time shown next to the report timezone
 - A-127 [info, 7] npm audit: react-router 6.30.6 has 2 moderate advisories (not reachable in this SPA)
 - A-128 [info, 7] PLAN 7.1 and 7.2 are not assigned to any phase

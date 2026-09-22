@@ -1,21 +1,26 @@
-# ccburn
+# vibewatt
 
 Token usage, cost and plan utilization for **Claude Code** and **Claude Cowork**, read
 from data already on your machine. No account setup, no API key, no telemetry.
 
 ```bash
-pip install ccburn        # or: pipx install ccburn / uv tool install ccburn
+pip install vibewatt        # or: pipx install vibewatt / uv tool install vibewatt
 
-ccburn                    # terminal report
-ccburn serve              # live dashboard in your browser
-ccburn html --out u.html  # standalone HTML report
-ccburn json | jq .        # machine readable
+vibewatt                    # terminal report
+vibewatt serve              # live dashboard in your browser
+vibewatt html --out u.html  # standalone HTML report
+vibewatt json | jq .        # machine readable
 ```
 
 Works on Windows, macOS, Linux and headless cloud boxes. Pure Python standard
 library, zero dependencies, no compiler and no native wheels.
 
 ---
+
+> **Renamed from ccburn.** The first run copies an existing ccburn data dir and
+> store to the vibewatt location and leaves the old one in place. `CCBURN_*`
+> variables and `ccburn.json` config files still work for one release, with a
+> deprecation note.
 
 ## Read this first: Claude Code is deleting your history
 
@@ -32,8 +37,8 @@ already gone, and no tool can recover it.
 transcripts are written at all rather than "keep forever"
 ([claude-code#23710](https://github.com/anthropics/claude-code/issues/23710)).
 
-`ccburn doctor` tells you what your current setting is and what it is costing you.
-ccburn's own stored history preserves days from its first run onward, but it
+`vibewatt doctor` tells you what your current setting is and what it is costing you.
+vibewatt's own stored history preserves days from its first run onward, but it
 cannot reach back before you installed it.
 
 ---
@@ -44,25 +49,25 @@ cannot reach back before you installed it.
 |---|---|---|
 | Claude Code (local) | yes, from `~/.claude/projects` | yes |
 | Cowork (local) | yes, from the desktop data dir | yes |
-| Claude Code on the web | **yes, via `ccburn harvest`** | yes |
-| Cowork remote sessions | **yes, via `ccburn harvest`** | yes |
+| Claude Code on the web | **yes, via `vibewatt harvest`** | yes |
+| Cowork remote sessions | **yes, via `vibewatt harvest`** | yes |
 | claude.ai chat | no | yes |
 
 Web and remote sessions run in throwaway cloud containers, so their *logs* never
 reach your disk. Their **usage totals** are a different matter: the Claude Code
 session API reports per-session tokens, cost, title, model and repository for every
-cloud session. `ccburn harvest` ingests that, which no other tool does.
+cloud session. `vibewatt harvest` ingests that, which no other tool does.
 
 On one real account, five cloud sessions carried **$120 of web usage that appears in
 no local log at all**.
 
 What *does* account for them is **plan utilization**: your 5-hour and 7-day allowance
-is charged account-wide, whichever surface spent it. ccburn reads that from the same
+is charged account-wide, whichever surface spent it. vibewatt reads that from the same
 endpoint Claude Code itself uses and shows it beside the local history. It is a
 percentage, not a token ledger, so the two views complement each other rather than
 one replacing the other.
 
-Anything ccburn cannot see, it says so rather than reporting zero.
+Anything vibewatt cannot see, it says so rather than reporting zero.
 
 ## Features
 
@@ -76,8 +81,8 @@ Anything ccburn cannot see, it says so rather than reporting zero.
 **Live**
 - Plan utilization meters (5-hour and 7-day) with reset countdowns
 - Current rate-limit window: spent so far, burn rate, projection to window close
-- `ccburn statusline` for Claude Code's statusLine hook, tmux or Starship
-- `ccburn serve` exposes `GET /api/usage` for any bar or widget
+- `vibewatt statusline` for Claude Code's statusLine hook, tmux or Starship
+- `vibewatt serve` exposes `GET /api/usage` for any bar or widget
 
 **Durability**
 - Stored rollups survive Claude Code's 30-day log pruning
@@ -97,7 +102,7 @@ These are the differences that move the number, all measured on real session dat
 **1. Content-block rows are collapsed.** Claude Code writes one JSONL line per content
 block of a response, and every one of those lines repeats the same whole-response
 `usage` object. Summing the lines multiplies your token count by however many blocks
-the response had. On a real session that was a **2.8x** inflation. ccburn keys each
+the response had. On a real session that was a **2.8x** inflation. vibewatt keys each
 response on `(message.id, requestId)` and counts it once.
 
 **2. Cache writes are split by TTL.** A 1-hour cache write costs 2x base input; a
@@ -106,7 +111,7 @@ Reading only the flat `cache_creation_input_tokens` total understated one real
 session's cache-write line by **38%**.
 
 **3. Current models are actually priced.** Rates are transcribed from Anthropic's
-published pricing page and live in `ccburn/pricing.py`. A community pricing table
+published pricing page and live in `vibewatt/pricing.py`. A community pricing table
 (LiteLLM) is fetched and cached, but only ever to *fill gaps* — it never overrides a
 verified rate. Community tables lag new releases, and a lagging table is worse than no
 table: it prices a current model at zero instead of admitting it does not know.
@@ -116,7 +121,7 @@ table: it prices a current model at zero instead of admitting it does not know.
 | Source | Path |
 |---|---|
 | Claude Code | `~/.claude/projects/**/*.jsonl` (override: `CLAUDE_CONFIG_DIR`) |
-| Cowork | `<desktop data dir>/{local-agent-mode-sessions,claude-code-sessions}/**/audit.jsonl` (override: `CCBURN_COWORK_DIR`) |
+| Cowork | `<desktop data dir>/{local-agent-mode-sessions,claude-code-sessions}/**/audit.jsonl` (override: `VIBEWATT_COWORK_DIR`) |
 
 Desktop data dir is `%APPDATA%\Claude` on Windows, `~/Library/Application Support/Claude`
 on macOS and `~/.config/Claude` on Linux.
@@ -128,22 +133,22 @@ envelope is enough to price both together.
 ## Commands
 
 ```
-ccburn report        terminal report (default)
-ccburn serve         live dashboard        --host --port --refresh --no-browser
-ccburn doctor        what ccburn can and cannot see, and why
-ccburn sync          parse local logs into the SQLite store
-ccburn harvest       ingest cloud session usage   --file sessions.json
-ccburn sessions      every session, local and cloud, with titles
-ccburn html          standalone interactive report  --out
-ccburn json          full data as JSON     --out
-ccburn csv           per day per model     --out
-ccburn blocks        recent rate-limit windows
-ccburn statusline    one compact line
+vibewatt report        terminal report (default)
+vibewatt serve         live dashboard        --host --port --refresh --no-browser
+vibewatt doctor        what vibewatt can and cannot see, and why
+vibewatt sync          parse local logs into the SQLite store
+vibewatt harvest       ingest cloud session usage   --file sessions.json
+vibewatt sessions      every session, local and cloud, with titles
+vibewatt html          standalone interactive report  --out
+vibewatt json          full data as JSON     --out
+vibewatt csv           per day per model     --out
+vibewatt blocks        recent rate-limit windows
+vibewatt statusline    one compact line
 ```
 
 ### Filters
 
-`ccburn html` and `ccburn serve` produce an interactive page. Everything derived
+`vibewatt html` and `vibewatt serve` produce an interactive page. Everything derived
 from local logs filters live in the browser, with no round trip:
 
 - date range: 7d / 30d / 90d / 1y / all
@@ -164,7 +169,7 @@ that cannot be sliced by project or source, and the panel says so on its face.
 | Cost looks enormous | It is the API-equivalent, not your bill. Pass `--plan 20` to see the multiple your subscription saves. |
 | Heatmap looks flat | Total tokens is dominated by cache reads. Switch the metric to cost or output. |
 
-Run `ccburn doctor` — it prints the last day found, today in your timezone, your
+Run `vibewatt doctor` — it prints the last day found, today in your timezone, your
 retention setting and per-source coverage, so the cause is visible rather than
 guessed at.
 
@@ -177,10 +182,10 @@ the four reference tools, including the 28 features that are not.
 
 ## Configuration
 
-Optional JSON, read from `%APPDATA%\ccburn\ccburn.json` on Windows,
-`~/Library/Application Support/ccburn/ccburn.json` on macOS,
-`${XDG_CONFIG_HOME:-~/.config}/ccburn/ccburn.json` on Linux, or `./.ccburn/ccburn.json`
-per project. Point `CCBURN_CONFIG` at a file to override.
+Optional JSON, read from `%APPDATA%\vibewatt\vibewatt.json` on Windows,
+`~/Library/Application Support/vibewatt/vibewatt.json` on macOS,
+`${XDG_CONFIG_HOME:-~/.config}/vibewatt/vibewatt.json` on Linux, or `./.vibewatt/vibewatt.json`
+per project. Point `VIBEWATT_CONFIG` at a file to override.
 
 ```json
 {
@@ -203,7 +208,7 @@ seconds-fresh while a session runs and costs no API call.
 ## Privacy
 
 Everything is computed locally. Prompt text is never read, stored or transmitted —
-ccburn only looks at the `usage` object and timestamps. The one network call is the
+vibewatt only looks at the `usage` object and timestamps. The one network call is the
 plan-utilization lookup, which sends your existing Claude Code OAuth token to
 Anthropic's own endpoint and nothing else. Disable it with `--no-quota`. The pricing
 refresh fetches a public JSON file and sends nothing. `--mask-projects` pseudonymises
@@ -213,13 +218,13 @@ project names for sharing a screenshot.
 
 - **Cost is an estimate at list API rates.** On a Pro or Max subscription this is what
   the same tokens *would* have cost pay-as-you-go, not what you were billed.
-- Claude Code prunes local logs after 30 days. ccburn's stored history covers days from
+- Claude Code prunes local logs after 30 days. vibewatt's stored history covers days from
   the first run onward; it cannot recover what was pruned before you installed it.
   Raise `cleanupPeriodDays` in your Claude Code settings too.
 - Heatmap intensity is total tokens, which cache reads dominate. The tables break the
   categories apart.
 - The plan-utilization endpoint is undocumented. It is the same one Claude Code calls,
-  but it can change without notice; ccburn degrades to local-only if it does.
+  but it can change without notice; vibewatt degrades to local-only if it does.
 
 ## License
 

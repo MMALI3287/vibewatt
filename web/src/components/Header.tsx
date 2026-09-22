@@ -21,7 +21,7 @@ export function Header() {
   return (
     <header className="header">
       <Link className="logo" to={{ pathname: "/", search }}>
-        ccburn
+        vibewatt
       </Link>
       <nav className="nav" aria-label="Primary">
         {NAV.map((n) => (

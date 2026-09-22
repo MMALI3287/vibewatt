@@ -1,7 +1,7 @@
 """Durable rollups that outlive log pruning.
 
 Claude Code deletes session logs after ``cleanupPeriodDays`` (30 by default),
-so a tool that only reads live logs quietly loses your older history. ccburn
+so a tool that only reads live logs quietly loses your older history. vibewatt
 writes a small per-day, per-model rollup to its own data directory and merges
 it back on every run.
 

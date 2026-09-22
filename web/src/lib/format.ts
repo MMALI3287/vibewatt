@@ -9,7 +9,7 @@ export const fmtPct = (v: number) => `${Math.round(v * 100)}%`;
 
 import type { Bucket } from "../api/client";
 
-// Mirrors Bucket.total_tokens in ccburn/aggregate.py; thinking is already inside output.
+// Mirrors Bucket.total_tokens in vibewatt/aggregate.py; thinking is already inside output.
 export function bucketTokens(b: Bucket): number {
   return b.input + b.cache_write_5m + b.cache_write_1h + b.cache_read + b.output;
 }
