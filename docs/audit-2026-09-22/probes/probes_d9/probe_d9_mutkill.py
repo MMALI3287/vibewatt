@@ -9,9 +9,9 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from ccburn import aggregate, config, pricing, sources, store
-from ccburn.aggregate import Report, cost_of
-from ccburn.sources import Turn
+from vibewatt import aggregate, config, pricing, sources, store
+from vibewatt.aggregate import Report, cost_of
+from vibewatt.sources import Turn
 
 UTC = timezone.utc
 JST = timezone(timedelta(hours=9))
@@ -104,7 +104,7 @@ def test_aggregate_buckets_in_report_timezone():
 
 
 def test_build_report_date_from_uses_report_timezone(logs):
-    from ccburn import cli
+    from vibewatt import cli
     cfg = {**config.DEFAULTS, "offline": True, "quota": False}
     report, *_ = cli.build_report(cfg, JST, date_from=date(2026, 9, 16))
     # claude-code turns at 20:00Z/21:00Z on 09-15 are 09-16 in JST.
@@ -192,7 +192,7 @@ def test_cloud_session_without_usage_is_skipped(tmp_path):
 # --- analysis (M13, M34) ------------------------------------------------------------
 
 def test_anomaly_uses_median_mad_not_mean_stdev():
-    from ccburn.analysis.anomaly import detect
+    from vibewatt.analysis.anomaly import detect
     target = date(2026, 9, 20)
     rows = [{"day": (target - timedelta(days=i)).isoformat(), "cost": 10.0 if i == 3 else 1.0}
             for i in range(1, 29)]
@@ -203,7 +203,7 @@ def test_anomaly_uses_median_mad_not_mean_stdev():
 
 
 def test_burn_alert_needs_projection_over_100(tmp_path):
-    from ccburn.analysis.alerts import evaluate
+    from vibewatt.analysis.alerts import evaluate
     now = datetime(2026, 9, 21, 2, tzinfo=UTC)
     reset = (now + timedelta(hours=3)).isoformat()
     with store.connect(tmp_path / "a.db") as conn:
@@ -216,7 +216,7 @@ def test_burn_alert_needs_projection_over_100(tmp_path):
 # --- wrapped (M22, M22b, M38) --------------------------------------------------------
 
 def test_wrapped_days_and_hours_in_report_timezone(logs):
-    from ccburn.analysis.wrapped import build
+    from vibewatt.analysis.wrapped import build
     cfg = {**config.DEFAULTS, "offline": True, "quota": False}
     with store.connect() as conn:
         store.sync_files(conn, [("claude-code", logs["claude-code"]), ("cowork", logs["cowork"])],
@@ -228,7 +228,7 @@ def test_wrapped_days_and_hours_in_report_timezone(logs):
 
 
 def test_wrapped_ignores_cloud_twin_of_unsynced_local_session(logs):
-    from ccburn.analysis.wrapped import build
+    from vibewatt.analysis.wrapped import build
     cfg = {**config.DEFAULTS, "offline": True, "quota": False}
     with store.connect() as conn:
         store.upsert_cloud_sessions(conn, [{"id": "s1", "created_at": "2026-09-16T00:00:00Z",
@@ -242,7 +242,7 @@ def test_wrapped_ignores_cloud_twin_of_unsynced_local_session(logs):
 def test_model_filter_applies_to_summary_sessions_wrapped(tmp_path):
     from fastapi.testclient import TestClient
 
-    from ccburn.api import create_app
+    from vibewatt.api import create_app
     f = tmp_path / "claude" / "projects" / "demo" / "mixed.jsonl"
     f.parent.mkdir(parents=True)
     f.write_text("\n".join([

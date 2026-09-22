@@ -9,10 +9,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from d1util import projects_root, rec, write_jsonl  # noqa: E402
 
-from ccburn import ingest, pricing  # noqa: E402
-from ccburn.aggregate import cost_of  # noqa: E402
-from ccburn.pricing import BUILTIN, Rate, normalize, rate_for  # noqa: E402
-from ccburn.sources import load  # noqa: E402
+from vibewatt import ingest, pricing  # noqa: E402
+from vibewatt.aggregate import cost_of  # noqa: E402
+from vibewatt.pricing import BUILTIN, Rate, normalize, rate_for  # noqa: E402
+from vibewatt.sources import load  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

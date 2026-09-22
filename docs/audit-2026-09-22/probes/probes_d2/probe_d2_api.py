@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from ccburn import cli as climod
-from ccburn import config as configmod
-from ccburn import quota as quotamod
-from ccburn.api import create_app
+from vibewatt import cli as climod
+from vibewatt import config as configmod
+from vibewatt import quota as quotamod
+from vibewatt.api import create_app
 
 JST = timezone(timedelta(hours=9))
 

@@ -9,8 +9,8 @@ import sys
 
 from fastapi.testclient import TestClient
 
-from ccburn import config as configmod
-from ccburn.api import create_app
+from vibewatt import config as configmod
+from vibewatt.api import create_app
 
 from test_d2_api import tree  # noqa: F401  (fixture)
 
@@ -19,15 +19,15 @@ def _env(tmp_path):
     env = {k: v for k, v in os.environ.items() if k not in ("PYTHONUTF8", "PYTHONIOENCODING")}
     env.update({
         "CLAUDE_CONFIG_DIR": str(tmp_path / "claude"), "APPDATA": str(tmp_path / "appdata"),
-        "XDG_CONFIG_HOME": str(tmp_path / "appdata"), "CCBURN_DATA_DIR": str(tmp_path / "data"),
+        "XDG_CONFIG_HOME": str(tmp_path / "appdata"), "VIBEWATT_DATA_DIR": str(tmp_path / "data"),
         "HOME": str(tmp_path / "home"), "USERPROFILE": str(tmp_path / "home"),
     })
-    env.pop("CCBURN_COWORK_DIR", None)
+    env.pop("VIBEWATT_COWORK_DIR", None)
     return env
 
 
 def _run(tmp_path, *args, env=None):
-    return subprocess.run([sys.executable, "-m", "ccburn.cli", *args],
+    return subprocess.run([sys.executable, "-m", "vibewatt.cli", *args],
                           capture_output=True, env=env or _env(tmp_path), cwd=tmp_path, timeout=120)
 
 

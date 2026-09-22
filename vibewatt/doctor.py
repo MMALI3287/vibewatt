@@ -1,4 +1,4 @@
-"""Diagnostics: show exactly what ccburn can and cannot see.
+"""Diagnostics: show exactly what vibewatt can and cannot see.
 
 Every number in a usage report is only as good as the files behind it. When a
 figure looks wrong the useful question is not "is the maths right" but "which
@@ -38,7 +38,7 @@ def run(cfg: dict, tz) -> int:
     say = lambda s="": print(s, file=out)
 
     say()
-    say("  ccburn doctor")
+    say("  vibewatt doctor")
     say()
     say(f"  platform        {platform.system()} {platform.release()}  python {platform.python_version()}")
     say(f"  timezone        {cfg.get('timezone')}  ->  today is {today}")
@@ -76,7 +76,7 @@ def run(cfg: dict, tz) -> int:
         by_source[source].append(fp)
     for label, roots in (("claude-code", claude_code.roots()),):
         say(f"    {label:<12} looked in: {', '.join(str(r) for r in roots)}")
-    say(f"    {'cowork':<12} looked in: desktop data dir (override CCBURN_COWORK_DIR)")
+    say(f"    {'cowork':<12} looked in: desktop data dir (override VIBEWATT_COWORK_DIR)")
     for source in (CLAUDE_CODE, COWORK):
         found = by_source.get(source, [])
         say(f"    {source:<12} {len(found)} file(s)")

@@ -19,14 +19,14 @@ export function Wrapped() {
     <p>{query.error.message}</p><button onClick={() => query.refetch()}>Retry Wrapped</button></section>;
   const data = query.data;
   function download() {
-    const lines = [`ccburn · ${data.year}`, `${fmtCompact(data.stored_tokens)} tokens`,
+    const lines = [`vibewatt · ${data.year}`, `${fmtCompact(data.stored_tokens)} tokens`,
       `${fmtUsd(data.stored_cost_usd)} API-equivalent cost`, `${data.stored_sessions} stored sessions`,
       `${data.longest_streak} day longest streak`, "Retained local + harvested usage. Not account-wide.",
       data.unpriced_turns ? `${data.unpriced_turns} unpriced responses excluded from cost.` : "Cost is not a subscription bill."];
     const escape = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c]!);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="440" viewBox="0 0 900 440"><rect width="900" height="440" fill="#fcfcfb"/>${lines.map((line, index) => `<text x="40" y="${65 + index * 50}" fill="#0b0b0b" font-family="sans-serif" font-size="${index ? 22 : 32}">${escape(line)}</text>`).join("")}</svg>`;
     const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
-    const link = document.createElement("a"); link.href = url; link.download = `ccburn-wrapped-${data.year}.svg`; link.click();
+    const link = document.createElement("a"); link.href = url; link.download = `vibewatt-wrapped-${data.year}.svg`; link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   return <section className="wrapped-page">

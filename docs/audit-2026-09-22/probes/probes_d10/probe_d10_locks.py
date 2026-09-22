@@ -10,8 +10,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from ccburn import store
-from ccburn.api import create_app
+from vibewatt import store
+from vibewatt.api import create_app
 
 
 def test_gets_while_writer_holds_lock(tmp_path):

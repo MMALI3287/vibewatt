@@ -7,7 +7,7 @@ import time
 
 from fastapi.testclient import TestClient
 
-from ccburn.api import create_app
+from vibewatt.api import create_app
 
 
 def test_overview_reparse_cost(tmp_path, capsys):

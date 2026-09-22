@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from ccburn import config, store
-import ccburn.analysis.wrapped as wrapped
+from vibewatt import config, store
+import vibewatt.analysis.wrapped as wrapped
 import tests.test_wrapped as orig
 
 JST = timezone(timedelta(hours=9))
@@ -25,9 +25,9 @@ def load_mutant(name):
     code = SRC.replace(old, new).replace(
         "from datetime import date, timedelta, tzinfo",
         "from datetime import date, timedelta, tzinfo, timezone")
-    spec = importlib.util.spec_from_loader("ccburn.analysis._mut", loader=None)
+    spec = importlib.util.spec_from_loader("vibewatt.analysis._mut", loader=None)
     mod = importlib.util.module_from_spec(spec)
-    mod.__package__ = "ccburn.analysis"
+    mod.__package__ = "vibewatt.analysis"
     exec(compile(code, "mut", "exec"), mod.__dict__)
     return mod
 
@@ -67,7 +67,7 @@ def test_mutant_killed_by_jst_probe(name):
 def test_mutant_survives_existing_suite(name, logs, monkeypatch):
     mod = load_mutant(name)
     monkeypatch.setattr(wrapped, "build", mod.build)
-    import ccburn.api.app as app_mod
+    import vibewatt.api.app as app_mod
     for attr in dir(app_mod):
         if getattr(app_mod, attr) is wrapped.build:
             monkeypatch.setattr(app_mod, attr, mod.build)

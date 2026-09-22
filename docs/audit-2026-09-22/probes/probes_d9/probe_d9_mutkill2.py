@@ -6,9 +6,9 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from ccburn import aggregate, config, history, sources
-from ccburn.aggregate import Bucket, Report
-from ccburn.sources import Turn
+from vibewatt import aggregate, config, history, sources
+from vibewatt.aggregate import Bucket, Report
+from vibewatt.sources import Turn
 
 UTC = timezone.utc
 JST = timezone(timedelta(hours=9))
@@ -21,7 +21,7 @@ def turn(ts, key):
 
 
 def test_build_report_date_to_is_inclusive(logs):
-    from ccburn import cli
+    from vibewatt import cli
     cfg = {**config.DEFAULTS, "offline": True, "quota": False}
     report, *_ = cli.build_report(cfg, JST, date_to=date(2026, 9, 16))
     assert report.total.turns == 3
@@ -59,7 +59,7 @@ def test_plan_multiple_is_api_over_plan():
 
 
 def test_cache_to_output_needs_200k():
-    from ccburn.analysis import waste
+    from vibewatt.analysis import waste
     row = {"day": "2026-09-10", "ts": "2026-09-10T03:00:00+00:00", "input": 0, "cache_5m": 0,
            "cache_1h": 0, "cache_read": 150_000, "output": 1, "sidechain": 0}
     assert [f for f in waste.detect("s", [row], []) if f.rule == "cache_to_output"] == []

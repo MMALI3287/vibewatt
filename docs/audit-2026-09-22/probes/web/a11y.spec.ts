@@ -15,7 +15,7 @@ async function settle(page: Page) {
 const bodyBg = (page: Page) => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 const state = (page: Page) => page.evaluate(() => ({
   dataTheme: document.documentElement.dataset.theme ?? null,
-  stored: (() => { try { return localStorage.getItem("ccburn-theme"); } catch { return "ERR"; } })(),
+  stored: (() => { try { return localStorage.getItem("vibewatt-theme"); } catch { return "ERR"; } })(),
   scheme: getComputedStyle(document.documentElement).colorScheme,
   bg: getComputedStyle(document.body).backgroundColor,
   button: Array.from(document.querySelectorAll("button")).find(b => b.textContent?.startsWith("Theme"))?.textContent ?? null,

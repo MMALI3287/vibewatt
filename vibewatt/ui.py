@@ -2,7 +2,7 @@
 
 One page, driven by an embedded dataset rather than server-rendered HTML, so the
 same file works three ways: opened from disk with no server, served live by
-``ccburn serve``, and filtered entirely in the browser with no round trip.
+``vibewatt serve``, and filtered entirely in the browser with no round trip.
 
 Filters apply to everything derived from local logs. They deliberately do NOT
 apply to plan utilization, which is an account-wide figure that cannot be sliced

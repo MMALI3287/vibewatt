@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from ccburn import config as configmod
-from ccburn.api import create_app
+from vibewatt import config as configmod
+from vibewatt.api import create_app
 
 
 def test_session_total_equals_sum_of_turns(logs):

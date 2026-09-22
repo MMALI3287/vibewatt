@@ -5,8 +5,8 @@ from __future__ import annotations
 import random
 from datetime import datetime, timedelta, timezone
 
-from ccburn import store
-from ccburn.analysis.alerts import evaluate
+from vibewatt import store
+from vibewatt.analysis.alerts import evaluate
 
 UTC = timezone.utc
 JST = timezone(timedelta(hours=9))
@@ -141,8 +141,8 @@ def test_alert_day_uses_report_tz(tmp_path):
 def test_one_overview_load_writes_several_samples(monkeypatch):
     from fastapi.testclient import TestClient
 
-    from ccburn import config, quota
-    from ccburn.api import create_app
+    from vibewatt import config, quota
+    from vibewatt.api import create_app
 
     calls = []
 

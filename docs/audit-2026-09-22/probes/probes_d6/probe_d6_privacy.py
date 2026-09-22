@@ -6,9 +6,9 @@ import json
 
 from fastapi.testclient import TestClient
 
-from ccburn import config as configmod
-from ccburn import store
-from ccburn.api import create_app
+from vibewatt import config as configmod
+from vibewatt import store
+from vibewatt.api import create_app
 
 
 def _jsonl(tmp_path, recs):
@@ -50,7 +50,7 @@ def test_every_distinct_last_prompt_is_retained(tmp_path):
 
 
 def test_weekly_payload_has_aggregates_only(tmp_path, monkeypatch):
-    from ccburn import weekly
+    from vibewatt import weekly
 
     _jsonl(tmp_path, [_turn("2026-09-20T01:00:00Z", "a"),
                       {"type": "last-prompt", "sessionId": "s1", "timestamp": "2026-09-20T02:00:00Z",

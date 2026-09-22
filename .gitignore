@@ -4,7 +4,7 @@ dist/
 build/
 *.egg-info/
 node_modules/
-ccburn/static/
+vibewatt/static/
 web/openapi.json
 web/test-results/
 web/playwright-report/

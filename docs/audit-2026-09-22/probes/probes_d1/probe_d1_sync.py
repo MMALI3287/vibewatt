@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from d1util import JST, projects_root, rec, write_jsonl  # noqa: E402
 
-from ccburn import ingest, store  # noqa: E402
+from vibewatt import ingest, store  # noqa: E402
 
 
 def _cost(_t):

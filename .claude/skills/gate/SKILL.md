@@ -13,8 +13,8 @@ cd web && npm run build && npm run test && cd ..
 
 Then confirm the invariants that regress most often:
 
-- `ccburn sync` twice in a row leaves the store totals unchanged (idempotent).
-- `ccburn doctor` reports coverage without raising.
+- `vibewatt sync` twice in a row leaves the store totals unchanged (idempotent).
+- `vibewatt doctor` reports coverage without raising.
 - The dashboard has zero horizontal overflow at 1440, 1024, 768 and 390px.
 - A filtered URL reloads into the same view.
 

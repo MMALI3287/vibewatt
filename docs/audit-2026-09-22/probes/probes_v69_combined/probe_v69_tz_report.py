@@ -4,9 +4,9 @@ from datetime import date, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
-from ccburn import cli as climod
-from ccburn import config as configmod
-from ccburn.api import create_app
+from vibewatt import cli as climod
+from vibewatt import config as configmod
+from vibewatt.api import create_app
 
 JST = timezone(timedelta(hours=9))
 

@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 
-from ccburn import store
-from ccburn.aggregate import cost_of
-from ccburn.analysis import analyze, anomaly, cache_scan, context, peaks, tips, waste
-from ccburn.ingest.tool_reads import read_tools
+from vibewatt import store
+from vibewatt.aggregate import cost_of
+from vibewatt.analysis import analyze, anomaly, cache_scan, context, peaks, tips, waste
+from vibewatt.ingest.tool_reads import read_tools
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CASES = json.loads((FIXTURES / "analysis_cases.json").read_text())

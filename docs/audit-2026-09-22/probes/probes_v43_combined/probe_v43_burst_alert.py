@@ -12,8 +12,8 @@ UTC = timezone.utc
 def _run(monkeypatch, order):
     from fastapi.testclient import TestClient
 
-    from ccburn import config, quota, store
-    from ccburn.api import create_app
+    from vibewatt import config, quota, store
+    from vibewatt.api import create_app
 
     now = datetime.now(UTC)
     reset = now + timedelta(hours=4, minutes=30)

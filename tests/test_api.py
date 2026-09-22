@@ -4,10 +4,10 @@ from datetime import timedelta, timezone
 
 from fastapi.testclient import TestClient
 
-from ccburn import cli as climod
-from ccburn import config as configmod
-from ccburn import store
-from ccburn.api import create_app
+from vibewatt import cli as climod
+from vibewatt import config as configmod
+from vibewatt import store
+from vibewatt.api import create_app
 
 
 def _app():

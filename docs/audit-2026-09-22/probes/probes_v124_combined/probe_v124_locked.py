@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from ccburn import store
-from ccburn.aggregate import cost_of
-from ccburn.ingest import discover
+from vibewatt import store
+from vibewatt.aggregate import cost_of
+from vibewatt.ingest import discover
 
 
 def line(i, sess="s1", mid=None, rid=None, usage=None, ts="2026-09-15T20:00:00Z", **extra):

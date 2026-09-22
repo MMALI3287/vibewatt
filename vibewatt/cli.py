@@ -183,7 +183,7 @@ def harvest(args, cfg, tz) -> int:
 
     if not args.file:
         print(
-            "ccburn harvest --file sessions.json\n\n"
+            "vibewatt harvest --file sessions.json\n\n"
             "Cloud sessions (Claude Code on the web, Cowork remote) write no local\n"
             "logs, but the session API reports their usage. To produce the file, ask\n"
             "any Claude session:\n\n"
@@ -239,7 +239,7 @@ def sessions_report(args, cfg, tz) -> int:
         rows = store.sessions(conn, limit=40)
 
     if not rows:
-        print("  no sessions yet - run 'ccburn sync' and 'ccburn harvest' first")
+        print("  no sessions yet - run 'vibewatt sync' and 'vibewatt harvest' first")
         return 1
     print(f"\n  {'when':<11} {'surface':<12} {'what you worked on':<58} "
           f"{'tokens':>9} {'cost':>9}")
@@ -254,7 +254,7 @@ def sessions_report(args, cfg, tz) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="ccburn",
+        prog="vibewatt",
         description="Token usage, cost and plan utilization for Claude Code and Cowork.",
     )
     p.add_argument("command", nargs="?", default="report",
@@ -320,7 +320,7 @@ def main(argv: list[str] | None = None) -> int:
         app = create_app(cfg)
         shown = args.host if args.host != "0.0.0.0" else "127.0.0.1"
         url = f"http://{shown}:{args.port}/"
-        print(f"  ccburn dashboard on {url}")
+        print(f"  vibewatt dashboard on {url}")
         print(f"  JSON at {url}api/usage")
         if args.host == "0.0.0.0":
             print("  bound to all interfaces - anyone who can reach this port sees your usage")
@@ -382,7 +382,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "html":
         from .ui import build_dataset, write
 
-        target = args.out or "ccburn-report.html"
+        target = args.out or "vibewatt-report.html"
         write(build_dataset(report, cfg, quota=q, duplicates=duplicates), target)
         print(f"wrote {target}")
         return 0
@@ -408,7 +408,7 @@ def main(argv: list[str] | None = None) -> int:
     if not files and not report.by_day:
         hints = {
             CLAUDE_CODE: "  Claude Code: ~/.claude/projects (override with CLAUDE_CONFIG_DIR)",
-            COWORK: "  Cowork:      the Claude desktop data dir (override with CCBURN_COWORK_DIR)",
+            COWORK: "  Cowork:      the Claude desktop data dir (override with VIBEWATT_COWORK_DIR)",
         }
         wanted = [args.source] if args.source != "all" else list(hints)
         label = "Cowork" if args.source == COWORK else (

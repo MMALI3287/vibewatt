@@ -7,7 +7,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from ccburn.analysis import anomaly
+from vibewatt.analysis import anomaly
 
 START = date(2026, 6, 1)  # Monday
 

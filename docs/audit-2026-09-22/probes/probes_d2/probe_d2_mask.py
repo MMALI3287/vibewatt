@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from test_d2_api import JST, tree  # noqa: F401
 
-from ccburn.api import create_app
+from vibewatt.api import create_app
 
 
 def test_mask_projects_everywhere(tree, capsys):  # noqa: F811

@@ -5,8 +5,8 @@ import json
 
 from fastapi.testclient import TestClient
 
-from ccburn import config as configmod
-from ccburn.api import create_app
+from vibewatt import config as configmod
+from vibewatt.api import create_app
 
 
 def _write(tmp_path, cwd, model):

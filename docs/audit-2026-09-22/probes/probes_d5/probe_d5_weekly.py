@@ -10,8 +10,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from ccburn import config, weekly
-from ccburn.api import create_app
+from vibewatt import config, weekly
+from vibewatt.api import create_app
 
 UTC = timezone.utc
 

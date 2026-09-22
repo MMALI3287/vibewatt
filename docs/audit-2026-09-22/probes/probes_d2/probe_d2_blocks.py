@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
-from ccburn.api import create_app
+from vibewatt.api import create_app
 
 
 def _line(rid, ts, mid, inp=100, out=10):

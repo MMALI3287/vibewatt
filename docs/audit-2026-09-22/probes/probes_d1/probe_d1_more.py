@@ -14,8 +14,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from d1util import JST, projects_root, rec, write_jsonl  # noqa: E402
 
-from ccburn import ingest, quota, store  # noqa: E402
-from ccburn.sources import load  # noqa: E402
+from vibewatt import ingest, quota, store  # noqa: E402
+from vibewatt.sources import load  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -86,11 +86,11 @@ def test_missing_msg_id_with_request_id_across_runs(tmp_path):
 # --- migrations built with the real older code -------------------------------
 
 def _old_store(tmp_path, commit):
-    src = subprocess.run(["git", "show", f"{commit}:ccburn/store.py"], cwd=REPO,
+    src = subprocess.run(["git", "show", f"{commit}:vibewatt/store.py"], cwd=REPO,
                          capture_output=True, text=True, check=True).stdout
     path = tmp_path / f"old_store_{commit}.py"
     path.write_text(src, encoding="utf-8")
-    spec = importlib.util.spec_from_file_location(f"ccburn._old_store_{commit}", path)
+    spec = importlib.util.spec_from_file_location(f"vibewatt._old_store_{commit}", path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)
@@ -216,7 +216,7 @@ def test_quota_endpoint_path_samples_with_http_mocked(tmp_path, monkeypatch):
 def test_history_prune_with_session_spanning_midnight(tmp_path):
     import os
 
-    from ccburn.cli import build_report
+    from vibewatt.cli import build_report
 
     root = projects_root(tmp_path)
     # s2 worked on Aug 1 (JST) only; s1 crossed midnight Aug 1 -> Aug 2, so its file is newer.
@@ -240,8 +240,8 @@ def test_history_prune_with_session_spanning_midnight(tmp_path):
 def test_history_restore_turns_unpriced_into_zero_cost(tmp_path):
     import os
 
-    from ccburn import pricing
-    from ccburn.cli import build_report, serialize
+    from vibewatt import pricing
+    from vibewatt.cli import build_report, serialize
 
     pricing._remote = None
     root = projects_root(tmp_path)

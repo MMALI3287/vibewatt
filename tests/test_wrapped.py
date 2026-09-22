@@ -6,8 +6,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from ccburn import config, store
-from ccburn.api import create_app
+from vibewatt import config, store
+from vibewatt.api import create_app
 
 
 def client():
@@ -76,7 +76,7 @@ def test_wrapped_empty_invalid_and_filters(logs):
 def test_wrapped_cloud_overlap_and_timezone(logs):
     from datetime import timedelta
 
-    from ccburn.analysis.wrapped import build
+    from vibewatt.analysis.wrapped import build
 
     api = client()
     api.post("/api/sync")
@@ -107,7 +107,7 @@ def test_wrapped_cloud_overlap_and_timezone(logs):
 
 
 def test_phase6_routes_do_not_require_network(monkeypatch):
-    from ccburn import service_status
+    from vibewatt import service_status
 
     def forbidden():
         raise AssertionError("offline status must not fetch")
@@ -133,7 +133,7 @@ def test_wrapped_unknown_cost_is_explicit(logs):
 
 
 def test_wrapped_cache_savings_use_model_speed_geo(logs):
-    from ccburn.pricing import MILLION, rate_for
+    from vibewatt.pricing import MILLION, rate_for
 
     api = client()
     api.post("/api/sync")

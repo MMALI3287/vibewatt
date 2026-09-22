@@ -7,8 +7,8 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from ccburn import concierge, service_status, store, weekly
-from ccburn.aggregate import Bucket, Report
+from vibewatt import concierge, service_status, store, weekly
+from vibewatt.aggregate import Bucket, Report
 
 
 def test_disabled_summary_does_no_work(monkeypatch):

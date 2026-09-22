@@ -7,10 +7,10 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-import ccburn.cli as climod
-from ccburn import quota
-from ccburn.api import create_app
-from ccburn.config import load as load_config
+import vibewatt.cli as climod
+from vibewatt import quota
+from vibewatt.api import create_app
+from vibewatt.config import load as load_config
 
 GEN = Path(__file__).resolve().parents[3] / "d10" / "gen_scale.py"
 

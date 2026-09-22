@@ -4,8 +4,8 @@ from tests.probes_d1.d1util import JST, projects_root, rec, write_jsonl
 
 
 def test_restored_day_keeps_unpriced(tmp_path):
-    from ccburn import pricing
-    from ccburn.cli import build_report
+    from vibewatt import pricing
+    from vibewatt.cli import build_report
     pricing._remote = None
     root = projects_root(tmp_path)
     f = write_jsonl(root / "p" / "a.jsonl", [

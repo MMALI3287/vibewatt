@@ -1,6 +1,6 @@
 # Feature matrix
 
-Every feature I found across the four reference tools, and whether ccburn actually
+Every feature I found across the four reference tools, and whether vibewatt actually
 has it. Legend:
 
 - **done** — implemented and exercised by a test or a real run
@@ -15,7 +15,7 @@ Sources: [ccusage](https://github.com/ccusage/ccusage) (MIT),
 
 ## Data sources
 
-| Feature | From | ccburn | Note |
+| Feature | From | vibewatt | Note |
 |---|---|---|---|
 | Claude Code local logs | all four | **done** | `~/.claude/projects/**/*.jsonl` |
 | `CLAUDE_CONFIG_DIR`, multi-path | ccusage | **done** | splits on `os.pathsep` |
@@ -25,15 +25,15 @@ Sources: [ccusage](https://github.com/ccusage/ccusage) (MIT),
 | macOS Keychain token lookup | widget | **partial** | coded, untested (no macOS here) |
 | Codex / Gemini / 15 other CLIs | ccusage, usage | **no** | out of scope; this is Claude-only |
 | Cursor `state.vscdb` | aitrack | **no** | |
-| **Claude Code web per-session usage** | none | **done** | `ccburn harvest` — via the session API, not the container |
+| **Claude Code web per-session usage** | none | **done** | `vibewatt harvest` — via the session API, not the container |
 | **Cowork remote per-session usage** | none | **partial** | same path; tag filter needs an OAuth caller |
 | Session titles ("what you worked on") | usage | **done** | from `last-prompt` records, no API call |
-| SQLite store | none | **done** | `ccburn sync`, idempotent upserts |
-| Session-grouped report | ccusage | **done** | `ccburn sessions`, local + cloud merged |
+| SQLite store | none | **done** | `vibewatt sync`, idempotent upserts |
+| Session-grouped report | ccusage | **done** | `vibewatt sessions`, local + cloud merged |
 
 ## Accuracy
 
-| Feature | From | ccburn | Note |
+| Feature | From | vibewatt | Note |
 |---|---|---|---|
 | Deduplicate repeated rows | ccusage | **done** | keyed on `(message.id, requestId)`; 2.8x inflation avoided |
 | Cache write priced per TTL (5m vs 1h) | none | **done** | others use one flat multiplier; 38% error |
@@ -50,7 +50,7 @@ Sources: [ccusage](https://github.com/ccusage/ccusage) (MIT),
 
 ## Reports
 
-| Feature | From | ccburn | Note |
+| Feature | From | vibewatt | Note |
 |---|---|---|---|
 | Daily rollup | all four | **done** | |
 | Per-model breakdown | all four | **done** | |
@@ -65,24 +65,24 @@ Sources: [ccusage](https://github.com/ccusage/ccusage) (MIT),
 | Month-to-date spend | widget | **done** | |
 | Plan vs API-equivalent savings | usage, widget | **done** | `--plan 20` shows the multiple |
 | Weekly / monthly report commands | ccusage | **no** | filter by range instead |
-| Session-grouped report | ccusage | **done** | `ccburn sessions` |
+| Session-grouped report | ccusage | **done** | `vibewatt sessions` |
 | "What you worked on" titles | usage | **done** | `last-prompt` records carry it |
 | Wrapped / Year in Review | usage | **no** | |
 
 ## Output and integration
 
-| Feature | From | ccburn | Note |
+| Feature | From | vibewatt | Note |
 |---|---|---|---|
 | Terminal tables + colour | ccusage, usage | **done** | |
 | Standalone HTML report | usage, claude-activity | **done** | offline, data embedded |
-| Live local dashboard | claude-activity | **done** | `ccburn serve` |
+| Live local dashboard | claude-activity | **done** | `vibewatt serve` |
 | JSON output | all four | **done** | |
 | CSV export | usage, widget | **done** | |
 | Localhost JSON API | widget | **done** | `/api/usage`, `/api/dataset` |
-| Statusline output | ccusage, usage, widget | **done** | `ccburn statusline` |
+| Statusline output | ccusage, usage, widget | **done** | `vibewatt statusline` |
 | Project-name masking | usage | **done** | `--mask-projects` |
 | Config file | ccusage, widget | **done** | platform-correct locations |
-| Diagnostics command | none | **done** | `ccburn doctor` |
+| Diagnostics command | none | **done** | `vibewatt doctor` |
 | PNG export | usage, widget | **no** | screenshot the page |
 | Compact table mode | ccusage | **partial** | responsive, no `--compact` flag |
 | Webhooks (Slack/Discord) | widget | **no** | |
@@ -90,7 +90,7 @@ Sources: [ccusage](https://github.com/ccusage/ccusage) (MIT),
 
 ## Live / desktop surface
 
-| Feature | From | ccburn | Note |
+| Feature | From | vibewatt | Note |
 |---|---|---|---|
 | Auto-refresh | widget, usage | **partial** | dashboard rebuilds per request; no push |
 | Menu bar / tray / OSD overlay | usage, widget | **no** | deliberate: no headless or cloud story |
@@ -104,7 +104,7 @@ Sources: [ccusage](https://github.com/ccusage/ccusage) (MIT),
 
 ## Analysis
 
-| Feature | From | ccburn | Note |
+| Feature | From | vibewatt | Note |
 |---|---|---|---|
 | Durable history surviving pruning | claude-activity | **done** | |
 | Monthly budget cap | widget | **partial** | config key read, no alerting |
@@ -129,6 +129,6 @@ notifications, tickers, themes) and in analysis features that need prompt text o
 an API call. If you want the tray widget, `bozdemir/claude-usage-widget` already
 does it well and is MIT.
 
-What ccburn has that none of them do: Cowork, per-TTL cache pricing, fast-mode and
+What vibewatt has that none of them do: Cowork, per-TTL cache pricing, fast-mode and
 geo pricing, unknown-model honesty, account-wide quota shown next to local history,
-interactive filters, and `ccburn doctor`.
+interactive filters, and `vibewatt doctor`.

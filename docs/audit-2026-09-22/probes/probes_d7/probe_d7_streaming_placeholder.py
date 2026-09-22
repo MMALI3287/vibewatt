@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ccburn.sources import CLAUDE_CODE, load
+from vibewatt.sources import CLAUDE_CODE, load
 
 
 def _line(out: int, stop: str | None) -> str:

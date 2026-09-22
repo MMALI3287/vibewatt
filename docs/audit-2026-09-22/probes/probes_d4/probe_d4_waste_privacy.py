@@ -7,10 +7,10 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ccburn import store
-from ccburn.aggregate import cost_of
-from ccburn.analysis import analyze, waste
-from ccburn.ingest.tool_reads import read_tools
+from vibewatt import store
+from vibewatt.aggregate import cost_of
+from vibewatt.analysis import analyze, waste
+from vibewatt.ingest.tool_reads import read_tools
 
 UTC = timezone.utc
 NOW = datetime(2026, 9, 19, tzinfo=UTC)

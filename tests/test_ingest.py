@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import inspect
 
-from ccburn import ingest
-from ccburn.ingest import cloud
-from ccburn.sources import CLAUDE_CODE, COWORK
+from vibewatt import ingest
+from vibewatt.ingest import cloud
+from vibewatt.sources import CLAUDE_CODE, COWORK
 
 
 def test_discover_finds_every_local_source(logs):

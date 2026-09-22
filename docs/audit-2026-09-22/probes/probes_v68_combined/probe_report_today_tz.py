@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
-from ccburn import aggregate
+from vibewatt import aggregate
 
 
 def test_report_today_follows_report_tz_extremes():

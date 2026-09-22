@@ -17,8 +17,16 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "appdata"))
-    monkeypatch.delenv("CCBURN_COWORK_DIR", raising=False)
-    monkeypatch.setenv("CCBURN_DATA_DIR", str(tmp_path / "data"))
+    # Pre-rename names left in a developer shell must not leak into a test.
+    for name in (
+        "VIBEWATT_COWORK_DIR",
+        "VIBEWATT_CONFIG",
+        "CCBURN_COWORK_DIR",
+        "CCBURN_CONFIG",
+        "CCBURN_DATA_DIR",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("VIBEWATT_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
 
 

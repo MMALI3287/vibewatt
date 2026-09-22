@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from ccburn.analysis import cache_scan, tips, waste
-from ccburn.pricing import rate_for
+from vibewatt.analysis import cache_scan, tips, waste
+from vibewatt.pricing import rate_for
 
 
 def turn(**changes):

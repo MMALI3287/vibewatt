@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import date, timedelta
-from ccburn.analysis.anomaly import detect
+from vibewatt.analysis.anomaly import detect
 
 def _rows(days, cost=5.0):
     return [{"day": d.isoformat(), "cost": cost} for d in days]

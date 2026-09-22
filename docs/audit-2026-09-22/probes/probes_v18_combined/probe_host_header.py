@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from ccburn.api import create_app
+from vibewatt.api import create_app
 
 
 def test_foreign_host_header_is_served(logs):

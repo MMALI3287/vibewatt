@@ -5,9 +5,9 @@ from datetime import datetime, timezone
 
 import pytest
 
-from ccburn.aggregate import build, cost_of
-from ccburn.pricing import MILLION, rate_for
-from ccburn.sources import Turn, read_file
+from vibewatt.aggregate import build, cost_of
+from vibewatt.pricing import MILLION, rate_for
+from vibewatt.sources import Turn, read_file
 
 
 def mk(model="claude-opus-5", **kw):

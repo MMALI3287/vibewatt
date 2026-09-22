@@ -5,8 +5,8 @@ import json
 
 import pytest
 
-from ccburn.aggregate import cost_of
-from ccburn.ingest import claude_code
+from vibewatt.aggregate import cost_of
+from vibewatt.ingest import claude_code
 
 
 def _line(model, usage):

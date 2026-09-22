@@ -1,4 +1,4 @@
-"""d8 probe: Phase 2 Gate says /api/summary totals equal `ccburn json` totals
+"""d8 probe: Phase 2 Gate says /api/summary totals equal `vibewatt json` totals
 for the same filters. The suite only checks the unfiltered case in-process."""
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from ccburn import cli as climod
-from ccburn import config as configmod
-from ccburn.api import create_app
+from vibewatt import cli as climod
+from vibewatt import config as configmod
+from vibewatt.api import create_app
 
 
 def _api(params: dict) -> dict:

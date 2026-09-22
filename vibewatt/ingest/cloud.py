@@ -1,7 +1,7 @@
 """Cloud sessions (Claude Code on the web, Cowork remote).
 
 These never touch local disk, so there is nothing to discover. Input is a
-session listing captured with ``ccburn harvest --file``.
+session listing captured with ``vibewatt harvest --file``.
 """
 
 from __future__ import annotations

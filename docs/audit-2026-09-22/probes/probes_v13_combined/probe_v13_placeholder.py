@@ -2,8 +2,8 @@ from __future__ import annotations
 import json
 from datetime import timezone
 from pathlib import Path
-from ccburn import sources, store
-from ccburn.aggregate import cost_of
+from vibewatt import sources, store
+from vibewatt.aggregate import cost_of
 SRC = "claude-code"
 
 

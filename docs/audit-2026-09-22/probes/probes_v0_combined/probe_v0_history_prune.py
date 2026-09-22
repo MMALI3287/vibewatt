@@ -28,7 +28,7 @@ def _cfg():
 
 
 def test_same_model_partial_prune(tmp_path):
-    from ccburn.cli import build_report
+    from vibewatt.cli import build_report
     root = tmp_path / "claude" / "projects" / "p"
     old = _write(root / "old.jsonl", [_rec("a", "2026-08-01T01:00:00Z", 5000)])
     _write(root / "new.jsonl", [_rec("b", "2026-08-01T14:30:00Z", 100),
@@ -46,7 +46,7 @@ def test_same_model_partial_prune(tmp_path):
 
 
 def test_other_model_partial_prune(tmp_path):
-    from ccburn.cli import build_report
+    from vibewatt.cli import build_report
     root = tmp_path / "claude" / "projects" / "p"
     old = _write(root / "old.jsonl", [_rec("a", "2026-08-01T01:00:00Z", 5000,
                                            model="claude-sonnet-4-5")])
@@ -61,8 +61,8 @@ def test_other_model_partial_prune(tmp_path):
 
 
 def test_api_summary_reflects_loss(tmp_path):
-    from ccburn import config as configmod
-    from ccburn.api import create_app
+    from vibewatt import config as configmod
+    from vibewatt.api import create_app
     root = tmp_path / "claude" / "projects" / "p"
     old = _write(root / "old.jsonl", [_rec("a", "2026-08-01T01:00:00Z", 5000)])
     _write(root / "new.jsonl", [_rec("b", "2026-08-01T14:30:00Z", 100)])

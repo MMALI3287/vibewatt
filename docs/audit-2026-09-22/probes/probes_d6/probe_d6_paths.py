@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import subprocess
 
-from ccburn import concierge, store
+from vibewatt import concierge, store
 
 
 def test_concierge_only_uses_configured_absolute_dirs(tmp_path):

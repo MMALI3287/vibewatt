@@ -7,9 +7,9 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from ccburn import store
-from ccburn.analysis import analyze, context, peaks
-from ccburn.api import create_app
+from vibewatt import store
+from vibewatt.analysis import analyze, context, peaks
+from vibewatt.api import create_app
 
 UTC = timezone.utc
 JST = timezone(timedelta(hours=9))

@@ -9,8 +9,8 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
-from ccburn import store
-from ccburn.api import create_app
+from vibewatt import store
+from vibewatt.api import create_app
 
 UTC = timezone.utc
 COLS = ["msg_id", "request_id", "ts", "day", "source", "project", "session", "model",

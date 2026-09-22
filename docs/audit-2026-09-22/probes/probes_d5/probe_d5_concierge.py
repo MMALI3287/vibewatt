@@ -10,8 +10,8 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from ccburn import concierge, config, store
-from ccburn.api import create_app
+from vibewatt import concierge, config, store
+from vibewatt.api import create_app
 
 
 def snapshot(root):

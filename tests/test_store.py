@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from conftest import JST
 
-from ccburn import ingest, quota, store
+from vibewatt import ingest, quota, store
 
 
 def _cost(_turn) -> float:

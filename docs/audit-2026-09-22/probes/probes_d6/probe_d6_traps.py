@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import datetime as dt
 
-from ccburn import terminal
-from ccburn.aggregate import Bucket, Report
+from vibewatt import terminal
+from vibewatt.aggregate import Bucket, Report
 
 FILLED = "\u25a0"
 
@@ -35,7 +35,7 @@ def test_cli_heatmap_uses_system_date_not_report_today(monkeypatch):
 
 
 def test_cloud_cost_kept_verbatim_but_missing_cost_becomes_zero():
-    from ccburn import store
+    from vibewatt import store
 
     with store.connect() as conn:
         store.upsert_cloud_sessions(conn, [

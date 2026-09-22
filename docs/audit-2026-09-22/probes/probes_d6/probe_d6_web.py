@@ -5,8 +5,8 @@ import json
 
 from fastapi.testclient import TestClient
 
-from ccburn import config as configmod
-from ccburn.api import create_app
+from vibewatt import config as configmod
+from vibewatt.api import create_app
 
 EVIL = {"Host": "evil.example:8777", "Origin": "http://evil.example:8777"}
 XORIGIN = {"Origin": "https://evil.example"}
@@ -90,7 +90,7 @@ def test_csrf_bodyless_posts_run(logs):
 
 
 def test_csrf_weekly_summary_triggers_paid_call(logs, monkeypatch):
-    from ccburn import weekly
+    from vibewatt import weekly
 
     calls = []
 

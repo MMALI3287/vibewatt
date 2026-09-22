@@ -1,5 +1,5 @@
 from __future__ import annotations
-import ccburn.pricing as p
+import vibewatt.pricing as p
 
 def test_builtin_outranks_remote(monkeypatch):
     builtin = p.rate_for("claude-opus-5")

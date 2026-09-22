@@ -35,12 +35,12 @@ what was tried, what worked and what did not, so nobody re-derives it.
 ## Not found
 
 - **A documented REST endpoint for listing sessions.** `/api/oauth/usage` is the
-  account-level one and is used by `ccburn/quota.py`. The per-session listing is
+  account-level one and is used by `vibewatt/quota.py`. The per-session listing is
   served through the `claude-code-remote` MCP tool over an internal channel; no
   public equivalent was found in the docs or in the container's environment. The
   `tags` filter that would list Cowork sessions is rejected for in-session callers
   and documented as OAuth-only.
-  **Current workaround:** `ccburn harvest --file sessions.json` ingests a saved
+  **Current workaround:** `vibewatt harvest --file sessions.json` ingests a saved
   listing.
   **Re-spiked in phase 2:** the `claude-code-remote` MCP tool (`list_sessions`)
   is not present in a plain Claude Code session — it's only reachable from

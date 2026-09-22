@@ -5,8 +5,8 @@ from __future__ import annotations
 import random
 from datetime import date, datetime, timedelta, timezone
 
-from ccburn import store
-from ccburn.analysis import analyze, anomaly
+from vibewatt import store
+from vibewatt.analysis import analyze, anomaly
 
 UTC = timezone.utc
 START = date(2026, 6, 1)

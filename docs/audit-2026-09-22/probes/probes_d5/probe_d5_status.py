@@ -6,7 +6,7 @@ import http.server
 import threading
 import time
 
-from ccburn import service_status
+from vibewatt import service_status
 
 
 class Drip(http.server.BaseHTTPRequestHandler):

@@ -14,7 +14,7 @@ explicitly from the repo root:
 uv run pytest -q docs/audit-2026-09-22/probes/probes_d1/probe_d1_dedup.py
 ```
 
-Probes import the package as `ccburn`. Update the imports after the Phase 6.5a
+Probes import the package as `vibewatt`. Update the imports after the Phase 6.5a
 rename. `web/` holds Playwright and vitest probes: copy one into `web/e2e/` or
 `web/src/` to run it.
 

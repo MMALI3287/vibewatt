@@ -9,9 +9,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from d1util import JST, projects_root, rec, write_jsonl  # noqa: E402
 
-from ccburn import ingest, store  # noqa: E402
-from ccburn.cli import build_report  # noqa: E402
-from ccburn.sources import load  # noqa: E402
+from vibewatt import ingest, store  # noqa: E402
+from vibewatt.cli import build_report  # noqa: E402
+from vibewatt.sources import load  # noqa: E402
 
 OFFLINE = {"offline": True, "quota": False, "history": False}
 
@@ -117,7 +117,7 @@ def test_history_rollup_partial_prune_loses_usage(tmp_path):
 
 
 def test_history_rollup_partial_prune_same_model_overwrites_blob(tmp_path):
-    from ccburn import history
+    from vibewatt import history
 
     root = projects_root(tmp_path)
     write_jsonl(root / "p" / "a.jsonl",

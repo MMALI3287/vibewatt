@@ -9,8 +9,8 @@ from datetime import timedelta, timezone
 
 from fastapi.testclient import TestClient
 
-from ccburn import config, store
-from ccburn.api import create_app
+from vibewatt import config, store
+from vibewatt.api import create_app
 
 JST = timezone(timedelta(hours=9))
 N = [0]

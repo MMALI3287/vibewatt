@@ -1,4 +1,4 @@
-"""FastAPI backend. `create_app()` is the entry point; `ccburn serve` mounts it."""
+"""FastAPI backend. `create_app()` is the entry point; `vibewatt serve` mounts it."""
 
 from __future__ import annotations
 

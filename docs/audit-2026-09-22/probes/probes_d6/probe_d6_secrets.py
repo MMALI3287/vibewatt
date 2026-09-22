@@ -8,10 +8,10 @@ from contextlib import redirect_stdout
 
 from fastapi.testclient import TestClient
 
-from ccburn import cli as climod
-from ccburn import config as configmod
-from ccburn import pricing, quota
-from ccburn.api import create_app
+from vibewatt import cli as climod
+from vibewatt import config as configmod
+from vibewatt import pricing, quota
+from vibewatt.api import create_app
 
 SENTINEL = "sk-ant-oat01-SENTINEL-TOKEN-XYZ"
 
@@ -48,7 +48,7 @@ def test_oauth_token_never_leaves_via_api_or_doctor(logs, monkeypatch):
             leaks.append(path)
     buf = io.StringIO()
     with redirect_stdout(buf):
-        from ccburn import doctor
+        from vibewatt import doctor
         doctor.run(cfg, climod.resolve_tz(cfg.get("timezone")))
     print("quota calls:", {u for u, _ in seen}, "leaks:", leaks,
           "doctor leak:", SENTINEL in buf.getvalue())
