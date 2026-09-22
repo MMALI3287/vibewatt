@@ -7,7 +7,7 @@ Plan utilization is the one figure that covers every surface: how much of each
 rate-limit window is spent across the whole account. It is a percentage, not a
 token ledger, so it complements the local history rather than replacing it.
 
-Sources, best first (PLAN.md section 2, amended in Phase 6.5d):
+Sources, best first (docs/PLAN.md section 2.5, amended in Phase 6.5d):
 
   1. ``vibewatt statusline``: Claude Code pipes its documented statusline JSON
      (``rate_limits.<window>.used_percentage`` and ``resets_at`` in Unix

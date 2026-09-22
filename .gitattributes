@@ -1,0 +1,5 @@
+# Normalise text files to LF in the repository; Git converts on checkout as configured.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.woff2 binary
