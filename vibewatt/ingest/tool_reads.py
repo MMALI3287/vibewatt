@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import ntpath
 import posixpath
@@ -12,8 +13,12 @@ from pathlib import Path
 from ..sources import _parse_ts, _project_name
 
 
-def read_tools(source: str, path: Path) -> Iterator[dict]:
-    """Keep each tool invocation, not each repeated usage/content record."""
+def read_tools(source: str, path: Path, *, key: bytes = b"") -> Iterator[dict]:
+    """Keep each tool invocation, not each repeated usage/content record.
+
+    `key` is the per-install HMAC key: a path is hashed so repeated reads can
+    be grouped without storing the path or letting a guess be confirmed.
+    """
     with path.open(encoding="utf-8", errors="replace") as handle:
         for line in handle:
             try:
@@ -51,7 +56,8 @@ def read_tools(source: str, path: Path) -> Iterator[dict]:
                 canonical = paths.normpath(paths.join(cwd, file_path))
                 if paths is ntpath:
                     canonical = paths.normcase(canonical)
-                digest = hashlib.sha256(f"{session}\0{canonical}".encode()).hexdigest()
+                digest = hmac.new(key, f"{session}\0{canonical}".encode(),
+                                  hashlib.sha256).hexdigest()
                 yield {
                     "session": session,
                     "tool_id": block["id"],

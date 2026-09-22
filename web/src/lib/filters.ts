@@ -2,11 +2,17 @@ import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 
 export type Metric = "cost" | "tokens";
+export type Source = "all" | "claude-code" | "cowork" | "web";
+const SOURCES: readonly Source[] = ["all", "claude-code", "cowork", "web"];
+const isSource = (v: string | null): v is Source => v !== null && (SOURCES as readonly string[]).includes(v);
+
+/** A select or URL value as a Source; anything the API would reject means all. */
+export const toSource = (v: string | null): Source => (isSource(v) ? v : "all");
 
 export interface Filters {
   from: string | null;
   to: string | null;
-  source: string;
+  source: Source;
   project: string | null;
   model: string | null;
   metric: Metric;
@@ -32,7 +38,8 @@ export function parseFilters(params: URLSearchParams): Filters {
   return {
     from: day("from"),
     to: day("to"),
-    source: text("source") ?? "all",
+    // An unknown source in a hand-edited URL falls back to all, not a 422.
+    source: toSource(params.get("source")),
     project: text("project"),
     model: text("model"),
     metric: params.get("metric") === "tokens" ? "tokens" : "cost",

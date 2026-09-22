@@ -311,7 +311,10 @@ def fetch(token: str | None = None, timeout: float = 10.0) -> Quota | None:
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout) as resp:
-            payload = json.loads(resp.read(1_000_000).decode("utf-8"))
+            raw = resp.read(64 * 1024 + 1)  # a few windows; never megabytes (A-102)
+        if len(raw) > 64 * 1024:
+            return None
+        payload = json.loads(raw.decode("utf-8"))
     except urllib.error.HTTPError as exc:
         if exc.code == 429:
             raise RateLimited from exc

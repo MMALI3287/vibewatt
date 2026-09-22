@@ -136,7 +136,7 @@ envelope is enough to price both together.
 
 ```
 vibewatt report        terminal report (default)
-vibewatt serve         live dashboard        --host --port --refresh --no-browser
+vibewatt serve         live dashboard        --host --port --no-browser
 vibewatt doctor        what vibewatt can and cannot see, and why
 vibewatt sync          parse local logs into the SQLite store
 vibewatt harvest       ingest cloud session usage   --file sessions.json
@@ -220,12 +220,29 @@ last 10 minutes.
 
 ## Privacy
 
-Everything is computed locally. Prompt text is never read, stored or transmitted —
-vibewatt only looks at the `usage` object and timestamps. The one network call is the
-plan-utilization lookup, which sends your existing Claude Code OAuth token to
-Anthropic's own endpoint and nothing else. Disable it with `--no-quota`. The pricing
-refresh fetches a public JSON file and sends nothing. `--mask-projects` pseudonymises
-project names for sharing a screenshot.
+Everything is computed locally and stored in one SQLite file in vibewatt's data
+directory. What it keeps from your logs: token counts, model, timestamps, project
+and session ids plus **one title per session**. The title is the session name Claude
+Code shows (`custom-title` or `ai-title`) or, failing those, the latest prompt of the
+session or its first message, up to 500 characters. No other prompt text, no response
+text and no file contents are stored. Paths of files the agent read are kept only as
+keyed hashes, to spot repeated reads.
+
+The dashboard listens on 127.0.0.1 and refuses requests whose `Host` is not a loopback
+name as well as cross-site requests that change state, so another web page in your browser
+cannot read it or drive it.
+
+Network calls, all optional (see [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md)):
+
+| Call | Sends | When | Off switch |
+|---|---|---|---|
+| Pricing table from GitHub (LiteLLM) | nothing | at most once a day | `--offline` |
+| `api.anthropic.com/api/oauth/usage` | your Claude Code OAuth token | fallback for plan utilization, at most every 10 min | `--no-quota` |
+| `status.claude.com` summary | nothing | dashboard status banner, cached 5 min | `--offline` |
+| Anthropic Messages API | your `ANTHROPIC_API_KEY` and weekly totals (project names only if you allow them) | only when you click the AI weekly summary with `ai_summary.enabled` | off by default |
+
+`--mask-projects` replaces project names with `project 1`, `project 2`, ... in every
+view and export, for sharing a screenshot.
 
 ## Caveats
 

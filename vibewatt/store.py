@@ -14,16 +14,18 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 from collections import defaultdict
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
+from itertools import pairwise
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone, tzinfo
 from pathlib import Path
 
 from .config import clock_zone, copy_sqlite, data_dir, zone_id
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -276,6 +278,15 @@ def _v7_quota_windows(conn) -> None:
     conn.execute("DROP TABLE quota_samples_v2")
 
 
+def _v8_keyed_path_hash(conn) -> None:
+    # Phase 6.5e: path hashes become an HMAC under a per-install key, so a
+    # guessed path cannot be confirmed from a copied store (A-121). Old
+    # unkeyed hashes cannot be converted without the paths, so tool reads are
+    # read again from the logs that still exist.
+    conn.execute("DELETE FROM tool_reads")
+    conn.execute("DELETE FROM tool_read_files")
+
+
 # Forward-only. Append a step and bump SCHEMA_VERSION; never drop a user's table.
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _v2_files_and_quota_samples,
@@ -284,6 +295,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     5: _v5_dedup_and_rollup,
     6: _v6_titles_and_drops,
     7: _v7_quota_windows,
+    8: _v8_keyed_path_hash,
 }
 assert max(MIGRATIONS) == SCHEMA_VERSION
 
@@ -300,17 +312,36 @@ def migrate(conn) -> None:
         conn.execute("INSERT OR REPLACE INTO meta VALUES ('schema', ?)", (str(version),))
 
 
+# Schema work takes the write lock, so it only runs when meta says the store is
+# behind, not on every request (A-056).
+_migrate_lock = threading.Lock()
+BUSY_TIMEOUT_MS = 30_000
+
+
+def _current(conn) -> int:
+    try:
+        return schema_version(conn)
+    except sqlite3.OperationalError:
+        return 0  # a new file: no meta table yet
+
+
 @contextmanager
 def connect(path: Path | None = None):
     target = path or db_path()
     target.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(target))
+    conn = sqlite3.connect(str(target), timeout=BUSY_TIMEOUT_MS / 1000)
     conn.row_factory = sqlite3.Row
     try:
-        conn.execute("PRAGMA journal_mode=WAL")
+        # A writer waits up to 30 s for another writer instead of failing at 5 s;
+        # WAL readers never wait. Sync commits per batch, so no wait is long.
+        conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
+        if _current(conn) < SCHEMA_VERSION:
+            with _migrate_lock:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.executescript(SCHEMA)
+                migrate(conn)
+                conn.commit()
         conn.execute("PRAGMA synchronous=NORMAL")
-        conn.executescript(SCHEMA)
-        migrate(conn)
         yield conn
         conn.commit()
     finally:
@@ -428,6 +459,19 @@ def rebuild_rollup(conn, hours: Iterable[str] | None = None) -> None:
         )
 
 
+def _path_key(conn) -> bytes:
+    """The per-install HMAC key for tool read paths, created on first use."""
+    import secrets
+
+    row = conn.execute("SELECT value FROM meta WHERE key = 'path_hash_key'").fetchone()
+    if row:
+        return bytes.fromhex(row[0])
+    key = secrets.token_bytes(32)
+    conn.execute("INSERT OR IGNORE INTO meta VALUES ('path_hash_key', ?)", (key.hex(),))
+    return bytes.fromhex(conn.execute(
+        "SELECT value FROM meta WHERE key = 'path_hash_key'").fetchone()[0])
+
+
 def generation(conn) -> int:
     row = conn.execute("SELECT value FROM meta WHERE key = 'generation'").fetchone()
     return int(row[0]) if row else 0
@@ -533,7 +577,7 @@ def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of, *,
             continue
         if reads_known.get(str(path)) != (st.st_mtime, st.st_size):
             try:
-                reads = list(read_tools(source, path))
+                reads = list(read_tools(source, path, key=_path_key(conn)))
             except OSError:
                 pass
             else:
@@ -547,6 +591,9 @@ def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of, *,
         else:
             changed.append((source, path, st))
 
+    # Release the write lock before the slow part: each batch commits on its
+    # own, so a request that writes (alerts, dismissals) never waits long.
+    conn.commit()
     hours: set[str] = set()
     for i in range(0, len(changed), batch_files):
         batch = changed[i:i + batch_files]
@@ -577,6 +624,7 @@ def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of, *,
             " VALUES (?,?,?,?,?,?)",
             [(path, mtime, size, stamp, n, d) for path, mtime, size, n, d in per_file])
         result.parsed += len(read)
+        conn.commit()
         if progress:
             progress(result.parsed, len(changed))
 
@@ -629,58 +677,83 @@ def _repo_name(ctx: dict) -> str | None:
     return None
 
 
-def upsert_cloud_sessions(conn, payload) -> tuple[int, int]:
+# Environments that leave no local log. A session that ran on this machine
+# (Remote Control bridges one to claude.ai) is already counted from its log.
+_CLOUD_ENVIRONMENTS = {"anthropic_cloud"}
+
+
+def _count(value) -> int:
+    if value is None:
+        return 0
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value < 0:
+        raise ValueError(f"not a token count: {value!r}")
+    return int(value)
+
+
+def upsert_cloud_sessions(conn, payload) -> dict[str, int]:
     """Ingest a session listing from the Claude Code session API.
 
-    Returns (written, skipped). Sessions with no usage block are skipped rather
-    than stored as zeroes, so an unstarted session cannot look like free work.
+    Returns counts: written; skipped (no usage block: an unstarted session is
+    not free work); rejected_no_id (no key to dedup on, A-032);
+    skipped_environment (ran locally, so its log already counts it).
+    A session with usage but no cost_usd is stored unpriced, not at $0 (A-027).
     """
     from .ingest import cloud
 
-    entries = cloud.parse(payload)
-    if not entries:
-        return 0, 0
-    written = skipped = 0
+    counts = {"written": 0, "skipped": 0, "rejected_no_id": 0, "skipped_environment": 0}
+    local_ids = {r[0] for r in conn.execute("SELECT DISTINCT session FROM turns")}
     rows = []
-    for s in entries:
-        if not isinstance(s, dict):
+    for s in cloud.parse(payload):
+        sid = s.get("id")
+        if not isinstance(sid, str) or not sid:
+            counts["rejected_no_id"] += 1
             continue
-        meta = s.get("external_metadata") or {}
-        usage = meta.get("usage") or {}
+        meta = s.get("external_metadata") if isinstance(s.get("external_metadata"), dict) else {}
+        usage = meta.get("usage") if isinstance(meta.get("usage"), dict) else {}
         if not usage:
-            skipped += 1
+            counts["skipped"] += 1
             continue
-        ctx = s.get("session_context") or {}
-        tags = s.get("tags") or []
-        origin = s.get("origin") or ""
-        surface = _SURFACE.get(origin, "claude-code")
-        for tag in tags:
-            if str(tag).startswith("cowork"):
-                surface = "cowork"
-        cu = meta.get("context_usage") or {}
-        rows.append((
-            s.get("id"), s.get("title"), origin, surface,
-            _repo_name(ctx), (ctx.get("model") or meta.get("model")),
-            s.get("created_at"), s.get("updated_at"),
-            int(usage.get("input_tokens") or 0),
-            int(usage.get("cache_write_tokens") or 0),
-            int(usage.get("cache_read_tokens") or 0),
-            int(usage.get("output_tokens") or 0),
-            float(usage.get("cost_usd") or 0.0),
-            cu.get("used_tokens"), cu.get("max_tokens"),
-            1, json.dumps(s, separators=(",", ":"))[:20000],
-        ))
-        written += 1
+        tags = [str(t) for t in s.get("tags") or [] if isinstance(t, (str, int))]
+        cowork = any(t.startswith("cowork") for t in tags)
+        environment = s.get("environment_kind")
+        if sid in local_ids or (
+            environment is not None and environment not in _CLOUD_ENVIRONMENTS and not cowork
+        ):
+            counts["skipped_environment"] += 1
+            continue
+        ctx = s.get("session_context") if isinstance(s.get("session_context"), dict) else {}
+        origin = str(s.get("origin") or "")
+        surface = "cowork" if cowork else _SURFACE.get(origin, "claude-code")
+        cu = meta.get("context_usage") if isinstance(meta.get("context_usage"), dict) else {}
+        cost = usage.get("cost_usd")
+        try:
+            row = (
+                sid, s.get("title") if isinstance(s.get("title"), str) else None,
+                origin, surface, _repo_name(ctx), (ctx.get("model") or meta.get("model")),
+                s.get("created_at"), s.get("updated_at"),
+                _count(usage.get("input_tokens")), _count(usage.get("cache_write_tokens")),
+                _count(usage.get("cache_read_tokens")), _count(usage.get("output_tokens")),
+                None if cost is None else float(cost),
+                cu.get("used_tokens"), cu.get("max_tokens"),
+                1, json.dumps(s, separators=(",", ":"))[:20000],
+            )
+        except (TypeError, ValueError):
+            counts["skipped"] += 1
+            continue
+        rows.append(row)
+        counts["written"] += 1
     conn.executemany(
         "INSERT OR REPLACE INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
-    conn.execute("INSERT OR REPLACE INTO meta VALUES ('last_harvest', ?)",
-                 (datetime.now(timezone.utc).isoformat(),))
-    return written, skipped
+    if rows:
+        conn.execute("INSERT OR REPLACE INTO meta VALUES ('last_harvest', ?)",
+                     (datetime.now(timezone.utc).isoformat(),))
+    return counts
 
 
 def sessions(
     conn, limit: int = 40, *, cursor: str | None = None,
-    source: str | None = None, project: str | None = None, model: str | None = None,
+    source: str | None = None, project: str | list[str] | None = None,
+    model: str | None = None, labels: dict[str, str] | None = None,
     date_from: date | None = None, date_to: date | None = None,
     tz: tzinfo = timezone.utc, search: str | None = None,
 ) -> list[dict]:
@@ -697,9 +770,12 @@ def sessions(
     if source:
         local_clauses.append("source = ?")
         local_args.append(source)
-    if project:
-        local_clauses.append("project = ?")
-        local_args.append(project)
+    if project is not None:
+        from .projects import clause
+
+        sql, values = clause("project", project)
+        local_clauses.append(sql)
+        local_args.extend(values)
     if model:
         local_clauses.append("model = ?")
         local_args.append(model)
@@ -721,9 +797,12 @@ def sessions(
     if source:
         cloud_clauses.append("surface = ?")
         cloud_args.append(source)
-    if project:
-        cloud_clauses.append("project = ?")
-        cloud_args.append(project)
+    if project is not None:
+        from .projects import clause
+
+        sql, values = clause("project", project)
+        cloud_clauses.append(sql)
+        cloud_args.extend(values)
     if model:
         cloud_clauses.append("model = ?")
         cloud_args.append(model)
@@ -756,7 +835,8 @@ def sessions(
             "project": r["project"] or "-", "model": r["model"], "started": r["started"],
             "ended": r["ended"], "tokens": r["tokens"] or 0, "cost": r["cost"] or 0.0,
             "harvested": True,
-            "unpriced_turns": 0,
+            # No cost_usd from the session API: unpriced, not free (A-027).
+            "unpriced_turns": int(r["cost"] is None),
             "context_used": r["context_used"], "context_max": r["context_max"],
         })
     for r in local:
@@ -768,6 +848,10 @@ def sessions(
             "harvested": False,
             "unpriced_turns": r["unpriced_turns"],
         })
+    if labels is not None:
+        for row in rows:
+            row["project"] = labels.get(row["project"], row["project"])
+
     def sort_key(row):
         return (row["started"] or "", row["id"])
 
@@ -852,8 +936,36 @@ def summary(conn) -> dict:
         " GROUP BY surface ORDER BY cost DESC")]
     prompts = one("SELECT COUNT(*) n FROM titles")  # the API key predates titles
     last = one("SELECT value FROM meta WHERE key='last_harvest'")
+    synced = one("SELECT value FROM meta WHERE key='last_sync'")
     return {"turns": turns, "cloud": cloud, "cloud_by_surface": by_surface,
-            "prompts": prompts, "last_harvest": last.get("value")}
+            "prompts": prompts, "last_harvest": last.get("value"),
+            "last_sync": synced.get("value")}
+
+
+def coverage(conn, min_gap_days: int = 7) -> dict:
+    """What the store covers: files per source and spans with no local turn."""
+    from .sources import CLAUDE_CODE, COWORK
+
+    sources = []
+    for source in (CLAUDE_CODE, COWORK):
+        files = conn.execute(
+            "SELECT COUNT(*) FROM files WHERE path LIKE ?",
+            ("%audit.jsonl" if source == COWORK else "%.jsonl",)).fetchone()[0]
+        if source == CLAUDE_CODE:
+            files -= conn.execute(
+                "SELECT COUNT(*) FROM files WHERE path LIKE '%audit.jsonl'").fetchone()[0]
+        lo, hi = conn.execute(
+            "SELECT MIN(day), MAX(day) FROM turns WHERE source = ?", (source,)).fetchone()
+        sources.append({"source": source, "files": files, "first_day": lo, "last_day": hi})
+    days = [date.fromisoformat(r[0]) for r in conn.execute(
+        "SELECT DISTINCT day FROM turns ORDER BY day")]
+    gaps = []
+    for prev, cur in pairwise(days):
+        missing = (cur - prev).days - 1
+        if missing >= min_gap_days:
+            gaps.append({"start": (prev + timedelta(days=1)).isoformat(),
+                         "end": (cur - timedelta(days=1)).isoformat(), "days": missing})
+    return {"sources": sources, "gaps": gaps, "dropped_records": dropped_records(conn)}
 
 
 def save_findings(conn: sqlite3.Connection, scope: str, findings: list[dict]) -> list[dict]:

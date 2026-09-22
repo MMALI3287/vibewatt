@@ -20,7 +20,7 @@ def analyze(
     date_from: date | None = None,
     date_to: date | None = None,
     source: str = "all",
-    project: str | None = None,
+    project: str | list[str] | None = None,
     model: str | None = None,
     overrides: dict | None = None,
     now: datetime | None = None,
@@ -38,7 +38,8 @@ def analyze(
     def facets(row: dict, source_key: str = "source") -> bool:
         return (
             (source == "all" or row[source_key] == source)
-            and (not project or row["project"] == project)
+            and (project is None or row["project"] in (
+                [project] if isinstance(project, str) else project))
             and (not model or row["model"] == model)
         )
 
@@ -104,7 +105,7 @@ def analyze(
             "Not enough history for anomaly detection: a fully priced day needs at "
             "least 14 preceding calendar days of observed history (up to 28)."
         )
-    if source != "all" or project or model:
+    if source != "all" or project is not None or model:
         notes.append(
             "Peak-window checks are unavailable with source, project or model filters: "
             "quota samples are account-wide and cannot be attributed to those filters."
