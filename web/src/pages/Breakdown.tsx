@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useTitle } from "../lib/title";
 import { Link, useLocation } from "react-router-dom";
 import { getSummary } from "../api/client";
 import { DataTable } from "../components/DataTable";
@@ -18,6 +19,7 @@ export function Breakdown({ dimension }: { dimension: "project" | "model" }) {
   const parentSearch = serializeFilters({ ...filters, [dimension]: null }).toString();
   return <>
     <h1>{title}</h1>
+    <TitleFor view={title} />
     {filters[dimension] && <nav aria-label="Breadcrumbs" className="breadcrumbs">
       <Link to={{ pathname: location.pathname, search: parentSearch }}>{title}</Link><span>/</span><span>{filters[dimension]}</span>
     </nav>}
@@ -36,6 +38,11 @@ export function Breakdown({ dimension }: { dimension: "project" | "model" }) {
         { accessorKey: "responses", header: "Responses", cell: info => fmtInt(info.row.original.responses) },
       ]} />}
     </section>
-    {filters[dimension] && <Sessions embedded />}
+    {filters[dimension] && <Sessions embedded={dimension} />}
   </>;
+}
+
+function TitleFor({ view }: { view: string }) {
+  useTitle(view);
+  return null;
 }

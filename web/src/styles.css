@@ -5,6 +5,7 @@
   --tp: #0b0b0b; --ts: #52514e; --tm: #84837c;
   --l0: #f0efec; --l1: #cde2fb; --l2: #9ec5f4; --l3: #5598e7; --l4: #2a78d6; --l5: #104281;
   --serious: #e34948; --warning: #eda100;
+  --backdrop: rgb(0 0 0 / 55%);
   --gutter: max(16px, 3vw);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -29,7 +30,15 @@ button, input, select { font: inherit; color: var(--tp); background: var(--s0); 
 button { cursor: pointer; }
 button:disabled { cursor: default; color: var(--tm); }
 a { color: inherit; }
-.muted { color: var(--tm); }
+/* --tm is 3.7:1 on the light surfaces, below AA for text; it stays for disabled
+   controls only. Muted text uses --ts (A-062). */
+.muted { color: var(--ts); }
+/* The sticky filter bar must not cover the focused element (A-038). */
+html { scroll-padding-top: 96px; }
+@media (max-width: 640px) { html { scroll-padding-top: 220px; } }
+.skip-link { position: absolute; left: 8px; top: -48px; z-index: 20; padding: 8px 12px; background: var(--s0); color: var(--tp); border: 1px solid var(--l4); border-radius: 6px; }
+.skip-link:focus { top: 8px; }
+.main:focus { outline: none; }
 
 .app { min-height: 100vh; display: grid; grid-template-rows: auto auto 1fr auto; }
 .app > * { min-width: 0; }
@@ -51,7 +60,8 @@ a { color: inherit; }
 
 .state { padding: 32px 0; }
 .state h1 { font-size: 18px; margin: 0 0 8px; }
-.state-error h1 { color: var(--serious); }
+/* Status colour on a mark, text in --tp: --serious is below AA as text (A-084). */
+.state-error h1 { color: var(--tp); border-left: 4px solid var(--serious); padding-left: 8px; }
 
 .hero { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: center; }
 .hero > * { min-width: 0; }
@@ -59,6 +69,7 @@ a { color: inherit; }
 .hero-number { margin: 4px 0 0; font-size: clamp(28px, 6vw, 44px); font-weight: 700; overflow-wrap: anywhere; }
 .meters { display: grid; gap: 8px; }
 .meter { display: grid; gap: 4px; }
+.meters > *, .meter > *, .kpis > *, .session-facts > *, .wrapped-facts > *, .plan > * { min-width: 0; }
 .meter-label { font-size: 12px; color: var(--ts); }
 .meter-track { display: block; height: 8px; background: var(--l0); border-radius: 4px; overflow: hidden; }
 .meter-fill { display: block; height: 100%; background: var(--l4); }
@@ -89,7 +100,8 @@ th, td { padding: 6px 8px; border-bottom: 1px solid var(--bd); text-align: left;
 th { font-weight: 600; color: var(--ts); }
 .num { text-align: right; font-variant-numeric: tabular-nums; }
 
-.footer { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 12px var(--gutter); border-top: 1px solid var(--bd); color: var(--tm); font-size: 12px; }
+.footer { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 12px var(--gutter); border-top: 1px solid var(--bd); color: var(--ts); font-size: 12px; }
+.footer-links { display: flex; flex-wrap: wrap; gap: 4px 12px; min-width: 0; }
 .footer > * { min-width: 0; }
 
 h1 { margin: 0; font-size: 24px; }
@@ -98,14 +110,15 @@ h1 { margin: 0; font-size: 24px; }
 .search-label { display: grid; gap: 6px; max-width: 32rem; margin-bottom: 12px; }
 .search-label input { width: 100%; min-width: 0; }
 .session-dialog { width: min(960px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; background: var(--s0); color: var(--tp); border: 1px solid var(--bd); border-radius: 12px; padding: 20px; }
-.session-dialog::backdrop { background: rgb(0 0 0 / 55%); }
+.session-dialog::backdrop { background: var(--backdrop); }
 .session-dialog h2 { overflow-wrap: anywhere; }
 .close-modal { display: block; margin-left: auto; }
 .session-facts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 10px; }
 .session-facts dd { margin: 0; overflow-wrap: anywhere; }
 .session-facts dt { color: var(--ts); }
 .heatmap-wrap { overflow-x: auto; padding: 45px 8px 8px; }
-.heatmap { display: grid; grid-template-rows: repeat(7, 16px); grid-auto-flow: column; grid-auto-columns: 16px; gap: 3px; width: max-content; }
+.heatmap { width: max-content; }
+.heatmap-row { display: grid; grid-template-rows: repeat(7, 16px); grid-auto-flow: column; grid-auto-columns: 16px; gap: 3px; }
 .heat-cell { position: relative; border-radius: 2px; }
 .heat-cell [role="tooltip"] { display: none; position: absolute; bottom: 22px; left: 0; z-index: 2; white-space: nowrap; padding: 5px; border: 1px solid var(--bd); border-radius: 4px; background: var(--s0); color: var(--tp); }
 .heat-cell:hover [role="tooltip"], .heat-cell:focus [role="tooltip"] { display: block; }

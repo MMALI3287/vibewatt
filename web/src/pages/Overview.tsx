@@ -6,11 +6,15 @@ import { Reconciliation } from "../components/Reconciliation";
 import { UsageCharts } from "../components/UsageCharts";
 import { DEFAULT_FILTERS, serializeFilters, useFilters, type Metric } from "../lib/filters";
 import { bucketTokens, fmtCompact, fmtInt, fmtPct, fmtUsd } from "../lib/format";
+import { useTitle } from "../lib/title";
+import { barLayout } from "../lib/chart";
+import { DataTable } from "../components/DataTable";
 
 const value = (b: Bucket, m: Metric) => (m === "tokens" ? bucketTokens(b) : b.cost_usd);
 const fmtValue = (v: number, m: Metric) => (m === "tokens" ? fmtCompact(v) : fmtUsd(v));
 
 export function Overview() {
+  useTitle("Overview");
   const [filters, update] = useFilters();
   const summary = useQuery({ queryKey: ["summary", filters], queryFn: () => getSummary(filters) });
   const unfiltered = useQuery({
@@ -22,9 +26,12 @@ export function Overview() {
 
   // Plan utilization is account-wide, so it shows whatever the local summary does.
   const meters = (
-    <section className="plan" aria-label="Plan utilization">
-      <PlanMeters />
-    </section>
+    <>
+      <h1>Overview</h1>
+      <section className="plan" aria-label="Plan utilization">
+        <PlanMeters />
+      </section>
+    </>
   );
   if (summary.isPending) {
     return (
@@ -119,8 +126,7 @@ function DailyChart({ s, metric }: { s: Summary; metric: Metric }) {
   const peak = Math.max(...values, 0);
   const w = 720;
   const h = 180;
-  const gap = 2;
-  const barW = days.length ? Math.max(1, (w - gap * (days.length - 1)) / days.length) : 0;
+  const { barWidth: barW, gap } = barLayout(days.length, w);
   const title = `Daily ${metric === "tokens" ? "tokens" : "cost"}`;
 
   return (
@@ -141,58 +147,29 @@ function DailyChart({ s, metric }: { s: Summary; metric: Metric }) {
       </div>
       <details>
         <summary>Table</summary>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Day</th>
-                <th className="num">{metric === "tokens" ? "Tokens" : "Cost"}</th>
-                <th className="num">Responses</th>
-              </tr>
-            </thead>
-            <tbody>
-              {days.map((d, i) => (
-                <tr key={d}>
-                  <td>{d}</td>
-                  <td className="num">{fmtValue(values[i], metric)}</td>
-                  <td className="num">{fmtInt(s.by_day[d].responses)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable label="Daily totals" rows={days.map((d, i) => ({ day: d, value: values[i], responses: s.by_day[d].responses })).reverse()} columns={[
+          { accessorKey: "day", header: "Day" },
+          { accessorKey: "value", header: metric === "tokens" ? "Tokens" : "Cost", cell: (info) => fmtValue(info.row.original.value, metric) },
+          { accessorKey: "responses", header: "Responses", cell: (info) => fmtInt(info.row.original.responses) },
+        ]} />
       </details>
     </section>
   );
 }
 
 function ModelTable({ s, metric }: { s: Summary; metric: Metric }) {
-  const rows = Object.entries(s.by_model).sort((a, b) => value(b[1], metric) - value(a[1], metric));
+  const rows = Object.entries(s.by_model)
+    .sort((a, b) => value(b[1], metric) - value(a[1], metric))
+    .map(([name, b]) => ({ name, cost: b.cost_usd, tokens: bucketTokens(b), responses: b.responses }));
   return (
     <section className="card" aria-label="By model">
       <h2>By model</h2>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Model</th>
-              <th className="num">Cost</th>
-              <th className="num">Tokens</th>
-              <th className="num">Responses</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(([name, b]) => (
-              <tr key={name}>
-                <td>{name}</td>
-                <td className="num">{fmtUsd(b.cost_usd)}</td>
-                <td className="num">{fmtCompact(bucketTokens(b))}</td>
-                <td className="num">{fmtInt(b.responses)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable label="By model" rows={rows} columns={[
+        { accessorKey: "name", header: "Model" },
+        { accessorKey: "cost", header: "Cost", cell: (info) => fmtUsd(info.row.original.cost) },
+        { accessorKey: "tokens", header: "Tokens", cell: (info) => fmtCompact(info.row.original.tokens) },
+        { accessorKey: "responses", header: "Responses", cell: (info) => fmtInt(info.row.original.responses) },
+      ]} />
     </section>
   );
 }

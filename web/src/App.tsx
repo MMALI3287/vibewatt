@@ -17,9 +17,11 @@ export function App() {
   const background = modal ? state?.backgroundLocation : undefined;
   return (
     <div className="app">
+      {/* Skips the header and the six filter controls on every page (A-040). */}
+      <a className="skip-link" href="#main">Skip to content</a>
       <Header />
       <FilterBar />
-      <main className="main">
+      <main className="main" id="main" tabIndex={-1}>
         <Routes location={background ?? location}>
           <Route path="/" element={<Overview />} />
           <Route path="/sessions" element={<Sessions />} />
