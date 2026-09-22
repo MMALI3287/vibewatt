@@ -1,5 +1,5 @@
 [project]
-name = "ccburn"
+name = "vibewatt"
 version = "0.3.0"
 description = "Token usage, cost and plan utilization for Claude Code and Cowork, from local data"
 readme = "README.md"
@@ -14,18 +14,40 @@ classifiers = [
   "Operating System :: MacOS",
   "Operating System :: POSIX :: Linux",
   "Programming Language :: Python :: 3",
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Topic :: Software Development",
 ]
-dependencies = []
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  # Windows ships no IANA database, so ZoneInfo("Asia/Tokyo") fails without it (A-058).
+  "tzdata>=2024.1; sys_platform == 'win32'",
+]
 
 [project.urls]
-Homepage = "https://github.com/MMALI3287/ccburn"
+Homepage = "https://github.com/MMALI3287/vibewatt"
+Issues = "https://github.com/MMALI3287/vibewatt/issues"
+Documentation = "https://github.com/MMALI3287/vibewatt/tree/master/docs"
 
 [project.scripts]
-ccburn = "ccburn.cli:main"
+vibewatt = "vibewatt.cli:main"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.16.7",
+  "httpx>=0.27",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's Depends(...) as a parameter default is the documented pattern, not
+# the mutable-default-argument bug B008 flags.
+"vibewatt/api/routes.py" = ["B008"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["ccburn"]
+packages = ["vibewatt"]

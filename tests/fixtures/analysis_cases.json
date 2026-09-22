@@ -1,0 +1,9 @@
+{
+  "cache": {"trigger": {"input": 1000000}, "quiet": {"input": 200000}},
+  "cache_to_output": {"trigger": {"cache_read": 200000, "output": 100}, "quiet": {"cache_read": 200000, "output": 2000}},
+  "subagent_heavy": {"trigger": {"sidechain": 1}, "quiet": {"sidechain": 0}},
+  "long_low_output": {"trigger": {"output": 10}, "quiet": {"output": 200}},
+  "model_mix": {"trigger": {"output": 100}, "quiet": {"output": 500}},
+  "fast_mode": {"trigger": {"fast": 1}, "quiet": {"fast": 0}},
+  "context": {"trigger": {"context_used": 900000, "context_max": 1000000}, "quiet": {"context_used": 451019, "context_max": 1000000}}
+}
