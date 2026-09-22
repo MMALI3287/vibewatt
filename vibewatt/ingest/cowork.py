@@ -43,5 +43,5 @@ def discover(cfg: dict | None = None) -> list[Path]:
     return files
 
 
-def parse(path: Path, drops: Counter | None = None) -> Iterator[Turn]:
-    return read_file(COWORK, path, drops)
+def parse(path: Path, drops: Counter | None = None, raw: dict | None = None) -> Iterator[Turn]:
+    return read_file(COWORK, path, drops, raw)

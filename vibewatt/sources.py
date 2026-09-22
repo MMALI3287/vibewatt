@@ -141,12 +141,49 @@ def _turn(source: str, path: Path, rec: dict, cwd: str | None) -> Turn | str:
     )
 
 
-def read_file(source: str, path: Path, drops: Counter | None = None) -> Iterator[Turn]:
+def _raw_tokens(rec: dict) -> int:
+    usage = (rec.get("message") or {}).get("usage") if isinstance(rec.get("message"), dict) else None
+    if not isinstance(usage, dict):
+        return 0
+    total = 0
+    for field in ("input_tokens", "output_tokens"):
+        value = usage.get(field)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            total += int(value)
+    return total
+
+
+def stats_line(rec: dict, path: Path) -> tuple[datetime, str, int, int] | None:
+    """How Claude's own Stats count one record: (time, session, message, tokens).
+
+    Reproduced exactly against the desktop app (33 sessions, 21,183 messages,
+    14,964,413 tokens at 2026-09-15 19:13:45 JST): messages are user and
+    assistant lines outside subagents; tokens are the naive input + output of
+    every assistant line, subagents included, with no dedup and no cache.
+    """
+    kind = rec.get("type")
+    if kind not in ("user", "assistant"):
+        return None
+    stamp = _parse_ts(rec.get("timestamp") or rec.get("_audit_timestamp"))
+    if stamp is None:
+        return None
+    session = str(rec.get("sessionId") or rec.get("session_id") or path.stem)
+    message = 0 if rec.get("isSidechain") else 1
+    tokens = _raw_tokens(rec) if kind == "assistant" else 0
+    return stamp, session, message, tokens
+
+
+def read_file(source: str, path: Path, drops: Counter | None = None,
+              raw: dict | None = None) -> Iterator[Turn]:
     """Every billable response line in one file, not deduped.
 
     Raises OSError when the file cannot be opened, so a sync does not record a
     locked file as read (A-024). A malformed record is skipped and counted in
     `drops` by reason; it never aborts the file (A-023).
+
+    `raw`, when given, collects per (UTC hour, session) the counts Claude's own
+    Stats use (see stats_line). They do not dedupe, so they are only ever shown
+    as a labelled comparison, never as a headline (A-116, A-125).
     """
     drops = drops if drops is not None else Counter()
     # utf-8-sig drops a leading BOM, which otherwise hides the first record (A-069).
@@ -167,6 +204,13 @@ def read_file(source: str, path: Path, drops: Counter | None = None) -> Iterator
             # Carry the last cwd forward: some records omit it (A-065).
             if isinstance(rec.get("cwd"), str) and rec["cwd"]:
                 cwd = rec["cwd"]
+            if raw is not None:
+                line_stats = stats_line(rec, path)
+                if line_stats is not None:
+                    stamp, session, message, tokens = line_stats
+                    entry = raw.setdefault((stamp.isoformat()[:13], session), [0, 0])
+                    entry[0] += message
+                    entry[1] += tokens
             if rec.get("type") != "assistant":
                 continue
             try:

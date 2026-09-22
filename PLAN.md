@@ -361,8 +361,14 @@ Each names its data source and how to prove it works.
 **Verify:** snapshot test on a fixture year; totals match `/api/summary` for the same range.
 
 ### 7.4 Anomaly detection
-**Definition:** a day whose cost exceeds `median(trailing 28 days) + 3 × MAD`. Median and MAD, not mean and stdev — one runaway session would poison a mean.
-**Needs:** at least 14 days of history; below that, report "not enough history" rather than a finding.
+**Definition (amended 2026-09-22, Phase 6.5f):** a day whose cost exceeds
+`median + 3 × max(1.4826 × MAD, 0.1 × median)` over the previous 28 active,
+fully priced days. Median and MAD, not mean and stdev: one runaway session
+would poison a mean. Inactive days are not $0 days. The floor keeps a flat
+baseline (MAD = 0) from flagging noise.
+**Needs:** at least 14 earlier active days; below that, say "not enough history". A
+range with no activity says so instead. A day with unpriced spend names the
+models.
 **Verify:** a fixture with 30 flat days plus one 10x day yields exactly one finding; 30 flat days yield none.
 
 ### 7.5 Burn / spike alerts
@@ -375,6 +381,10 @@ Each names its data source and how to prove it works.
 **Definition:** flag sessions whose hit rate is below 50% while total input exceeds 200k tokens, with the dollar value of the miss.
 **Out of scope:** reading prompt text to find repeated prefixes. Ratios only, no content.
 **Verify:** a fixture session with 0% hit rate and 1M input tokens produces a finding whose stated saving equals `input × (rate.input − rate.cache_read)`.
+**Deviation (recorded 2026-09-22, A-119):** the implemented saving also converts cache
+writes to reads, so a write-heavy session states more than the formula above (8.0
+vs 1.35 on 300k input with 700k 1h writes). `docs/PHASE-5.md` describes savings as
+upper-bound scenarios. The spec fixture, which has no writes, still matches.
 
 ### 7.7 Cost optimisation tips
 **Source:** the finding set, rendered as ranked advice.
@@ -801,6 +811,39 @@ Statusline fixtures from Claude Code 2.1.80+ ingest correctly.
 one 10x day still yield exactly one. On the audit's real-data snapshot, the
 reconciliation panel reproduces the desktop figures (33 / 21,183 / 15M) from
 the raw-line rule.
+**Status (2026-09-22): done** on `fix/phase-6-5f-analysis-wrapped`. Record:
+- Anomaly: rule in 7.4. `anomaly.detect()` returns a status; the reasons it
+  could not evaluate a day go to the notes and into the anomaly group itself
+  (A-043, A-093). An unpriced day leaves the baseline instead of blocking the
+  next 28 days.
+- Findings: `analysis.current()` serves the stored snapshot until the store
+  generation or the day changes; only `POST /api/analysis` forces a run
+  (A-092). **Changed: old snapshot rows are deleted, not kept inactive.** Why:
+  each filter selection left a permanent snapshot behind; nothing read them.
+  Alert rows are kept, because a fired alert must stay known.
+- Dismissals: schema 9 `dismissals` table. A session finding stays dismissed
+  under every filter; other findings per selection (A-091). Existing dismissals
+  were carried over.
+- `GET /api/findings/{id}` and the route-backed modal
+  `/analysis/findings/:id` (A-046). Severity and "show dismissed" are URL
+  parameters (A-123). Peak findings name the zone (A-122).
+- Stats reconciliation: `sources.stats_line()` is Claude's Stats rule (messages
+  are user and assistant lines outside subagents; tokens are naive input +
+  output of every assistant line, subagents included; no dedup; no cache; no
+  Cowork). Sync stores it per file, UTC hour and session in `raw_lines`.
+  `GET /api/reconciliation` and the Overview panel show it beside the deduped
+  figures, with the reasons and the definition of a session (A-116, A-125).
+  `scripts/reconcile_stats.py --until 2026-09-15T19:13:45+09:00` reproduces the
+  desktop's 33 sessions, 21,183 messages and 14,964,413 tokens exactly.
+- Wrapped: the year is typed into a draft and committed on Enter or blur while
+  the previous year stays mounted (A-051); tables have empty rows and zero
+  windows read as unavailable (A-100); aliased projects merge (A-049, done in
+  6.5e). Tests with JST boundaries, a leap-day streak and three months of model
+  mix with cache savings (A-052, A-097).
+- Tests: `tests/test_analysis_wrapped.py` (12); the weekly summary is checked
+  against a real store with a planted title (A-099); KPI formulas (A-077) and the
+  cloud-twin case (A-098) are in `tests/test_mutation_guards.py`; e2e for the
+  modal, URL state, the Wrapped year and the panel.
 
 #### Phase 6.5g: Frontend correctness and accessibility
 **Do:**

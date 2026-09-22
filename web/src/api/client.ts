@@ -73,6 +73,16 @@ export async function getFindings(f: Filters, includeDismissed: boolean) {
   }));
 }
 
+export async function getFinding(id: string) {
+  return unwrap(await api.GET("/api/findings/{finding_id}", { params: { path: { finding_id: id } } }));
+}
+
+export async function getReconciliation(f: Filters) {
+  return unwrap(await api.GET("/api/reconciliation", {
+    params: { query: { from: f.from ?? undefined, to: f.to ?? undefined } },
+  }));
+}
+
 export async function dismissFinding(id: string, dismissed: boolean) {
   return unwrap(await api.POST("/api/findings/{finding_id}/dismiss", {
     params: { path: { finding_id: id } }, body: { dismissed },

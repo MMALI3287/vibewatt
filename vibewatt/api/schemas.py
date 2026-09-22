@@ -252,9 +252,34 @@ class FindingOut(BaseModel):
     created_at: str
 
 
+class DedupedFiguresOut(BaseModel):
+    responses: int
+    input_output_tokens: int
+    all_tokens: int
+    sessions: int
+
+
+class StatsFiguresOut(BaseModel):
+    messages: int
+    tokens: int
+    sessions: int
+
+
+class ReconciliationOut(BaseModel):
+    source: str
+    deduped: DedupedFiguresOut
+    # What Claude's own Stats would show for the same days. A comparison only.
+    stats_equivalent: StatsFiguresOut
+    token_ratio: float | None
+    reasons: list[str]
+    session_definition: str
+
+
 class AnalysisOut(BaseModel):
     findings: list[FindingOut]
     notes: list[str]
+    # Why anomaly detection could not run, shown in the anomaly group (A-093).
+    anomaly_notes: list[str] = []
     analyzed_at: str
 
 

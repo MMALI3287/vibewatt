@@ -17,7 +17,8 @@ export function PlanMeters() {
     <div className="meters" aria-label="Plan utilization (account-wide)">
       {quota.isPending && <p className="muted">Loading plan utilization…</p>}
       {quota.isError && <p className="muted">Plan utilization unavailable</p>}
-      {quota.isSuccess && !quota.data && <p className="muted">Plan utilization unavailable</p>}
+      {/* No reading, or a reading with no windows, is the same to a reader (A-100). */}
+      {quota.isSuccess && !quota.data?.windows.length && <p className="muted">Plan utilization unavailable</p>}
       {quota.data?.windows.map((w) => {
         const pct = clamp(w.utilization);
         const pace = w.pace_delta;
