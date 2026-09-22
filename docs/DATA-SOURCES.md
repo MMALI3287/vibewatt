@@ -43,6 +43,28 @@ what was tried, what worked and what did not, so nobody re-derives it.
   records across `--mode display|calculate|auto`. This is why the built-in table
   outranks any fetched one.
 
+## Other inputs (Phases 5-6)
+
+- **Tool reads.** `Read` tool calls in Claude Code logs, for the repeated-read
+  finding. Only a keyed hash of `(session, path)` is stored: an HMAC under a
+  per-install random key in the store's `meta`, so a guessed path cannot be
+  confirmed from a copied store (A-121).
+- **Session titles.** See above: one title per session.
+- **Desktop plan history.** `plan-usage-history.json`, read only, version 2. See
+  PLAN.md section 2.5.
+
+## Outbound calls
+
+Every request vibewatt makes. Each has a size cap and a timeout; none is made
+from a page request unless noted.
+
+| Call | Method, URL | Sends | Cap, timeout | When |
+|---|---|---|---|---|
+| Pricing table | GET `raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json` | nothing | 16 MiB, 10 s | CLI reports and `serve` startup, cached 24 h; `--offline` skips |
+| Plan utilization | GET `api.anthropic.com/api/oauth/usage` | Claude Code OAuth token | 64 KiB, 10 s | fallback only, at most every 10 min, backs off on 429; never from a page |
+| Service status | GET `status.claude.com/api/v2/summary.json` | nothing | 512 KiB, 3 s total | dashboard banner, cached 5 min; not when offline |
+| AI weekly summary | POST `api.anthropic.com/v1/messages` | `ANTHROPIC_API_KEY`, weekly aggregates | 64 KiB each way, 15 s | a button click with `ai_summary.enabled`; off by default |
+
 ## Not found
 
 - **A documented REST endpoint for listing sessions.** `/api/oauth/usage` is the

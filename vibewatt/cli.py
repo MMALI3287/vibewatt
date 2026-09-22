@@ -83,6 +83,14 @@ def serialize(report) -> dict:
     return payload
 
 
+def _cell(value):
+    # A spreadsheet runs a cell that starts with = + - @ as a formula. Model and
+    # project names come from logs, so they are neutralized (A-072).
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
+
+
 def to_csv(report) -> str:
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
@@ -92,39 +100,9 @@ def to_csv(report) -> str:
     for (day, model), b in sorted(report.by_day_model.items()):
         # An unpriced row has no cost at all, not a cost of zero.
         cost = "" if b.unpriced and not b.cost else f"{b.cost:.6f}"
-        writer.writerow([day, model, b.turns, b.input, b.cache_5m,
+        writer.writerow([day, _cell(model), b.turns, b.input, b.cache_5m,
                          b.cache_1h, b.cache_read, b.output, cost, b.unpriced])
     return out.getvalue()
-
-
-def mask_projects(report) -> None:
-    """Replace project names with stable pseudonyms, for sharing a screenshot."""
-    renamed = {}
-    for index, (name, bucket) in enumerate(
-        sorted(report.by_project.items(), key=lambda kv: kv[1].cost, reverse=True), 1
-    ):
-        renamed[f"project {index}"] = bucket
-    report.by_project.clear()
-    report.by_project.update(renamed)
-
-
-def apply_aliases(report, aliases: dict) -> None:
-    if not aliases:
-        return
-    from .aggregate import Bucket
-
-    merged: dict = {}
-    for name, bucket in report.by_project.items():
-        label = aliases.get(name, name)
-        if label in merged:
-            existing = merged[label]
-            for f in ("turns", "input", "cache_5m", "cache_1h", "cache_read",
-                      "output", "thinking", "web_searches", "cost"):
-                setattr(existing, f, getattr(existing, f) + getattr(bucket, f))
-        else:
-            merged[label] = bucket
-    report.by_project.clear()
-    report.by_project.update(merged)
 
 
 def statusline(cfg, tz, raw: str) -> str:
@@ -201,18 +179,29 @@ def build_report(cfg, tz, *, source="all", date_from=None, date_to=None,
     if refresh:
         files = discover(cfg)
         duplicates = sync_store(cfg, tz, files).duplicates
+    from .aggregate import _merge_into
+    from .projects import project_map, relabel_buckets, resolve
+
     with store.connect() as conn:
+        labels = project_map(conn, cfg)
         report = from_store(
             conn, tz, source=source, date_from=date_from, date_to=date_to,
-            project=project, model=model,
+            project=resolve(labels, project, bool(cfg.get("mask_projects"))), model=model,
             include_sidechains=cfg.get("include_sidechains", True),
             session_hours=cfg.get("session_length_hours", 5),
             overrides=cfg.get("pricing_overrides"), parts=parts,
         )
 
-    apply_aliases(report, cfg.get("project_aliases") or {})
-    if cfg.get("mask_projects"):
-        mask_projects(report)
+    # Aliases and masking, the same mapping every endpoint uses.
+    report.by_project = relabel_buckets(report.by_project, labels)
+    cells: dict = {}
+    for (day, src, raw, mdl), bucket in report.by_cell.items():
+        key = (day, src, labels.get(raw, raw), mdl)
+        if key in cells:
+            _merge_into(cells[key], bucket)
+        else:
+            cells[key] = bucket
+    report.by_cell = cells
 
     q, quota_note = quota.read(cfg) if with_quota else (None, None)
     return report, q, quota_note, duplicates, files
@@ -241,15 +230,21 @@ def harvest(args, cfg, tz) -> int:
     try:
         with open(args.file, "r", encoding="utf-8") as fh:
             payload = json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
-        raise SystemExit(f"cannot read {args.file}: {exc}")
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise SystemExit(f"cannot read {args.file}: {exc}") from exc
     # Accept the tool's envelope or a bare list.
     if isinstance(payload, dict) and "ccr" in payload:
         payload = payload["ccr"]
     with store.connect() as conn:
-        written, skipped = store.upsert_cloud_sessions(conn, payload)
+        counts = store.upsert_cloud_sessions(conn, payload)
         info = store.summary(conn)
-    print(f"  harvested {written} session(s), skipped {skipped} with no usage block")
+    if not any(counts.values()):
+        # A file that holds no session listing is an error, not a silent success (A-031).
+        raise SystemExit(f"{args.file} holds no session entries: expected a list, "
+                         '{"data": [...]} or {"ccr": ...}')
+    print(f"  harvested {counts['written']} session(s), skipped {counts['skipped']} with no "
+          f"usage block, {counts['rejected_no_id']} without an id, "
+          f"{counts['skipped_environment']} that ran locally")
     for row in info["cloud_by_surface"]:
         print(f"    {row['surface']:<12} {row['n']:>4} session(s)   ${row['cost'] or 0:,.2f}")
     return 0
@@ -327,7 +322,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", metavar="PATH", help="write html/csv/json here instead of stdout")
     p.add_argument("--host", default="127.0.0.1", help="serve: bind address")
     p.add_argument("--port", type=int, default=8777, help="serve: port")
-    p.add_argument("--refresh", type=int, default=30, help="serve: refresh seconds (0 disables)")
     p.add_argument("--no-browser", action="store_true", help="serve: do not open a browser")
     p.add_argument("--no-color", action="store_true")
     p.add_argument("--plan", type=float, metavar="USD",
@@ -380,14 +374,18 @@ def main(argv: list[str] | None = None) -> int:
         import uvicorn
 
         from .api import create_app
+        from .api.security import is_loopback
 
-        app = create_app(cfg)
-        shown = args.host if args.host != "0.0.0.0" else "127.0.0.1"
+        local = is_loopback(args.host)
+        app = create_app(cfg, extra_hosts=None if local else {args.host})
+        shown = "127.0.0.1" if args.host in ("0.0.0.0", "::") else args.host
         url = f"http://{shown}:{args.port}/"
         print(f"  vibewatt dashboard on {url}")
-        print(f"  JSON at {url}api/usage")
-        if args.host == "0.0.0.0":
-            print("  bound to all interfaces - anyone who can reach this port sees your usage")
+        if not local:
+            # Any non-loopback bind, not just 0.0.0.0 (A-103).
+            print(f"  WARNING: bound to {args.host}. Anyone who can reach this port can read your"
+                  " usage and session titles, trigger syncs and spend API credit on summaries.",
+                  file=sys.stderr)
         print("  ctrl-c to stop")
         if not args.no_browser:
             threading.Timer(0.5, lambda: webbrowser.open(url)).start()

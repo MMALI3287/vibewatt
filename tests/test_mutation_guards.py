@@ -301,7 +301,7 @@ def test_cloud_session_without_usage_is_skipped(tmp_path):
                     "external_metadata": {},
                 }
             ],
-        ) == (0, 1)
+        ) == {"written": 0, "skipped": 1, "rejected_no_id": 0, "skipped_environment": 0}
         assert conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 0
 
 

@@ -18,7 +18,10 @@ from ..cli import build_report, report_zone, serialize, sync_store
 from .routes import _quota_out, router
 
 
-def create_app(cfg: dict | None = None) -> FastAPI:
+def create_app(cfg: dict | None = None, *, extra_hosts: set[str] | None = None) -> FastAPI:
+    """`extra_hosts` adds a non-loopback bind name to the Host allowlist."""
+    from .security import LocalOnly
+
     cfg = cfg or configmod.load()
     tz = report_zone(cfg)
 
@@ -96,8 +99,10 @@ def create_app(cfg: dict | None = None) -> FastAPI:
     app.state.report = report
 
     app.include_router(router)
+    # Added last, so it runs first: nothing reaches a route from a foreign Host.
+    app.add_middleware(LocalOnly, extra_hosts=extra_hosts)
 
-    @app.get("/api/usage")
+    @app.get("/api/usage", include_in_schema=False)
     def legacy_usage() -> JSONResponse:
         ensure_synced()
         report, q, *_ = build_report(cfg, tz)
@@ -107,7 +112,7 @@ def create_app(cfg: dict | None = None) -> FastAPI:
             payload["quota"] = quota_out.model_dump()
         return JSONResponse(payload)
 
-    @app.get("/api/dataset")
+    @app.get("/api/dataset", include_in_schema=False)
     def legacy_dataset() -> JSONResponse:
         from ..ui import build_dataset
 
@@ -116,8 +121,8 @@ def create_app(cfg: dict | None = None) -> FastAPI:
         return JSONResponse(json.loads(json.dumps(build_dataset(report, cfg, quota=q,
                                                                   duplicates=duplicates))))
 
-    @app.get("/", response_class=HTMLResponse)
-    @app.get("/index.html", response_class=HTMLResponse)
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    @app.get("/index.html", response_class=HTMLResponse, include_in_schema=False)
     def legacy_page() -> str:
         from ..ui import build_dataset, build_page
 

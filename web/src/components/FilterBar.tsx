@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { getSessionFacets, getSummary } from "../api/client";
-import { DEFAULT_FILTERS, useFilters, type Metric } from "../lib/filters";
+import { DEFAULT_FILTERS, toSource, useFilters, type Metric } from "../lib/filters";
 
 // Options come from the unfiltered summary so picking one value never hides the others.
 export function FilterBar() {
@@ -38,7 +38,7 @@ export function FilterBar() {
       </label>
       <label>
         Surface
-        <select name="source" value={filters.source} onChange={(e) => update({ source: e.target.value })}>
+        <select name="source" value={filters.source} onChange={(e) => update({ source: toSource(e.target.value) })}>
           <option value="all">All</option>
           {withCurrent(sources, filters.source === "all" ? null : filters.source).map((s) => (
             <option key={s} value={s}>

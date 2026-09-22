@@ -291,7 +291,7 @@ its client from OpenAPI.
 ```
 GET  /api/summary?from&to&source&project&model&metric
 GET  /api/daily?...           day -> tokens, cost, responses
-GET  /api/hourly?...          hour-of-day matrix
+GET  /api/hourly?...          hour-of-day vector (24 buckets; decided in 6.5e, A-115)
 GET  /api/sessions?...&cursor&limit     paginated, includes titles
 GET  /api/sessions/{id}       one session with its turns
 GET  /api/breakdown/{dim}?... dim in model|project|source|surface
@@ -726,6 +726,49 @@ Statusline fixtures from Claude Code 2.1.80+ ingest correctly.
   succeeds.
 - A GET during a sync never returns 500.
 - The OpenAPI diff check passes.
+**Status (2026-09-22): done** on `fix/phase-6-5e-security-api`. Record:
+- `api/security.py` `LocalOnly`, the outermost middleware: Host must be a
+  loopback name (421 otherwise) unless `serve --host` names another. A
+  non-GET needs `Sec-Fetch-Site: same-origin` (or `none`); without that header
+  a present `Origin` must match the Host. The browser's verdict wins over
+  Origin because Vite's dev proxy rewrites Host. A request with a body must be
+  `application/json`. Requests with neither header (curl) are not browser-driven
+  and pass. `serve` warns on any non-loopback bind.
+- SQLite: `busy_timeout` 30 s; migrations run only when `meta.schema` is
+  behind; sync commits after discovery and after each batch; a second sync
+  gets 409 instead of queueing.
+- `POST /api/sync` streams NDJSON progress with `Accept: application/x-ndjson`
+  and returns JSON otherwise. `/api/health` is typed and reports `last_sync`
+  and coverage (files per source, gaps of 7+ days, dropped records).
+- `web/openapi.json` is now committed. `tests/test_security_api.py` fails when
+  the live schema differs or a 200 response is untyped. This stands in for the
+  CI step until Phase 7 adds CI: run `npm run gen:api` and commit both files.
+- Filters: one validated dependency (dates 1970-01-01..9998-12-31, `from <=
+  to`, literal `source` and `metric`); `/api/wrapped?year` is 1970..9998.
+- Projects: `vibewatt/projects.py` maps raw names to shown names (aliases, then
+  a mask numbered by all-time cost) for every response and resolves a shown
+  name back for every filter. **Removed `cli.apply_aliases()` and
+  `cli.mask_projects()`.** Why: each endpoint applied its own part, so shown
+  names could not be filtered on and session endpoints leaked raw names.
+- **Removed `breakdown/surface`.** Why: it was an alias of `breakdown/source`
+  over local logs, while the surfaces that matter (web, Cowork remote) are the
+  ones local logs cannot see. Sessions carry the real surface.
+- **Removed the `serve --refresh` flag.** Why: it did nothing since Phase 3.
+- `/api/blocks` returns the active block first, then newest first, with `limit`.
+- Harvest: typed body (a list, `{data}` or `{ccr}`), 20 MiB cap, entries without
+  an id rejected, sessions that ran locally (a local log or a non-cloud
+  `environment_kind`) skipped, a session without `cost_usd` stored unpriced. The
+  API and the CLI report per-reason counts; an input with no entries is an error.
+- Status uses `summary.json` with a 3-second total deadline in a worker thread.
+  Pricing download capped at 16 MiB, the quota response at 64 KiB.
+- CSV export prefixes cells starting with `= + - @` with `'`.
+- Schema 8: tool read path hashes are HMACs under a per-install key; old
+  unkeyed hashes were deleted and are re-read from the logs that still exist.
+- Legacy `/`, `/api/usage` and `/api/dataset` are hidden from the schema; Phase 7
+  removes them with `ui.py`.
+- Docs: README privacy rewritten (A-061); DATA-SOURCES lists every input and
+  outbound call (A-108).
+- Tests: `tests/test_security_api.py` (32).
 
 #### Phase 6.5f: Analysis corrections, Wrapped and stats reconciliation
 **Do:**

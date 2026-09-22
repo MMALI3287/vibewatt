@@ -12,6 +12,19 @@ JST = timezone(timedelta(hours=9))
 
 
 @pytest.fixture(autouse=True)
+def loopback_test_client(monkeypatch):
+    """TestClient sends Host: testserver, which the Host allowlist rejects."""
+    from starlette.testclient import TestClient
+
+    original = TestClient.__init__
+
+    def init(self, app, base_url="http://127.0.0.1:8777", **kw):
+        original(self, app, base_url=base_url, **kw)
+
+    monkeypatch.setattr(TestClient, "__init__", init)
+
+
+@pytest.fixture(autouse=True)
 def isolated_home(tmp_path, monkeypatch):
     """No test may read the developer's real ~/.claude or write their real store."""
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))

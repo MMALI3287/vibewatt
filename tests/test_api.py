@@ -231,7 +231,8 @@ def test_harvest_ingests_a_cloud_session(tmp_path):
     }]
     resp = client.post("/api/harvest", json=payload)
     assert resp.status_code == 200
-    assert resp.json() == {"written": 1, "skipped": 0}
+    assert resp.json() == {"written": 1, "skipped": 0, "rejected_no_id": 0,
+                           "skipped_environment": 0}
 
     sessions = client.get("/api/sessions").json()
     cloud_rows = [r for r in sessions if r["harvested"]]
@@ -273,7 +274,7 @@ def test_export_csv_and_json(logs):
     assert json_resp.status_code == 200
 
     bad = client.get("/api/export", params={"format": "xml"})
-    assert bad.status_code == 400
+    assert bad.status_code == 422  # rejected by the typed parameter
 
 
 def test_bad_date_filter_is_400(logs):

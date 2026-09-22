@@ -292,7 +292,7 @@ def from_store(
     source: str = "all",
     date_from: date | None = None,
     date_to: date | None = None,
-    project: str | None = None,
+    project: str | list[str] | None = None,
     model: str | None = None,
     include_sidechains: bool = True,
     session_hours: int = 5,
@@ -312,9 +312,12 @@ def from_store(
     if source and source != "all":
         where.append("source = ?")
         args.append(source)
-    if project:
-        where.append("project = ?")
-        args.append(project)
+    if project is not None:
+        from .projects import clause
+
+        sql, values = clause("project", project)
+        where.append(sql)
+        args.extend(values)
     if model:
         where.append("model = ?")
         args.append(model)
@@ -384,7 +387,7 @@ def from_store(
                 f" FROM rollup WHERE {kept} GROUP BY hr ORDER BY hr", args),
             session_hours,
         )
-    if (not source or source == "all") and not project:
+    if (not source or source == "all") and project is None:
         _add_history(conn, report, date_from, date_to, model, overrides)
     return report
 
