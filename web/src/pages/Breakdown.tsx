@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useTitle } from "../lib/title";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router";
 import { getSummary } from "../api/client";
 import { DataTable } from "../components/DataTable";
 import { UsageSummary } from "../components/UsageSummary";

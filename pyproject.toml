@@ -3,7 +3,7 @@ name = "vibewatt"
 version = "0.3.0"
 description = "Token usage, cost and plan utilization for Claude Code and Cowork, from local data"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "MD Musaddique Ali Erfan" }]
 keywords = ["claude", "claude-code", "cowork", "usage", "tokens", "cost"]
@@ -19,8 +19,8 @@ classifiers = [
   "Topic :: Software Development",
 ]
 dependencies = [
-  "fastapi>=0.115",
-  "uvicorn>=0.30",
+  "fastapi>=0.141.1",
+  "uvicorn>=0.53",
   # Windows ships no IANA database, so ZoneInfo("Asia/Tokyo") fails without it (A-058).
   "tzdata>=2024.1; sys_platform == 'win32'",
 ]
@@ -37,7 +37,7 @@ vibewatt = "vibewatt.cli:main"
 dev = [
   "pytest>=8.0",
   "ruff>=0.16.7",
-  "httpx>=0.27",
+  "httpx2",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -57,3 +57,8 @@ artifacts = ["vibewatt/static/**"]
 
 [tool.hatch.build.hooks.custom]
 path = "scripts/build_hook.py"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+  "ignore:The anyio.abc.BlockingPortal alias is deprecated.*:DeprecationWarning:starlette.testclient",
+]

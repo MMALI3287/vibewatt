@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { dismissFinding, getFinding, getFindings, type Finding } from "../api/client";
 import { useFilters } from "../lib/filters";
 import { fmtUsd } from "../lib/format";

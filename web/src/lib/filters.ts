@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 
 export type Metric = "cost" | "tokens";
 export type Source = "all" | "claude-code" | "cowork" | "web";

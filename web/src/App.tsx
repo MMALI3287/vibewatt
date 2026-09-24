@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Route, Routes, useLocation, type Location } from "react-router-dom";
+import { Route, Routes, useLocation, type Location } from "react-router";
 import { FilterBar } from "./components/FilterBar";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
