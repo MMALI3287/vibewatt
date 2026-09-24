@@ -977,6 +977,12 @@ PASS linux: clean wheel, 11 assets, SPA, APIs, fixture data, no Node.
 PASS installed dashboard: six routes, both themes, session deep link, no runtime errors
 ```
 
+Post-commit clean-snapshot verification reran all 267 Python tests, 12 frontend
+unit tests and 47 browser checks. It caught a verification-script resource leak:
+`sqlite3.Connection` context management commits but does not close the handle.
+The idempotence probe now closes it explicitly so Windows can clean its temporary
+database. This changes only the gate script, not the application or stored data.
+
 The wheel checks use fresh pip-installed venvs in paths with spaces and Japanese
 characters, launch outside the checkout and hide Node from the server PATH.
 Sync idempotence and doctor use fixtures. Installed checks ran on Windows Python

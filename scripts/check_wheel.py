@@ -14,6 +14,7 @@ import tempfile
 import time
 import venv
 import zipfile
+from contextlib import closing
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -116,7 +117,7 @@ def main() -> None:
                 stdout=subprocess.DEVNULL,
             )
             if command == "sync":
-                with sqlite3.connect(root / "data/vibewatt.db") as connection:
+                with closing(sqlite3.connect(root / "data/vibewatt.db")) as connection:
                     snapshots.append(
                         connection.execute(
                             "SELECT COUNT(*), SUM(input), SUM(output), SUM(cost) FROM turns"
