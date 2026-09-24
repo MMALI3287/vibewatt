@@ -6,7 +6,7 @@ import hashlib
 import math
 import sqlite3
 from collections import deque
-from datetime import datetime, timedelta, timezone, tzinfo
+from datetime import UTC, datetime, timedelta, tzinfo
 from statistics import median
 
 from .. import store
@@ -17,7 +17,7 @@ _SCOPE = "phase6-alerts"
 def _time(value: str | None) -> datetime | None:
     try:
         parsed = datetime.fromisoformat(value or "")
-        return parsed.astimezone(timezone.utc) if parsed.tzinfo else None
+        return parsed.astimezone(UTC) if parsed.tzinfo else None
     except (TypeError, ValueError):
         return None
 
@@ -60,48 +60,69 @@ def evaluate(
     from ..aggregate import from_store
     from .forecast import forecast
 
-    instant = (now or datetime.now(tz)).astimezone(timezone.utc)
+    instant = (now or datetime.now(tz)).astimezone(UTC)
     day = instant.astimezone(tz).date().isoformat()
     candidates = []
     for window in forecast(conn, instant):
         key = f"{window['key']}:{window['scope']}:{window['episode_start']}"
         band = window["band"]
         if window["used"] >= 100:
-            detail = (f"Account-wide utilization reached {window['used']:.0f}% before the "
-                      f"reset at {window['resets_at']}.")
+            detail = (
+                f"Account-wide utilization reached {window['used']:.0f}% before the "
+                f"reset at {window['resets_at']}."
+            )
         elif band and band["p50"] >= 100:
-            detail = (f"At {window['used']:.0f}% with {window['elapsed_pct']:.0f}% of the window "
-                      f"gone, this account's past windows put the reset at "
-                      f"{band['p10']:.0f}-{band['p90']:.0f}% (median {band['p50']:.0f}%).")
+            detail = (
+                f"At {window['used']:.0f}% with {window['elapsed_pct']:.0f}% of the window "
+                f"gone, this account's past windows put the reset at "
+                f"{band['p10']:.0f}-{band['p90']:.0f}% (median {band['p50']:.0f}%)."
+            )
         else:
             continue
-        candidates.append(_alert("burn", key, f"{window['label']} may reach its limit",
-                                 detail, day))
+        candidates.append(
+            _alert("burn", key, f"{window['label']} may reach its limit", detail, day)
+        )
 
     # Spikes: responses in the last 24 hours against the 50 priced responses
     # before each one. Older spikes are history, not active alerts.
     since = (instant - SPIKE_LOOKBACK).isoformat()
-    prior = [r[0] for r in conn.execute(
-        "SELECT cost FROM turns WHERE ts < ? AND cost IS NOT NULL AND cost >= 0"
-        " ORDER BY ts DESC LIMIT 50", (since,))][::-1]
+    prior = [
+        r[0]
+        for r in conn.execute(
+            "SELECT cost FROM turns WHERE ts < ? AND cost IS NOT NULL AND cost >= 0"
+            " ORDER BY ts DESC LIMIT 50",
+            (since,),
+        )
+    ][::-1]
     baseline: deque[float] = deque(prior, maxlen=50)
     for row in conn.execute(
         "SELECT msg_id, request_id, ts, cost FROM turns WHERE ts >= ? AND ts <= ?"
-        " ORDER BY ts, msg_id, request_id", (since, instant.isoformat())
+        " ORDER BY ts, msg_id, request_id",
+        (since, instant.isoformat()),
     ):
         if not _number(row["cost"]):
             continue
         if len(baseline) == 50 and row["cost"] > 5 * median(baseline):
-            candidates.append(_alert(
-                "spike", repr((row["msg_id"], row["request_id"])),
-                "Unusually expensive local response",
-                f"Local response cost ${row['cost']:.4f} exceeds 5x the previous "
-                f"50 priced responses' median (${median(baseline):.4f}).", day))
+            candidates.append(
+                _alert(
+                    "spike",
+                    repr((row["msg_id"], row["request_id"])),
+                    "Unusually expensive local response",
+                    f"Local response cost ${row['cost']:.4f} exceeds 5x the previous "
+                    f"50 priced responses' median (${median(baseline):.4f}).",
+                    day,
+                )
+            )
         baseline.append(row["cost"])
 
     active = None
-    report = from_store(conn, tz, session_hours=session_hours, overrides=overrides,
-                        parts=frozenset({"blocks"}))
+    report = from_store(
+        conn,
+        tz,
+        session_hours=session_hours,
+        overrides=overrides,
+        parts=frozenset({"blocks"}),
+    )
     for block in reversed(report.blocks):
         if block.start <= instant < block.end:
             minutes = max(1.0, (instant - block.start).total_seconds() / 60)

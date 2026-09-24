@@ -15,11 +15,12 @@ import json
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 CLAUDE_CODE = "claude-code"
 COWORK = "cowork"
+
 
 @dataclass(frozen=True)
 class Turn:
@@ -48,7 +49,7 @@ def _parse_ts(raw: str | None) -> datetime | None:
     if not raw:
         return None
     try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(timezone.utc)
+        return datetime.fromisoformat(raw).astimezone(UTC)
     except ValueError:
         return None
 
@@ -120,9 +121,12 @@ def _turn(source: str, path: Path, rec: dict, cwd: str | None) -> Turn | str:
         cache_1h=c1h,
         cache_read=_int(usage.get("cache_read_input_tokens")),
         output=_int(usage.get("output_tokens")),
-        thinking=_int(details.get("thinking_tokens")) if isinstance(details, dict) else 0,
-        web_searches=(_int(server.get("web_search_requests"))
-                      if isinstance(server, dict) else 0),
+        thinking=_int(details.get("thinking_tokens"))
+        if isinstance(details, dict)
+        else 0,
+        web_searches=(
+            _int(server.get("web_search_requests")) if isinstance(server, dict) else 0
+        ),
         fast=usage.get("speed") == "fast",
         # Only "us" changes the price (1.1x). "global", "not_available" and any
         # other value bill at the standard rate.
@@ -142,7 +146,11 @@ def _turn(source: str, path: Path, rec: dict, cwd: str | None) -> Turn | str:
 
 
 def _raw_tokens(rec: dict) -> int:
-    usage = (rec.get("message") or {}).get("usage") if isinstance(rec.get("message"), dict) else None
+    usage = (
+        (rec.get("message") or {}).get("usage")
+        if isinstance(rec.get("message"), dict)
+        else None
+    )
     if not isinstance(usage, dict):
         return 0
     total = 0
@@ -173,8 +181,9 @@ def stats_line(rec: dict, path: Path) -> tuple[datetime, str, int, int] | None:
     return stamp, session, message, tokens
 
 
-def read_file(source: str, path: Path, drops: Counter | None = None,
-              raw: dict | None = None) -> Iterator[Turn]:
+def read_file(
+    source: str, path: Path, drops: Counter | None = None, raw: dict | None = None
+) -> Iterator[Turn]:
     """Every billable response line in one file, not deduped.
 
     Raises OSError when the file cannot be opened, so a sync does not record a
@@ -225,7 +234,9 @@ def read_file(source: str, path: Path, drops: Counter | None = None,
             yield turn
 
 
-def response_key(msg_id: str, request_id: str, session: str, ts: datetime) -> tuple[str, str]:
+def response_key(
+    msg_id: str, request_id: str, session: str, ts: datetime
+) -> tuple[str, str]:
     """Identity of one API response, shared by every line that repeats it.
 
     Claude Code writes one line per content block and repeats the response's
@@ -240,7 +251,15 @@ def response_key(msg_id: str, request_id: str, session: str, ts: datetime) -> tu
     return f"{session}:{ts.isoformat()}", ""
 
 
-TOKEN_FIELDS = ("input", "cache_5m", "cache_1h", "cache_read", "output", "thinking", "web_searches")
+TOKEN_FIELDS = (
+    "input",
+    "cache_5m",
+    "cache_1h",
+    "cache_read",
+    "output",
+    "thinking",
+    "web_searches",
+)
 
 
 def _attribution(turn: Turn) -> tuple:
@@ -301,8 +320,11 @@ def load(files: list[tuple[str, Path]]) -> tuple[list[Turn], int]:
 # names a session and ai-title when it names one itself; `summary` records no
 # longer exist (A-059).
 TITLE_RANK = {"custom-title": 4, "ai-title": 3, "last-prompt": 2, "first-user": 1}
-_TITLE_FIELD = {"custom-title": "customTitle", "ai-title": "aiTitle",
-                "last-prompt": "lastPrompt"}
+_TITLE_FIELD = {
+    "custom-title": "customTitle",
+    "ai-title": "aiTitle",
+    "last-prompt": "lastPrompt",
+}
 
 
 def _first_user_text(rec: dict) -> str:
@@ -330,7 +352,8 @@ def read_titles(files: list[tuple[str, Path]]) -> list[dict]:
         with handle:
             for line in handle:
                 if '"type"' not in line or not any(
-                    k in line for k in ('"custom-title"', '"ai-title"', '"last-prompt"', '"user"')
+                    k in line
+                    for k in ('"custom-title"', '"ai-title"', '"last-prompt"', '"user"')
                 ):
                     continue
                 try:
@@ -344,7 +367,9 @@ def read_titles(files: list[tuple[str, Path]]) -> list[dict]:
                     kind = "first-user"
                 if kind not in TITLE_RANK:
                     continue
-                session = str(rec.get("sessionId") or rec.get("session_id") or path.stem)
+                session = str(
+                    rec.get("sessionId") or rec.get("session_id") or path.stem
+                )
                 seen = best.get(session)
                 if kind == "first-user":
                     if seen is not None:
@@ -358,7 +383,11 @@ def read_titles(files: list[tuple[str, Path]]) -> list[dict]:
                 if not text:
                     continue
                 if seen is None or TITLE_RANK[kind] >= TITLE_RANK[seen["kind"]]:
-                    best[session] = {"session": session, "kind": kind,
-                                     "rank": TITLE_RANK[kind], "ts": rec.get("timestamp"),
-                                     "text": text[:500]}
+                    best[session] = {
+                        "session": session,
+                        "kind": kind,
+                        "rank": TITLE_RANK[kind],
+                        "ts": rec.get("timestamp"),
+                        "text": text[:500],
+                    }
     return list(best.values())

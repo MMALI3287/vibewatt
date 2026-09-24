@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import random
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -13,17 +13,30 @@ from vibewatt import cli, quota, store
 from vibewatt.analysis.alerts import evaluate
 from vibewatt.analysis.forecast import Point, episodes, forecast, forecast_series
 
-UTC = timezone.utc
 NOW = datetime(2026, 9, 21, 2, tzinfo=UTC)
 FIVE = timedelta(hours=5)
 
 
-def sample(conn, when, utilization, reset=None, key="five_hour", scope="account",
-           source="statusline"):
+def sample(
+    conn,
+    when,
+    utilization,
+    reset=None,
+    key="five_hour",
+    scope="account",
+    source="statusline",
+):
     conn.execute(
         "INSERT OR IGNORE INTO quota_samples VALUES (?,?,?,?,?,?,?)",
-        (when.isoformat(), key, quota.label_for(key), scope, float(utilization),
-         reset.isoformat() if reset else None, source),
+        (
+            when.isoformat(),
+            key,
+            quota.label_for(key),
+            scope,
+            float(utilization),
+            reset.isoformat() if reset else None,
+            source,
+        ),
     )
 
 
@@ -47,13 +60,34 @@ def response(conn, index, cost, minutes_ago):
     conn.execute(
         f"INSERT INTO turns ({store.TURN_COLUMNS}) VALUES "
         "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (f"m{index}", "r", (NOW - timedelta(minutes=minutes_ago)).isoformat(), "2026-09-21",
-         "claude-code", "demo", "s", "unknown", 100, 0, 0, 0, 100, 0, 0, 0, 0, None, cost,
-         None, 1),
+        (
+            f"m{index}",
+            "r",
+            (NOW - timedelta(minutes=minutes_ago)).isoformat(),
+            "2026-09-21",
+            "claude-code",
+            "demo",
+            "s",
+            "unknown",
+            100,
+            0,
+            0,
+            0,
+            100,
+            0,
+            0,
+            0,
+            0,
+            None,
+            cost,
+            None,
+            1,
+        ),
     )
 
 
 # --- the gate -----------------------------------------------------------------------
+
 
 def test_burst_sampled_series_crossing_100_fires_exactly_once(conn):
     reset = NOW + timedelta(hours=2)
@@ -119,8 +153,10 @@ def test_not_enough_history_is_said(conn):
 
 def test_resets_are_detected_from_the_data():
     t0 = NOW - timedelta(hours=10)
-    points = [Point(t0 + timedelta(minutes=15 * i), u, None)
-              for i, u in enumerate([5, 30, 60, 90, 8, 20, 35])]
+    points = [
+        Point(t0 + timedelta(minutes=15 * i), u, None)
+        for i, u in enumerate([5, 30, 60, 90, 8, 20, 35])
+    ]
     assert [len(e.points) for e in episodes(points, FIVE)] == [4, 3]
     far = [Point(t0, 40, None), Point(t0 + timedelta(hours=6), 45, None)]
     assert len(episodes(far, FIVE)) == 2
@@ -134,7 +170,8 @@ def test_series_without_a_current_window_has_no_forecast():
 # --- sources ------------------------------------------------------------------------
 
 STATUSLINE = {  # Claude Code 2.1.80+ statusline stdin, trimmed
-    "session_id": "abc", "model": {"id": "claude-opus-5", "display_name": "Opus"},
+    "session_id": "abc",
+    "model": {"id": "claude-opus-5", "display_name": "Opus"},
     "rate_limits": {
         "five_hour": {"used_percentage": 23.5, "resets_at": 1_900_000_000},
         "seven_day": {"used_percentage": 41.2, "resets_at": 1_900_300_000},
@@ -148,8 +185,12 @@ def test_statusline_stdin_is_recorded_and_throttled():
     assert "5-hour 24%" in line and "7-day 41%" in line
     cli.statusline({"quota": True}, UTC, raw)  # the same reading seconds later
     with store.connect() as c:
-        rows = [tuple(r) for r in c.execute(
-            "SELECT key, utilization, resets_at, source FROM quota_samples ORDER BY key")]
+        rows = [
+            tuple(r)
+            for r in c.execute(
+                "SELECT key, utilization, resets_at, source FROM quota_samples ORDER BY key"
+            )
+        ]
     assert rows == [
         ("five_hour", 23.5, "2030-03-17T17:46:40+00:00", "statusline"),
         ("seven_day", 41.2, "2030-03-21T05:06:40+00:00", "statusline"),
@@ -180,28 +221,36 @@ def test_stale_dump_is_not_a_sample(tmp_path):  # A-013
     import os
 
     dump = tmp_path / "rate-limits.json"
-    dump.write_text(json.dumps({"rate_limits": {"five_hour": {"used_percentage": 42}}}),
-                    encoding="utf-8")
+    dump.write_text(
+        json.dumps({"rate_limits": {"five_hour": {"used_percentage": 42}}}),
+        encoding="utf-8",
+    )
     old = (NOW - timedelta(hours=2)).timestamp()
     os.utime(dump, (old, old))
     assert quota.from_statusline(dump, now=NOW) is None
     fresh = quota.from_statusline(
-        dump, now=datetime.fromtimestamp(old, UTC) + timedelta(minutes=1))
+        dump, now=datetime.fromtimestamp(old, UTC) + timedelta(minutes=1)
+    )
     assert fresh is not None and fresh.windows[0].utilization == 42
 
 
 def test_desktop_history_import_is_version_gated_and_deduped(tmp_path, conn):
     path = tmp_path / "plan-usage-history.json"
-    blob = {"version": 2, "samples": [
-        {"t": 1_789_000_000_000, "org": "org-1", "u": {"fh": 37, "sd": 34}},
-        {"t": 1_789_000_900_000, "org": "org-1", "u": {"fh": 50, "sd": 35}},
-    ]}
+    blob = {
+        "version": 2,
+        "samples": [
+            {"t": 1_789_000_000_000, "org": "org-1", "u": {"fh": 37, "sd": 34}},
+            {"t": 1_789_000_900_000, "org": "org-1", "u": {"fh": 50, "sd": 35}},
+        ],
+    }
     path.write_text(json.dumps(blob), encoding="utf-8")
     assert quota.import_desktop(conn, path) == (4, "")
     assert quota.import_desktop(conn, path) == (0, "")
     path.write_text(json.dumps({**blob, "version": 3}), encoding="utf-8")
     assert quota.import_desktop(conn, path) == (
-        0, "desktop plan history version 3 not supported")
+        0,
+        "desktop plan history version 3 not supported",
+    )
 
 
 def test_one_desktop_org_and_the_account_are_one_series(conn):
@@ -230,8 +279,9 @@ def test_endpoint_is_throttled_and_backs_off(conn, monkeypatch):
     assert len(calls) == 2  # the second 429 doubled the wait to 20 minutes
 
     later = NOW + timedelta(hours=7)
-    reading = quota.Quota([quota.Window("five_hour", 10, later + timedelta(hours=4))],
-                          "endpoint", later)
+    reading = quota.Quota(
+        [quota.Window("five_hour", 10, later + timedelta(hours=4))], "endpoint", later
+    )
     monkeypatch.setattr(quota, "fetch", lambda: reading)
     assert quota.maybe_fetch(conn, cfg, later) == ""
     monkeypatch.setattr(quota, "fetch", lambda: pytest.fail("fetched while fresh"))
@@ -244,8 +294,9 @@ def test_quota_endpoint_never_calls_the_network(monkeypatch):
     from vibewatt.api import create_app
 
     monkeypatch.setattr(quota, "read_token", lambda: "t")
-    monkeypatch.setattr(quota, "fetch",
-                        lambda *a: pytest.fail("a page load called the endpoint"))
+    monkeypatch.setattr(
+        quota, "fetch", lambda *a: pytest.fail("a page load called the endpoint")
+    )
     client = TestClient(create_app({"offline": False, "quota": True}))
     client.app.state.synced = True
     assert client.get("/api/quota").json() is None
@@ -259,6 +310,7 @@ def test_quota_endpoint_never_calls_the_network(monkeypatch):
 
 # --- spikes and blocks ----------------------------------------------------------------
 
+
 @pytest.mark.parametrize("count,cost,expected", [(49, 10, 0), (50, 5, 0), (50, 6, 1)])
 def test_spike_baseline_and_durable_dedup(conn, count, cost, expected):
     for index in range(count):
@@ -269,7 +321,9 @@ def test_spike_baseline_and_durable_dedup(conn, count, cost, expected):
     result = evaluate(conn, UTC, now=NOW)
     assert result["new_count"] == expected
     assert evaluate(conn, UTC, now=NOW)["new_count"] == 0
-    assert result["active_block"]["cost_per_minute"] == pytest.approx((count + cost) / 120)
+    assert result["active_block"]["cost_per_minute"] == pytest.approx(
+        (count + cost) / 120
+    )
 
 
 def test_spike_older_than_a_day_is_not_an_active_alert(conn):  # A-050
@@ -283,7 +337,7 @@ def test_spike_older_than_a_day_is_not_an_active_alert(conn):  # A-050
 def test_alert_day_is_in_the_report_timezone(conn):  # A-096
     from zoneinfo import ZoneInfo
 
-    when = NOW - timedelta(hours=3)          # 23:00 UTC on the 20th, 08:00 JST on the 21st
+    when = NOW - timedelta(hours=3)  # 23:00 UTC on the 20th, 08:00 JST on the 21st
     sample(conn, when - timedelta(minutes=1), 100, NOW + timedelta(hours=1))
     evaluate(conn, ZoneInfo("Asia/Tokyo"), now=when)
     (row,) = conn.execute("SELECT day FROM findings WHERE kind = 'burn'").fetchall()

@@ -11,16 +11,46 @@ vibewatt serve                # dashboard in your browser
 vibewatt json | jq .          # machine readable
 ```
 
-Works on Windows, macOS and Linux with Python 3.10 or newer.
+Works on Windows, macOS and Linux with Python 3.11 or newer.
 
-> **Status:** pre-1.0. The React dashboard described below is being packaged into
-> the wheel ([the plan](docs/PLAN.md), Phase 7). Until that release, `vibewatt serve`
-> shows the older single-page report; run the new dashboard from a source checkout
-> with `vibewatt serve` and `npm run dev` in `web/` side by side.
+> **Source release:** Phase 7 packages the React dashboard in the wheel.
+> Python 3.11 or newer is required; Node is only needed to build from source.
+> PyPI currently contains the 0.0.1 name-reservation package. Until the full
+> release is published, build and install the wheel as shown below.
 
 > **Renamed from ccburn.** The first run copies an existing ccburn data directory
 > and store to the vibewatt location and leaves the old one in place. `CCBURN_*`
 > variables and `ccburn.json` files still work for one release, with a warning.
+
+## Dashboard preview
+
+Fixture data, with quota disabled. No personal usage is shown.
+
+![Overview in the light theme](docs/images/overview-light.png)
+![Overview in the dark theme](docs/images/overview-dark.png)
+
+## Build and install from source
+
+Use Python 3.11+ and Node 22.12+ (Node 24 is used in CI).
+
+```bash
+uv sync
+cd web
+npm ci
+npm run build
+cd ..
+uv build
+pip install dist/vibewatt-0.3.0-py3-none-any.whl
+vibewatt serve
+```
+
+The wheel and source archive include the built dashboard. Installed users do not
+need Node. Deep links such as `/sessions/<id>` work on reload. For frontend
+iteration, run `npm run dev` in `web/` alongside the API.
+
+The old `html` command and `/api/usage` and `/api/dataset` endpoints have been
+retired. Use the dashboard, `vibewatt json`/`csv` or the typed `/api/summary` and
+`/api/export` endpoints. See [deferred work and prerequisites](docs/DEFERRED.md).
 
 ## Keep your history first
 

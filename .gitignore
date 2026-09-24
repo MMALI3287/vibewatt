@@ -19,3 +19,7 @@ docs/CODEX-SETUP.md
 .venv/
 .env
 *.tsbuildinfo
+
+# Local browser evidence; curated README captures live in docs/images.
+.playwright-cli/
+output/

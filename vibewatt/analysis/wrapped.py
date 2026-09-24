@@ -29,8 +29,14 @@ def build(
     # The caller's connection, not a second one: a nested connection deadlocks
     # behind the caller's open write transaction.
     report = from_store(
-        conn, tz, source=source, date_from=start, date_to=end, project=project,
-        model=model, include_sidechains=cfg.get("include_sidechains", True),
+        conn,
+        tz,
+        source=source,
+        date_from=start,
+        date_to=end,
+        project=project,
+        model=model,
+        include_sidechains=cfg.get("include_sidechains", True),
         session_hours=cfg.get("session_length_hours", 5),
         overrides=cfg.get("pricing_overrides"),
     )
@@ -38,7 +44,11 @@ def build(
 
     labels = project_map(conn, cfg)
     report.by_project = relabel_buckets(report.by_project, labels)
-    wanted = None if project is None else set([project] if isinstance(project, str) else project)
+    wanted = (
+        None
+        if project is None
+        else set([project] if isinstance(project, str) else project)
+    )
     rows = []
     all_local_ids = set(report.sessions)
     for raw in conn.execute("SELECT * FROM turns ORDER BY ts, msg_id, request_id"):
@@ -154,7 +164,9 @@ def build(
     merged: dict[str, dict] = {}
     for item in projects.values():
         name = labels.get(item["name"], item["name"])
-        into = merged.setdefault(name, {**item, "name": name, "cost_usd": 0.0, "tokens": 0})
+        into = merged.setdefault(
+            name, {**item, "name": name, "cost_usd": 0.0, "tokens": 0}
+        )
         into["cost_usd"] += item["cost_usd"]
         into["tokens"] += item["tokens"]
     ranked = sorted(merged.values(), key=lambda p: (-p["tokens"], p["name"]))

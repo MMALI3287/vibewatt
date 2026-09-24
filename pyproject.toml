@@ -53,7 +53,8 @@ build-backend = "hatchling.build"
 packages = ["vibewatt"]
 
 [tool.hatch.build]
-artifacts = ["vibewatt/static/**"]
+artifacts = ["vibewatt/static/**", "!vibewatt/static/**/*.map"]
+exclude = ["vibewatt/static/**/*.map"]
 
 [tool.hatch.build.hooks.custom]
 path = "scripts/build_hook.py"

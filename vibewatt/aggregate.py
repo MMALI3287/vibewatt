@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
+from itertools import pairwise
 
 from .config import clock_zone
 from .pricing import MILLION, WEB_SEARCH_PER_CALL, rate_for
@@ -26,7 +27,9 @@ class Bucket:
 
     @property
     def total_tokens(self) -> int:
-        return self.input + self.cache_5m + self.cache_1h + self.cache_read + self.output
+        return (
+            self.input + self.cache_5m + self.cache_1h + self.cache_read + self.output
+        )
 
     @property
     def cache_write(self) -> int:
@@ -78,11 +81,11 @@ class Block:
 
     @property
     def is_active(self) -> bool:
-        return self.start <= datetime.now(timezone.utc) < self.end
+        return self.start <= datetime.now(UTC) < self.end
 
     @property
     def elapsed_minutes(self) -> float:
-        end = min(datetime.now(timezone.utc), self.end)
+        end = min(datetime.now(UTC), self.end)
         return max(1.0, (end - self.start).total_seconds() / 60)
 
     @property
@@ -95,14 +98,16 @@ class Block:
 
     def project_to_end(self) -> tuple[int, float]:
         """Extrapolate this window's totals to its close at the current rate."""
-        minutes_left = max(0.0, (self.end - datetime.now(timezone.utc)).total_seconds() / 60)
+        minutes_left = max(0.0, (self.end - datetime.now(UTC)).total_seconds() / 60)
         return (
             self.bucket.total_tokens + int(self.tokens_per_minute * minutes_left),
             self.bucket.cost + self.cost_per_minute * minutes_left,
         )
 
 
-def build_blocks(turns: list[Turn], hours: int = 5, overrides: dict | None = None) -> list[Block]:
+def build_blocks(
+    turns: list[Turn], hours: int = 5, overrides: dict | None = None
+) -> list[Block]:
     """Group turns into rate-limit windows.
 
     A window opens on the hour containing its first turn and runs `hours`. It
@@ -117,8 +122,13 @@ def build_blocks(turns: list[Turn], hours: int = 5, overrides: dict | None = Non
     current: Block | None = None
 
     for turn in ordered:
-        if current is None or turn.ts >= current.end or (
-            current.last_activity is not None and turn.ts - current.last_activity >= length
+        if (
+            current is None
+            or turn.ts >= current.end
+            or (
+                current.last_activity is not None
+                and turn.ts - current.last_activity >= length
+            )
         ):
             start = turn.ts.replace(minute=0, second=0, microsecond=0)
             current = Block(start=start, end=start + length)
@@ -137,15 +147,15 @@ class Report:
     by_source: dict = field(default_factory=lambda: defaultdict(Bucket))
     by_project: dict = field(default_factory=lambda: defaultdict(Bucket))
     by_day_model: dict = field(default_factory=lambda: defaultdict(Bucket))
-    by_hour: dict = field(default_factory=lambda: defaultdict(Bucket))   # 0-23
+    by_hour: dict = field(default_factory=lambda: defaultdict(Bucket))  # 0-23
     # (day, source, project, model) -> Bucket. The grain the UI filters over.
     by_cell: dict = field(default_factory=lambda: defaultdict(Bucket))
     sessions: set = field(default_factory=set)
     unknown_models: set = field(default_factory=set)
     restored_days: set = field(default_factory=set)
     blocks: list = field(default_factory=list)
-    today: date | None = None          # today in the REPORT's timezone
-    subagent: Bucket = field(default_factory=Bucket)   # sidechain turns, tracked apart
+    today: date | None = None  # today in the REPORT's timezone
+    subagent: Bucket = field(default_factory=Bucket)  # sidechain turns, tracked apart
 
     @property
     def days(self) -> list[date]:
@@ -159,7 +169,7 @@ class Report:
         return None
 
     def month_to_date(self, today: date | None = None) -> Bucket:
-        today = today or self.today or date.today()
+        today = today or self.today or datetime.now().astimezone().date()
         out = Bucket()
         for day, bucket in self.by_day.items():
             if day.year == today.year and day.month == today.month:
@@ -172,10 +182,10 @@ class Report:
         if not days:
             return 0, 0
         longest = run = 1
-        for prev, cur in zip(days, days[1:]):
+        for prev, cur in pairwise(days):
             run = run + 1 if cur - prev == timedelta(days=1) else 1
             longest = max(longest, run)
-        today = self.today or date.today()
+        today = self.today or datetime.now().astimezone().date()
         current = 0
         if days[-1] in (today, today - timedelta(days=1)):
             current = 1
@@ -229,7 +239,7 @@ def build(
     return report
 
 
-def plan_comparison(report: "Report", plan_usd: float | None) -> dict | None:
+def plan_comparison(report: Report, plan_usd: float | None) -> dict | None:
     """What the subscription saved against pay-as-you-go API rates.
 
     A large API-equivalent figure is the point of a subscription, not a warning.
@@ -256,8 +266,18 @@ _SUMS = (
     " SUM(thinking) thinking, SUM(web_search) web_searches,"
     " COALESCE(SUM(cost), 0) cost, SUM(unpriced) unpriced"
 )
-_BUCKET_FIELDS = ("turns", "input", "cache_5m", "cache_1h", "cache_read", "output",
-                  "thinking", "web_searches", "cost", "unpriced")
+_BUCKET_FIELDS = (
+    "turns",
+    "input",
+    "cache_5m",
+    "cache_1h",
+    "cache_read",
+    "output",
+    "thinking",
+    "web_searches",
+    "cost",
+    "unpriced",
+)
 
 
 _CELL_SUMS = (
@@ -266,10 +286,20 @@ _CELL_SUMS = (
     " SUM(thinking) thinking, SUM(web_searches) web_searches,"
     " COALESCE(SUM(cost), 0) cost, SUM(unpriced) unpriced"
 )
-REPORT_PARTS = frozenset({
-    "by_day", "by_model", "by_source", "by_project", "by_day_model", "by_hour",
-    "by_cell", "subagent", "sessions", "blocks",
-})
+REPORT_PARTS = frozenset(
+    {
+        "by_day",
+        "by_model",
+        "by_source",
+        "by_project",
+        "by_day_model",
+        "by_hour",
+        "by_cell",
+        "subagent",
+        "sessions",
+        "blocks",
+    }
+)
 
 
 def _bucket(row) -> Bucket:
@@ -335,7 +365,9 @@ def from_store(
     conn.execute("DROP TABLE IF EXISTS temp.cells")
     conn.execute(
         f"CREATE TEMP TABLE cells AS SELECT day, hour, source, project, model, {_SUMS}"
-        f" FROM rollup WHERE {kept} GROUP BY day, hour, source, project, model", args)
+        f" FROM rollup WHERE {kept} GROUP BY day, hour, source, project, model",
+        args,
+    )
 
     def rows(cols: str):
         group = f" GROUP BY {cols}" if cols else ""
@@ -368,23 +400,31 @@ def from_store(
                 report.by_hour[r["hour"]] = _bucket(r)
     if "by_cell" in want:
         for r in rows("day, source, project, model"):
-            report.by_cell[(date.fromisoformat(r["day"]), r["source"], r["project"],
-                            r["model"])] = _bucket(r)
+            report.by_cell[
+                (date.fromisoformat(r["day"]), r["source"], r["project"], r["model"])
+            ] = _bucket(r)
     conn.execute("DROP TABLE temp.cells")
     if "subagent" in want:
         sub = conn.execute(
-            f"SELECT {_SUMS} FROM rollup WHERE {base} AND sidechain = 1", args).fetchone()
+            f"SELECT {_SUMS} FROM rollup WHERE {base} AND sidechain = 1", args
+        ).fetchone()
         if sub["turns"]:
             report.subagent = _bucket(sub)
     if "sessions" in want:
-        report.sessions = {r[0] for r in conn.execute(
-            f"SELECT DISTINCT session FROM rollup WHERE {kept}", args)}
+        report.sessions = {
+            r[0]
+            for r in conn.execute(
+                f"SELECT DISTINCT session FROM rollup WHERE {kept}", args
+            )
+        }
     if "blocks" in want:
         report.blocks = _blocks_from_hours(
             conn.execute(
                 f"SELECT hr, MIN(first_ts) first_ts, MAX(last_ts) last_ts,"
                 f" GROUP_CONCAT(DISTINCT model) models, {_SUMS}"
-                f" FROM rollup WHERE {kept} GROUP BY hr ORDER BY hr", args),
+                f" FROM rollup WHERE {kept} GROUP BY hr ORDER BY hr",
+                args,
+            ),
             session_hours,
         )
     if (not source or source == "all") and project is None:
@@ -406,8 +446,13 @@ def _blocks_from_hours(hour_rows, hours: int) -> list[Block]:
     for r in hour_rows:
         first = datetime.fromisoformat(r["first_ts"])
         last = datetime.fromisoformat(r["last_ts"])
-        if current is None or first >= current.end or (
-            current.last_activity is not None and first - current.last_activity >= length
+        if (
+            current is None
+            or first >= current.end
+            or (
+                current.last_activity is not None
+                and first - current.last_activity >= length
+            )
         ):
             start = first.replace(minute=0, second=0, microsecond=0)
             current = Block(start=start, end=start + length)
@@ -440,11 +485,23 @@ def _add_history(conn, report: Report, date_from, date_to, model, overrides) -> 
     history = conn.execute(f"SELECT * FROM history_days WHERE {cond}", args).fetchall()
     if not history:
         return
-    live = {(r["day"], r["model"]): r for r in conn.execute(
-        f"SELECT day, model, {_SUMS} FROM rollup WHERE {cond} GROUP BY day, model", args)}
-    pairs = (("responses", "turns"), ("input", "input"), ("cache_5m", "cache_5m"),
-             ("cache_1h", "cache_1h"), ("cache_read", "cache_read"), ("output", "output"),
-             ("thinking", "thinking"), ("web_search", "web_searches"))
+    live = {
+        (r["day"], r["model"]): r
+        for r in conn.execute(
+            f"SELECT day, model, {_SUMS} FROM rollup WHERE {cond} GROUP BY day, model",
+            args,
+        )
+    }
+    pairs = (
+        ("responses", "turns"),
+        ("input", "input"),
+        ("cache_5m", "cache_5m"),
+        ("cache_1h", "cache_1h"),
+        ("cache_read", "cache_read"),
+        ("output", "output"),
+        ("thinking", "thinking"),
+        ("web_search", "web_searches"),
+    )
     for h in history:
         have = live.get((h["day"], h["model"]))
         extra = Bucket()
@@ -457,7 +514,9 @@ def _add_history(conn, report: Report, date_from, date_to, model, overrides) -> 
             extra.unpriced = max(1, extra.turns)
             report.unknown_models.add(h["model"])
         else:
-            extra.cost = max(0.0, (h["cost"] or 0.0) - ((have["cost"] if have else 0.0) or 0.0))
+            extra.cost = max(
+                0.0, (h["cost"] or 0.0) - ((have["cost"] if have else 0.0) or 0.0)
+            )
         day = date.fromisoformat(h["day"])
         _merge_into(report.by_day[day], extra)
         _merge_into(report.by_day_model[(day, h["model"])], extra)

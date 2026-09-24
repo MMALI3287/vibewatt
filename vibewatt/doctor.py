@@ -13,7 +13,7 @@ import os
 import platform
 import sys
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from . import quota
@@ -24,7 +24,11 @@ from .sources import CLAUDE_CODE, COWORK, load
 
 def _claude_settings() -> tuple[Path | None, dict]:
     configured = os.environ.get("CLAUDE_CONFIG_DIR")
-    base = Path(configured.split(os.pathsep)[0]).expanduser() if configured else Path.home() / ".claude"
+    base = (
+        Path(configured.split(os.pathsep)[0]).expanduser()
+        if configured
+        else Path.home() / ".claude"
+    )
     path = base / "settings.json"
     try:
         return path, json.loads(path.read_text(encoding="utf-8"))
@@ -40,9 +44,13 @@ def run(cfg: dict, tz) -> int:
     say()
     say("  vibewatt doctor")
     say()
-    say(f"  platform        {platform.system()} {platform.release()}  python {platform.python_version()}")
+    say(
+        f"  platform        {platform.system()} {platform.release()}  python {platform.python_version()}"
+    )
     say(f"  timezone        {cfg.get('timezone')}  ->  today is {today}")
-    say(f"  system date     {date.today()}  (differs from above if your tz setting is not local)")
+    say(
+        f"  system date     {datetime.now().astimezone().date()}  (differs from above if your tz setting is not local)"
+    )
     say(f"  config dir      {user_config_dir()}")
     say(f"  data dir        {data_dir()}")
 
@@ -53,16 +61,20 @@ def run(cfg: dict, tz) -> int:
     period = settings.get("cleanupPeriodDays")
     if path is None:
         say("    no Claude Code settings.json found; the 30-day default applies")
-        say("    ACTION: set cleanupPeriodDays to 3650, logs older than 30 days are being deleted")
+        say(
+            "    ACTION: set cleanupPeriodDays to 3650, logs older than 30 days are being deleted"
+        )
     elif period is None:
         say(f"    {path}")
         say("    cleanupPeriodDays not set -> default 30 days")
         say("    ACTION: set cleanupPeriodDays to 3650. Cleanup runs at every startup.")
     elif period == 0:
-        say(f"    cleanupPeriodDays = 0  <-- THIS DISABLES TRANSCRIPT WRITING ENTIRELY")
+        say("    cleanupPeriodDays = 0  <-- THIS DISABLES TRANSCRIPT WRITING ENTIRELY")
         say("    ACTION: change it to 3650. Zero does not mean keep forever.")
     elif period < 365:
-        say(f"    cleanupPeriodDays = {period} -> logs older than {period} days are deleted at startup")
+        say(
+            f"    cleanupPeriodDays = {period} -> logs older than {period} days are deleted at startup"
+        )
         say("    ACTION: raise it to 3650 if you want full history")
     else:
         say(f"    cleanupPeriodDays = {period}  (good)")
@@ -76,7 +88,9 @@ def run(cfg: dict, tz) -> int:
         by_source[source].append(fp)
     for label, roots in (("claude-code", claude_code.roots()),):
         say(f"    {label:<12} looked in: {', '.join(str(r) for r in roots)}")
-    say(f"    {'cowork':<12} looked in: desktop data dir (override VIBEWATT_COWORK_DIR)")
+    say(
+        f"    {'cowork':<12} looked in: desktop data dir (override VIBEWATT_COWORK_DIR)"
+    )
     for source in (CLAUDE_CODE, COWORK):
         found = by_source.get(source, [])
         say(f"    {source:<12} {len(found)} file(s)")
@@ -87,7 +101,9 @@ def run(cfg: dict, tz) -> int:
         return 1
 
     turns, duplicates = load(files)
-    say(f"    parsed       {len(turns)} responses, {duplicates} content-block repeats collapsed")
+    say(
+        f"    parsed       {len(turns)} responses, {duplicates} content-block repeats collapsed"
+    )
 
     # --- coverage per source -------------------------------------------------
     say()
@@ -97,8 +113,10 @@ def run(cfg: dict, tz) -> int:
         per_source[t.source].add(t.ts.astimezone(tz).date())
     for source, days in sorted(per_source.items()):
         ordered = sorted(days)
-        say(f"    {source:<12} {len(ordered)} active day(s)   "
-            f"{ordered[0]} .. {ordered[-1]}")
+        say(
+            f"    {source:<12} {len(ordered)} active day(s)   "
+            f"{ordered[0]} .. {ordered[-1]}"
+        )
 
     all_days = sorted({d for s in per_source.values() for d in s})
     last = all_days[-1]
@@ -106,25 +124,31 @@ def run(cfg: dict, tz) -> int:
     say()
     say("  streak check")
     say(f"    most recent local activity   {last}  ({gap} day(s) ago)")
-    say(f"    today in {str(cfg.get('timezone')):<12}        {today}")
+    say(f"    today in {cfg.get('timezone')!s:<12}        {today}")
     if gap == 0:
         say("    -> streak counts from today")
     elif gap == 1:
         say("    -> streak counts from yesterday")
     else:
-        say(f"    -> streak reads 0 because nothing local landed in the last 2 days.")
+        say("    -> streak reads 0 because nothing local landed in the last 2 days.")
         say("       Claude Code on the web, Cowork remote and claude.ai chat write NO")
         say("       local logs, so daily use through those surfaces cannot raise this.")
-        say("       Plan utilization below is the account-wide figure that does count them.")
+        say(
+            "       Plan utilization below is the account-wide figure that does count them."
+        )
 
     recent = [str(d) for d in all_days[-10:]]
     say(f"    last 10 local active days    {', '.join(recent)}")
 
     # gaps inside the covered range hint at pruning
     span = (all_days[-1] - all_days[0]).days + 1
-    say(f"    covered span                 {span} calendar day(s), {len(all_days)} active")
+    say(
+        f"    covered span                 {span} calendar day(s), {len(all_days)} active"
+    )
     if span > 30 and len(all_days) < span * 0.4:
-        say("    note: sparse coverage over a long span is what pruned history looks like")
+        say(
+            "    note: sparse coverage over a long span is what pruned history looks like"
+        )
 
     # --- the store, which keeps every turn after its log is pruned --------------
     say()
@@ -137,20 +161,28 @@ def run(cfg: dict, tz) -> int:
     else:
         with store.connect() as conn:
             row = conn.execute(
-                "SELECT COUNT(*) n, MIN(day) lo, MAX(day) hi FROM turns").fetchone()
+                "SELECT COUNT(*) n, MIN(day) lo, MAX(day) hi FROM turns"
+            ).fetchone()
             imported = conn.execute(
-                "SELECT COUNT(*) n, MIN(day) lo, MAX(day) hi FROM history_days").fetchone()
-            last = conn.execute("SELECT value FROM meta WHERE key = 'last_sync'").fetchone()
+                "SELECT COUNT(*) n, MIN(day) lo, MAX(day) hi FROM history_days"
+            ).fetchone()
+            last = conn.execute(
+                "SELECT value FROM meta WHERE key = 'last_sync'"
+            ).fetchone()
             dropped = store.dropped_records(conn)
         say(f"    {store.db_path()}")
         say(f"    {row['n']:,} response(s)  {row['lo']} .. {row['hi']}")
         say(f"    last sync {last[0] if last else 'never'}")
         if dropped:
-            reasons = ", ".join(f"{reason} {n}" for reason, n in sorted(dropped.items()))
+            reasons = ", ".join(
+                f"{reason} {n}" for reason, n in sorted(dropped.items())
+            )
             say(f"    records skipped as malformed: {reasons}")
         if imported["n"]:
-            say(f"    history.json import: {imported['n']} day/model row(s), "
-                f"{imported['lo']} .. {imported['hi']} (fills only what the store lacks)")
+            say(
+                f"    history.json import: {imported['n']} day/model row(s), "
+                f"{imported['lo']} .. {imported['hi']} (fills only what the store lacks)"
+            )
 
     # --- account level -------------------------------------------------------
     say()
