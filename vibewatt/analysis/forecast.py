@@ -19,12 +19,12 @@ Resets are detected from the data, never from an assumed schedule: a change of
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from ..quota import _parse_time, label_for, window_length
 
-MIN_HISTORY = 4          # completed windows needed before a band is shown
-DROP = 2.0               # a fall of more than this many points is a reset
+MIN_HISTORY = 4  # completed windows needed before a band is shown
+DROP = 2.0  # a fall of more than this many points is a reset
 RESET_JITTER = timedelta(minutes=10)
 
 
@@ -78,7 +78,14 @@ def episodes(points: list[Point], length: timedelta) -> list[Episode]:
         new = current is None or prev is None
         if not new:
             reset = current.resets_at
-            if p.resets_at is not None and reset is not None and abs(p.resets_at - reset) > RESET_JITTER or p.used < prev.used - DROP or p.ts - prev.ts >= length or p.ts >= current.end(length):
+            if (
+                p.resets_at is not None
+                and reset is not None
+                and abs(p.resets_at - reset) > RESET_JITTER
+                or p.used < prev.used - DROP
+                or p.ts - prev.ts >= length
+                or p.ts >= current.end(length)
+            ):
                 new = True
         if new:
             current = Episode()
@@ -97,7 +104,9 @@ def _percentile(values: list[float], q: float) -> float:
     return ordered[lo] + (ordered[hi] - ordered[lo]) * (pos - lo)
 
 
-def forecast_series(key: str, scope: str, points: list[Point], now: datetime) -> dict | None:
+def forecast_series(
+    key: str, scope: str, points: list[Point], now: datetime
+) -> dict | None:
     """Pace and band for the current window of one series, or None if it has none."""
     length = window_length(key)
     if length is None or not points:
@@ -107,7 +116,7 @@ def forecast_series(key: str, scope: str, points: list[Point], now: datetime) ->
         return None
     current = eps[-1]
     if now >= current.end(length):
-        return None                       # the last window is over; no reading since
+        return None  # the last window is over; no reading since
     start = current.start(length)
     elapsed = min(1.0, max(0.0, (now - start) / length))
     used = current.points[-1].used
@@ -121,8 +130,10 @@ def forecast_series(key: str, scope: str, points: list[Point], now: datetime) ->
         projected = [used + g for g in growth]
         # A rolling window stops at 100 %; only a spend limit can go past it.
         cap = float("inf") if key == "spend_limit" else 100.0
-        band = {q: min(cap, max(used, _percentile(projected, p)))
-                for q, p in (("p10", 0.1), ("p50", 0.5), ("p90", 0.9))}
+        band = {
+            q: min(cap, max(used, _percentile(projected, p)))
+            for q, p in (("p10", 0.1), ("p50", 0.5), ("p90", 0.9))
+        }
     return {
         "key": key,
         "scope": scope,
@@ -134,13 +145,14 @@ def forecast_series(key: str, scope: str, points: list[Point], now: datetime) ->
         "resets_at": current.end(length).isoformat(),
         "band": band,
         "history_windows": len(growth),
-        "note": None if band else (
-            f"not enough history: {len(growth)} of {MIN_HISTORY} past windows"),
+        "note": None
+        if band
+        else (f"not enough history: {len(growth)} of {MIN_HISTORY} past windows"),
     }
 
 
 def forecast(conn, now: datetime | None = None) -> list[dict]:
-    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    now = (now or datetime.now(UTC)).astimezone(UTC)
     from ..quota import canonical_scope
 
     canon = canonical_scope(conn)
@@ -152,7 +164,8 @@ def forecast(conn, now: datetime | None = None) -> list[dict]:
         if stamp is None:
             continue
         series.setdefault((r["key"], canon(r["scope"])), []).append(
-            Point(stamp, float(r["utilization"]), _parse_time(r["resets_at"])))
+            Point(stamp, float(r["utilization"]), _parse_time(r["resets_at"]))
+        )
     out = []
     for (key, scope), points in sorted(series.items()):
         result = forecast_series(key, scope, points, now)

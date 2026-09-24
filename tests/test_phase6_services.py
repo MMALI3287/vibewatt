@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import json
 import subprocess
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -17,7 +17,7 @@ def test_disabled_summary_does_no_work(monkeypatch):
 
     monkeypatch.setattr(weekly.cli, "build_report", forbidden)
     monkeypatch.setattr(weekly, "urlopen", forbidden)
-    assert weekly.generate({}, timezone.utc)["status"] == "disabled"
+    assert weekly.generate({}, UTC)["status"] == "disabled"
 
 
 @pytest.mark.parametrize("include_names", [False, True])
@@ -48,8 +48,8 @@ def test_weekly_privacy_and_bounds(monkeypatch, include_names):
     monkeypatch.setattr(weekly, "urlopen", fetch)
     result = weekly.generate(
         {"ai_summary": {"enabled": True, "include_project_names": include_names}},
-        timezone.utc,
-        datetime(2026, 9, 21, tzinfo=timezone.utc),
+        UTC,
+        datetime(2026, 9, 21, tzinfo=UTC),
     )
     assert result["status"] == "ready"
     assert result["text"] == "Weekly brief"
@@ -61,7 +61,7 @@ def test_enabled_summary_without_key_does_no_work(monkeypatch):
         weekly.cli, "build_report", lambda *a, **kw: pytest.fail("no key")
     )
     assert (
-        weekly.generate({"ai_summary": {"enabled": True}}, timezone.utc)["status"]
+        weekly.generate({"ai_summary": {"enabled": True}}, UTC)["status"]
         == "unavailable"
     )
 

@@ -12,7 +12,7 @@ so most of this guide is about keeping them right.
 
 ## Set up
 
-You need [uv](https://docs.astral.sh/uv/) and Node.js 20 or newer.
+You need [uv](https://docs.astral.sh/uv/) and Python 3.11+ and Node.js 22.12+ (CI uses Node 24).
 
 ```bash
 git clone https://github.com/MMALI3287/vibewatt.git
@@ -21,7 +21,7 @@ uv sync                     # Python package and dev tools
 cd web && npm ci && cd ..   # frontend
 ```
 
-Run the dashboard against your own logs with `uv run vibewatt serve`, or develop
+Build once with `npm run build` in `web/`. Run the dashboard against your own logs with `uv run vibewatt serve`, or develop
 the frontend with `cd web && npm run dev` next to it.
 
 ## Checks
@@ -69,3 +69,15 @@ paste your `~/.claude/.credentials.json` or an API key.
 
 By contributing you agree that your contribution is licensed under the
 [MIT License](LICENSE).
+
+## Release verification
+
+Run `uv build` after the frontend build. The build hook rejects missing hashed JS
+or CSS and the wheel excludes source maps. `uv build` rebuilds the wheel from the
+sdist, which must carry the same assets. CI installs that wheel in a fresh venv on
+Windows and Linux and runs `scripts/check_wheel.py --browser` with Node absent
+from the server PATH. The browser controller uses the build host's Node.
+
+The dependency floor gate is `uv run --isolated --no-project --resolution
+lowest-direct --with-editable . --with "pytest>=8" --with httpx2 python -m pytest -q`.
+Publishing a release is a separate authorized step.

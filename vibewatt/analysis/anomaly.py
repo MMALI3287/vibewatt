@@ -33,7 +33,9 @@ def threshold(baseline: list[float]) -> tuple[float, float, float]:
     return center + 3 * spread, center, spread
 
 
-def detect(turns: list[dict], start: date | None, end: date) -> tuple[list[Finding], dict]:
+def detect(
+    turns: list[dict], start: date | None, end: date
+) -> tuple[list[Finding], dict]:
     """Findings, plus why detection could not run where it could not.
 
     The status says how many days were evaluated and, for the rest, whether
@@ -52,8 +54,13 @@ def detect(turns: list[dict], start: date | None, end: date) -> tuple[list[Findi
             cost[day] += row["cost"]
     active = sorted(set(cost) | set(unpriced))
     in_range = [d for d in active if not start or d >= start]
-    status = {"evaluated": 0, "short_history": 0, "unpriced": 0, "unpriced_models": [],
-              "active_days": len(in_range)}
+    status = {
+        "evaluated": 0,
+        "short_history": 0,
+        "unpriced": 0,
+        "unpriced_models": [],
+        "active_days": len(in_range),
+    }
     findings: list[Finding] = []
     models: set[str] = set()
     for day in in_range:
@@ -63,27 +70,35 @@ def detect(turns: list[dict], start: date | None, end: date) -> tuple[list[Findi
             continue
         # Earlier fully priced active days. A day with unpriced spend is left
         # out of the baseline rather than blocking every day after it (A-043).
-        prior = [d for d in active if d < day and not unpriced.get(d)][-MAX_ACTIVE_DAYS:]
+        prior = [d for d in active if d < day and not unpriced.get(d)][
+            -MAX_ACTIVE_DAYS:
+        ]
         if len(prior) < MIN_ACTIVE_DAYS:
             status["short_history"] += 1
             continue
         status["evaluated"] += 1
         limit, center, spread = threshold([cost[d] for d in prior])
         if cost[day] > limit:
-            findings.append(Finding(
-                "anomaly", "daily_cost", "warning", day.isoformat(), day.isoformat(),
-                "Unusually expensive day",
-                "Local cost exceeds the median of your previous active days by more "
-                "than 3 robust standard deviations. Days without activity are not "
-                "counted as $0.",
-                metrics={
-                    "cost_usd": cost[day],
-                    "median_usd": center,
-                    "spread_usd": spread,
-                    "threshold_usd": limit,
-                    "baseline_days": len(prior),
-                },
-            ))
+            findings.append(
+                Finding(
+                    "anomaly",
+                    "daily_cost",
+                    "warning",
+                    day.isoformat(),
+                    day.isoformat(),
+                    "Unusually expensive day",
+                    "Local cost exceeds the median of your previous active days by more "
+                    "than 3 robust standard deviations. Days without activity are not "
+                    "counted as $0.",
+                    metrics={
+                        "cost_usd": cost[day],
+                        "median_usd": center,
+                        "spread_usd": spread,
+                        "threshold_usd": limit,
+                        "baseline_days": len(prior),
+                    },
+                )
+            )
     status["unpriced_models"] = sorted(models)
     return findings, status
 
@@ -97,9 +112,11 @@ def notes(status: dict) -> list[str]:
     if status["short_history"]:
         out.append(
             f"Anomaly detection skipped {status['short_history']} day(s) with fewer than "
-            f"{MIN_ACTIVE_DAYS} earlier active days to compare against (not enough history).")
+            f"{MIN_ACTIVE_DAYS} earlier active days to compare against (not enough history)."
+        )
     if status["unpriced"]:
         out.append(
             f"Anomaly detection skipped {status['unpriced']} day(s) with unpriced spend "
-            f"from {', '.join(status['unpriced_models'])}.")
+            f"from {', '.join(status['unpriced_models'])}."
+        )
     return out

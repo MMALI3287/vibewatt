@@ -6,7 +6,7 @@ import itertools
 import json
 import os
 import sqlite3
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from conftest import JST
@@ -14,8 +14,6 @@ from conftest import JST
 from vibewatt import config, store
 from vibewatt.aggregate import build_blocks, cost_of, from_store
 from vibewatt.sources import CLAUDE_CODE, COWORK, load
-
-UTC = timezone.utc
 
 
 def line(

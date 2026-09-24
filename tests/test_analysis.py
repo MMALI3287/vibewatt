@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -14,7 +14,6 @@ from vibewatt.ingest.tool_reads import read_tools
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CASES = json.loads((FIXTURES / "analysis_cases.json").read_text())
-UTC = timezone.utc
 NOW = datetime(2026, 9, 19, tzinfo=UTC)
 
 
@@ -332,8 +331,12 @@ def test_findings_stable_dismissed_resolved_and_restored():
         conn.execute("UPDATE turns SET input=10")
         assert not analyze(conn, UTC, now=NOW)["findings"]
         # The resolved snapshot row is pruned; the dismissal itself survives.
-        assert conn.execute(
-            "SELECT COUNT(*) FROM findings WHERE id=?", (cache["id"],)).fetchone()[0] == 0
+        assert (
+            conn.execute(
+                "SELECT COUNT(*) FROM findings WHERE id=?", (cache["id"],)
+            ).fetchone()[0]
+            == 0
+        )
         assert conn.execute("SELECT COUNT(*) FROM dismissals").fetchone()[0] == 1
         conn.execute("UPDATE turns SET input=1000000")
         assert next(
@@ -415,7 +418,9 @@ def test_v3_migration_preserves_existing_data_and_adds_metadata_checkpoints(tmp_
     store._v2_files_and_quota_samples(conn)
     conn.execute("INSERT INTO meta VALUES ('schema','3')")
     conn.execute("INSERT INTO files VALUES ('retained',1,1,'ts',1)")
-    conn.execute("CREATE TABLE prompts (session TEXT NOT NULL, ts TEXT, text TEXT NOT NULL, PRIMARY KEY (session, text))")  # pre-schema-6 table
+    conn.execute(
+        "CREATE TABLE prompts (session TEXT NOT NULL, ts TEXT, text TEXT NOT NULL, PRIMARY KEY (session, text))"
+    )  # pre-schema-6 table
     conn.execute("INSERT INTO prompts VALUES ('s','ts','keep')")
     conn.commit()
     conn.close()

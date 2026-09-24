@@ -7,7 +7,8 @@ import csv
 import io
 import json
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 from . import config as configmod
 from . import pricing, quota, terminal
@@ -20,7 +21,7 @@ def resolve_tz(name: str | None):
     if not name or name == "local":
         return datetime.now().astimezone().tzinfo
     if name == "utc":
-        return timezone.utc
+        return UTC
     try:
         from zoneinfo import ZoneInfo
 
@@ -32,7 +33,9 @@ def resolve_tz(name: str | None):
 def report_zone(cfg: dict):
     """The report timezone, with the day boundary moved to `day_start_hour`."""
     try:
-        return configmod.day_zone(resolve_tz(cfg.get("timezone")), cfg.get("day_start_hour"))
+        return configmod.day_zone(
+            resolve_tz(cfg.get("timezone")), cfg.get("day_start_hour")
+        )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
@@ -61,8 +64,10 @@ def serialize(report) -> dict:
         "by_model": {m: _bucket_dict(b) for m, b in report.by_model.items()},
         "by_source": {s: _bucket_dict(b) for s, b in report.by_source.items()},
         "by_project": {p: _bucket_dict(b) for p, b in report.by_project.items()},
-        "by_day_model": {f"{d}|{m}": _bucket_dict(b)
-                         for (d, m), b in sorted(report.by_day_model.items())},
+        "by_day_model": {
+            f"{d}|{m}": _bucket_dict(b)
+            for (d, m), b in sorted(report.by_day_model.items())
+        },
         "by_hour": {str(h): _bucket_dict(b) for h, b in sorted(report.by_hour.items())},
         "sessions": len(report.sessions),
         "unknown_models": sorted(report.unknown_models),
@@ -94,14 +99,37 @@ def _cell(value):
 def to_csv(report) -> str:
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\n")
-    writer.writerow(["date", "model", "responses", "input", "cache_write_5m",
-                     "cache_write_1h", "cache_read", "output", "cost_usd",
-                     "unpriced_responses"])
+    writer.writerow(
+        [
+            "date",
+            "model",
+            "responses",
+            "input",
+            "cache_write_5m",
+            "cache_write_1h",
+            "cache_read",
+            "output",
+            "cost_usd",
+            "unpriced_responses",
+        ]
+    )
     for (day, model), b in sorted(report.by_day_model.items()):
         # An unpriced row has no cost at all, not a cost of zero.
         cost = "" if b.unpriced and not b.cost else f"{b.cost:.6f}"
-        writer.writerow([day, _cell(model), b.turns, b.input, b.cache_5m,
-                         b.cache_1h, b.cache_read, b.output, cost, b.unpriced])
+        writer.writerow(
+            [
+                day,
+                _cell(model),
+                b.turns,
+                b.input,
+                b.cache_5m,
+                b.cache_1h,
+                b.cache_read,
+                b.output,
+                cost,
+                b.unpriced,
+            ]
+        )
     return out.getvalue()
 
 
@@ -142,8 +170,15 @@ def statusline(cfg, tz, raw: str) -> str:
             # The user's own command from their own config, run through a shell
             # exactly as Claude Code runs a statusLine command. Claude Code's
             # JSON goes in on stdin and is never interpolated into the command.
-            done = subprocess.run(chain, shell=True, input=raw, capture_output=True,
-                                  text=True, timeout=5, check=False)
+            done = subprocess.run(
+                chain,
+                shell=True,
+                input=raw,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
             first = done.stdout.strip().splitlines()[:1]
             parts = first + parts
         except (OSError, subprocess.SubprocessError):
@@ -158,12 +193,24 @@ def sync_store(cfg, tz, files=None, progress=None):
     files = discover(cfg) if files is None else files
     overrides = cfg.get("pricing_overrides")
     with store.connect() as conn:
-        return store.sync_files(conn, files, tz, lambda t: cost_of(t, overrides),
-                                progress=progress)
+        return store.sync_files(
+            conn, files, tz, lambda t: cost_of(t, overrides), progress=progress
+        )
 
 
-def build_report(cfg, tz, *, source="all", date_from=None, date_to=None,
-                  project=None, model=None, refresh=False, with_quota=True, parts=None):
+def build_report(
+    cfg,
+    tz,
+    *,
+    source="all",
+    date_from=None,
+    date_to=None,
+    project=None,
+    model=None,
+    refresh=False,
+    with_quota=True,
+    parts=None,
+):
     """Report numbers, always from the SQLite store.
 
     Shared by the CLI and the API so filtering logic lives in exactly one
@@ -185,11 +232,17 @@ def build_report(cfg, tz, *, source="all", date_from=None, date_to=None,
     with store.connect() as conn:
         labels = project_map(conn, cfg)
         report = from_store(
-            conn, tz, source=source, date_from=date_from, date_to=date_to,
-            project=resolve(labels, project, bool(cfg.get("mask_projects"))), model=model,
+            conn,
+            tz,
+            source=source,
+            date_from=date_from,
+            date_to=date_to,
+            project=resolve(labels, project, bool(cfg.get("mask_projects"))),
+            model=model,
             include_sidechains=cfg.get("include_sidechains", True),
             session_hours=cfg.get("session_length_hours", 5),
-            overrides=cfg.get("pricing_overrides"), parts=parts,
+            overrides=cfg.get("pricing_overrides"),
+            parts=parts,
         )
 
     # Aliases and masking, the same mapping every endpoint uses.
@@ -225,7 +278,8 @@ def harvest(args, cfg, tz) -> int:
             "    List my Claude Code sessions with list_sessions (mine: true, limit 100,\n"
             "    paginating with after_id) and write the raw JSON to sessions.json\n\n"
             "Then run this command against it. Re-harvesting is idempotent.",
-            file=sys.stderr)
+            file=sys.stderr,
+        )
         return 2
     try:
         with open(args.file, "r", encoding="utf-8") as fh:
@@ -240,13 +294,19 @@ def harvest(args, cfg, tz) -> int:
         info = store.summary(conn)
     if not any(counts.values()):
         # A file that holds no session listing is an error, not a silent success (A-031).
-        raise SystemExit(f"{args.file} holds no session entries: expected a list, "
-                         '{"data": [...]} or {"ccr": ...}')
-    print(f"  harvested {counts['written']} session(s), skipped {counts['skipped']} with no "
-          f"usage block, {counts['rejected_no_id']} without an id, "
-          f"{counts['skipped_environment']} that ran locally")
+        raise SystemExit(
+            f"{args.file} holds no session entries: expected a list, "
+            '{"data": [...]} or {"ccr": ...}'
+        )
+    print(
+        f"  harvested {counts['written']} session(s), skipped {counts['skipped']} with no "
+        f"usage block, {counts['rejected_no_id']} without an id, "
+        f"{counts['skipped_environment']} that ran locally"
+    )
     for row in info["cloud_by_surface"]:
-        print(f"    {row['surface']:<12} {row['n']:>4} session(s)   ${row['cost'] or 0:,.2f}")
+        print(
+            f"    {row['surface']:<12} {row['n']:>4} session(s)   ${row['cost'] or 0:,.2f}"
+        )
     return 0
 
 
@@ -263,14 +323,20 @@ def sync(args, cfg, tz) -> int:
     result = sync_store(cfg, tz, files, progress)
     with store.connect() as conn:
         info = store.summary(conn)
-    print(f"  parsed {result.parsed} changed file(s), skipped {result.skipped} unchanged, "
-          f"{len(files)} total")
-    print(f"  synced {result.turns} response(s), "
-          f"{result.duplicates} content-block repeats collapsed")
+    print(
+        f"  parsed {result.parsed} changed file(s), skipped {result.skipped} unchanged, "
+        f"{len(files)} total"
+    )
+    print(
+        f"  synced {result.turns} response(s), "
+        f"{result.duplicates} content-block repeats collapsed"
+    )
     print(f"  recovered {result.prompts} prompt title(s)")
     t = info["turns"]
-    print(f"  store now holds {t['n']:,} response(s)  {t['lo']} .. {t['hi']}  "
-          f"${t['cost'] or 0:,.2f}")
+    print(
+        f"  store now holds {t['n']:,} response(s)  {t['lo']} .. {t['hi']}  "
+        f"${t['cost'] or 0:,.2f}"
+    )
     print(f"  database: {store.db_path()}")
     return 0
 
@@ -285,13 +351,17 @@ def sessions_report(args, cfg, tz) -> int:
     if not rows:
         print("  no sessions yet - run 'vibewatt sync' and 'vibewatt harvest' first")
         return 1
-    print(f"\n  {'when':<11} {'surface':<12} {'what you worked on':<58} "
-          f"{'tokens':>9} {'cost':>9}")
+    print(
+        f"\n  {'when':<11} {'surface':<12} {'what you worked on':<58} "
+        f"{'tokens':>9} {'cost':>9}"
+    )
     print("  " + "-" * 103)
     for r in rows:
         when = (r["started"] or "")[:10]
-        print(f"  {when:<11} {r['surface']:<12} {r['title'][:58]:<58} "
-              f"{terminal.human(r['tokens']):>9} {terminal.money(r['cost']):>9}")
+        print(
+            f"  {when:<11} {r['surface']:<12} {r['title'][:58]:<58} "
+            f"{terminal.human(r['tokens']):>9} {terminal.money(r['cost']):>9}"
+        )
     print()
     return 0
 
@@ -301,33 +371,68 @@ def build_parser() -> argparse.ArgumentParser:
         prog="vibewatt",
         description="Token usage, cost and plan utilization for Claude Code and Cowork.",
     )
-    p.add_argument("command", nargs="?", default="report",
-                   choices=["report", "serve", "blocks", "statusline", "json", "csv",
-                            "html", "doctor", "harvest", "sync", "sessions"],
-                   help="report (default), serve, doctor, harvest, sync, sessions, "
-                        "blocks, statusline, json, csv, html")
+    p.add_argument(
+        "command",
+        nargs="?",
+        default="report",
+        choices=[
+            "report",
+            "serve",
+            "blocks",
+            "statusline",
+            "json",
+            "csv",
+            "doctor",
+            "harvest",
+            "sync",
+            "sessions",
+        ],
+        help="report (default), serve, doctor, harvest, sync, sessions, "
+        "blocks, statusline, json, csv",
+    )
     p.add_argument("--source", choices=[CLAUDE_CODE, COWORK, "all"], default="all")
     p.add_argument("--since", metavar="YYYY-MM-DD")
     p.add_argument("--days", type=int, metavar="N")
     p.add_argument("--tz", help="timezone for day buckets (default: local)")
-    p.add_argument("--day-start-hour", type=int, metavar="H",
-                   help="hour (0-23) a day starts at, so late nights count as one day")
+    p.add_argument(
+        "--day-start-hour",
+        type=int,
+        metavar="H",
+        help="hour (0-23) a day starts at, so late nights count as one day",
+    )
     p.add_argument("--weeks", type=int, help="heatmap width in weeks")
-    p.add_argument("--session-hours", type=int, help="rate-limit window length (default 5)")
-    p.add_argument("--no-sidechains", action="store_true", help="exclude subagent turns")
+    p.add_argument(
+        "--session-hours", type=int, help="rate-limit window length (default 5)"
+    )
+    p.add_argument(
+        "--no-sidechains", action="store_true", help="exclude subagent turns"
+    )
     p.add_argument("--by-project", action="store_true")
-    p.add_argument("--mask-projects", action="store_true", help="pseudonymise project names")
-    p.add_argument("--no-quota", action="store_true", help="skip the account-level lookup")
+    p.add_argument(
+        "--mask-projects", action="store_true", help="pseudonymise project names"
+    )
+    p.add_argument(
+        "--no-quota", action="store_true", help="skip the account-level lookup"
+    )
     p.add_argument("--offline", action="store_true", help="never fetch pricing")
-    p.add_argument("--out", metavar="PATH", help="write html/csv/json here instead of stdout")
+    p.add_argument(
+        "--out", metavar="PATH", help="write csv/json here instead of stdout"
+    )
     p.add_argument("--host", default="127.0.0.1", help="serve: bind address")
     p.add_argument("--port", type=int, default=8777, help="serve: port")
-    p.add_argument("--no-browser", action="store_true", help="serve: do not open a browser")
+    p.add_argument(
+        "--no-browser", action="store_true", help="serve: do not open a browser"
+    )
     p.add_argument("--no-color", action="store_true")
-    p.add_argument("--plan", type=float, metavar="USD",
-                   help="your monthly plan price, to show API-equivalent savings")
-    p.add_argument("--file", metavar="PATH",
-                   help="harvest: a session listing JSON to ingest")
+    p.add_argument(
+        "--plan",
+        type=float,
+        metavar="USD",
+        help="your monthly plan price, to show API-equivalent savings",
+    )
+    p.add_argument(
+        "--file", metavar="PATH", help="harvest: a session listing JSON to ingest"
+    )
     return p
 
 
@@ -383,9 +488,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  vibewatt dashboard on {url}")
         if not local:
             # Any non-loopback bind, not just 0.0.0.0 (A-103).
-            print(f"  WARNING: bound to {args.host}. Anyone who can reach this port can read your"
-                  " usage and session titles, trigger syncs and spend API credit on summaries.",
-                  file=sys.stderr)
+            print(
+                f"  WARNING: bound to {args.host}. Anyone who can reach this port can read your"
+                " usage and session titles, trigger syncs and spend API credit on summaries.",
+                file=sys.stderr,
+            )
         print("  ctrl-c to stop")
         if not args.no_browser:
             threading.Timer(0.5, lambda: webbrowser.open(url)).start()
@@ -420,18 +527,19 @@ def main(argv: list[str] | None = None) -> int:
         cutoff = (datetime.now(tz) - timedelta(days=args.days)).date()
     if args.since:
         try:
-            cutoff = datetime.strptime(args.since, "%Y-%m-%d").date()
+            cutoff = date.fromisoformat(args.since)
         except ValueError:
             raise SystemExit(f"--since expects YYYY-MM-DD, got {args.since!r}")
 
     report, q, quota_note, duplicates, files = build_report(
-        cfg, tz, source=args.source, date_from=cutoff, refresh=True)
+        cfg, tz, source=args.source, date_from=cutoff, refresh=True
+    )
 
     if args.command == "json":
         payload = serialize(report)
         text = json.dumps(payload, indent=2)
         if args.out:
-            open(args.out, "w", encoding="utf-8").write(text + "\n")
+            Path(args.out).write_text(text + "\n", encoding="utf-8")
             print(f"wrote {args.out}")
         else:
             print(text)
@@ -440,18 +548,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "csv":
         text = to_csv(report)
         if args.out:
-            open(args.out, "w", encoding="utf-8").write(text)
+            Path(args.out).write_text(text, encoding="utf-8")
             print(f"wrote {args.out}")
         else:
             sys.stdout.write(text)
-        return 0
-
-    if args.command == "html":
-        from .ui import build_dataset, write
-
-        target = args.out or "vibewatt-report.html"
-        write(build_dataset(report, cfg, quota=q, duplicates=duplicates), target)
-        print(f"wrote {target}")
         return 0
 
     color = terminal.use_color() and not args.no_color
@@ -462,10 +562,12 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         for block in report.blocks[-12:]:
             flag = " <- active" if block.is_active else ""
-            print(f"  {block.start:%Y-%m-%d %H:%M} - {block.end:%H:%M}  "
-                  f"{terminal.human(block.bucket.total_tokens):>8} tok  "
-                  f"{terminal.money(block.bucket.cost):>9}  "
-                  f"{len(block.models)} model(s){flag}")
+            print(
+                f"  {block.start:%Y-%m-%d %H:%M} - {block.end:%H:%M}  "
+                f"{terminal.human(block.bucket.total_tokens):>8} tok  "
+                f"{terminal.money(block.bucket.cost):>9}  "
+                f"{len(block.models)} model(s){flag}"
+            )
         return 0
 
     if not files and not report.by_day:
@@ -474,8 +576,13 @@ def main(argv: list[str] | None = None) -> int:
             COWORK: "  Cowork:      the Claude desktop data dir (override with VIBEWATT_COWORK_DIR)",
         }
         wanted = [args.source] if args.source != "all" else list(hints)
-        label = "Cowork" if args.source == COWORK else (
-            "Claude Code" if args.source == CLAUDE_CODE else "Claude Code or Cowork")
+        label = (
+            "Cowork"
+            if args.source == COWORK
+            else (
+                "Claude Code" if args.source == CLAUDE_CODE else "Claude Code or Cowork"
+            )
+        )
         print(
             f"No {label} session logs found. Looked in:\n"
             + "\n".join(hints[s] for s in wanted),
@@ -497,8 +604,12 @@ def main(argv: list[str] | None = None) -> int:
         print(file=out)
         print(block_text, file=out)
     print(file=out)
-    print(terminal.heatmap(report, weeks=cfg.get("weeks", 53), color=color,
-                           today=report.today), file=out)
+    print(
+        terminal.heatmap(
+            report, weeks=cfg.get("weeks", 53), color=color, today=report.today
+        ),
+        file=out,
+    )
     print(file=out)
     print(terminal.table("model", report.by_model, color), file=out)
     if len(report.by_source) > 1:
@@ -510,10 +621,14 @@ def main(argv: list[str] | None = None) -> int:
 
     notes = []
     if duplicates:
-        notes.append(f"{duplicates} repeated content-block rows collapsed into their response")
+        notes.append(
+            f"{duplicates} repeated content-block rows collapsed into their response"
+        )
     if report.restored_days:
-        notes.append(f"{len(report.restored_days)} day(s) include usage from the imported "
-                     "history.json")
+        notes.append(
+            f"{len(report.restored_days)} day(s) include usage from the imported "
+            "history.json"
+        )
     if report.unknown_models:
         notes.append("unpriced model(s): " + ", ".join(sorted(report.unknown_models)))
     if q is None and quota_note:

@@ -56,8 +56,9 @@ def read_tools(source: str, path: Path, *, key: bytes = b"") -> Iterator[dict]:
                 canonical = paths.normpath(paths.join(cwd, file_path))
                 if paths is ntpath:
                     canonical = paths.normcase(canonical)
-                digest = hmac.new(key, f"{session}\0{canonical}".encode(),
-                                  hashlib.sha256).hexdigest()
+                digest = hmac.new(
+                    key, f"{session}\0{canonical}".encode(), hashlib.sha256
+                ).hexdigest()
                 yield {
                     "session": session,
                     "tool_id": block["id"],

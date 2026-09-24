@@ -36,8 +36,9 @@ def discover(cfg: dict | None = None) -> list[tuple[str, Path]]:
     return [(name, path) for name, mod in SOURCES.items() for path in mod.discover(cfg)]
 
 
-def parse(source: str, path: Path, drops: Counter | None = None,
-          raw: dict | None = None) -> Iterator[Turn]:
+def parse(
+    source: str, path: Path, drops: Counter | None = None, raw: dict | None = None
+) -> Iterator[Turn]:
     return SOURCES[source].parse(path, drops, raw)
 
 
@@ -51,9 +52,12 @@ def walk(root: Path, pattern: str) -> list[Path]:
     found: dict[str, Path] = {}
     for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
         dirnames[:] = sorted(
-            d for d in dirnames
-            if not (os.path.islink(os.path.join(dirpath, d))
-                    or isjunction(os.path.join(dirpath, d)))
+            d
+            for d in dirnames
+            if not (
+                os.path.islink(os.path.join(dirpath, d))
+                or isjunction(os.path.join(dirpath, d))
+            )
         )
         for name in sorted(filenames):
             if fnmatch.fnmatch(name, pattern):

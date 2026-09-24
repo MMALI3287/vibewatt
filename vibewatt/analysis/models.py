@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone, tzinfo
+from datetime import UTC, datetime, tzinfo
 from typing import Literal
 
 Kind = Literal["anomaly", "cache", "tip", "waste", "peak", "context"]
@@ -30,8 +30,8 @@ class Finding:
 
 def timestamp(value: str | None) -> datetime | None:
     try:
-        stamp = datetime.fromisoformat((value or "").replace("Z", "+00:00"))
-        return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
+        stamp = datetime.fromisoformat(value or "")
+        return stamp if stamp.tzinfo else stamp.replace(tzinfo=UTC)
     except (ValueError, TypeError):
         return None
 

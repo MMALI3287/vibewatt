@@ -42,16 +42,15 @@ Working and verified against a real account:
 | Account-wide plan utilization | `vibewatt/quota.py` | done |
 | Cloud session harvest | `vibewatt/store.py` `vibewatt/cli.py` | done |
 | SQLite store | `vibewatt/store.py` | done |
-| Durable history across log pruning | `vibewatt/history.py` | done |
+| Durable history across log pruning | `vibewatt/store.py` | retained turns and rollups |
 | Diagnostics | `vibewatt/doctor.py` | done |
 | Terminal report | `vibewatt/terminal.py` | done |
-| Single-file interactive HTML | `vibewatt/ui.py` | done, to be superseded by the React app |
-| Dashboard server | `vibewatt/dashboard.py` | done, to be replaced by FastAPI |
+| React dashboard | `web/src/`, `vibewatt/static/` | built assets packaged in the wheel |
+| Dashboard server | `vibewatt/api/app.py` | FastAPI with local-only middleware |
 
 **Audit 2026-09-22:** phases 1-6 were audited against this plan. 128 findings,
 evidence in `docs/AUDIT-2026-09-22.md`, one line each in section 11, scheduled
-as Phase 6.5a-g below. The table above is partly stale (`dashboard.py` was
-removed in Phase 2; the CLI is argparse, not Typer); Phase 7 refreshes it.
+as Phase 6.5a-g below. Phase 7 refreshes the table above to reflect the store-only reporting pipeline.
 
 Numbers proven on real data: content-block dedup avoids a **2.8x** overcount of
 input/output (2.1x across all token types, A-101);
@@ -225,11 +224,11 @@ vibewatt/                     Python package
   store.py                  SQLite schema + queries
   analysis/                 anomaly.py, cache_scan.py, waste.py, tips.py, wrapped.py
   api/                      FastAPI app: routes, schemas, dependencies
-  cli.py                    typer CLI
+  cli.py                    argparse CLI
   static/                   built frontend, served by the API
 web/                        Vite + React + TypeScript
   src/
-    routes/                 Overview, Sessions, Projects, Models, Analysis, Wrapped, Settings
+    pages/                  Overview, Sessions, Breakdown, Analysis, Wrapped
     components/             ui primitives, charts
     lib/                    api client, formatting, filter state
 tests/                      pytest, fixtures never touch ~/.claude
@@ -242,10 +241,10 @@ docs/                       DATA-SOURCES.md, DESIGN.md
 |---|---|---|
 | Store | SQLite (stdlib `sqlite3`) | Zero install, one file, fast enough for years of turns. No server. |
 | API | FastAPI + uvicorn | Typed request/response, automatic OpenAPI the frontend generates from. |
-| CLI | Typer | Same codebase, better help than argparse. |
+| CLI | argparse | Standard library CLI shared with the API pipeline. |
 | Frontend | Vite + React + TypeScript | The feature list is a component tree: tabs, modals, accordions, pagination. |
 | Charts | Recharts | Composable, themeable, sane defaults. |
-| Styling | CSS custom properties + CSS modules | No utility-class dependency; theming is one token swap. |
+| Styling | CSS custom properties + shared stylesheet | No utility-class dependency; theming is one token swap. |
 | Tables | TanStack Table | Sorting, pagination, column visibility, without writing it. |
 | State | TanStack Query + URL search params | Filters belong in the URL so views are shareable and the back button works. |
 
@@ -294,13 +293,22 @@ GET  /api/daily?...           day -> tokens, cost, responses
 GET  /api/hourly?...          hour-of-day vector (24 buckets; decided in 6.5e, A-115)
 GET  /api/sessions?...&cursor&limit     paginated, includes titles
 GET  /api/sessions/{id}       one session with its turns
-GET  /api/breakdown/{dim}?... dim in model|project|source|surface
+GET  /api/breakdown/{dim}?... dim in model|project|source
 GET  /api/blocks              rate-limit windows, active first
 GET  /api/quota               account-wide utilization + recent samples
 GET  /api/findings            analysis output, filterable by kind/severity
 GET  /api/wrapped?year        year-in-review payload
 GET  /api/health              store stats, last sync, last harvest, coverage gaps
 POST /api/sync                re-parse local logs (streams progress)
+GET  /api/session-facets      stored filter options
+GET  /api/reconciliation      raw Stats rule versus deduped local totals
+GET  /api/alerts              burn and spike evidence
+GET  /api/status              optional public service status
+GET  /api/concierge?project   read-only resume brief
+GET  /api/findings/{id}       finding detail
+POST /api/findings/{id}/dismiss
+POST /api/analysis           refresh analysis snapshot
+POST /api/weekly-summary     opt-in AI summary
 POST /api/harvest             ingest a session listing
 GET  /api/export?format=csv|json
 ```
@@ -346,11 +354,13 @@ Read `docs/DESIGN.md` before writing any chart. It carries the validated palette
 Each names its data source and how to prove it works.
 
 ### 7.1 Session-grouped report
+Implemented in Phases 4 and 6.5b, verified by store/session reconciliation tests.
 **Source:** `turns` grouped by session, unioned with harvested `sessions`.
 **Shows:** title, surface, project, model mix, duration, tokens, cost, context peak.
 **Verify:** a known session's total equals the sum of its turns; a harvested session appears with its API cost unchanged.
 
 ### 7.2 "What you worked on" titles
+Implemented and corrected in Phase 6.5c; the current title rule is recorded there.
 **Source:** `last-prompt` records; fall back to first user message; prefer `summary` when present; cloud sessions use the API `title`.
 **Out of scope:** calling a model to summarize. The text is already on disk.
 **Verify:** a fixture session with a `last-prompt` record yields that text; one without falls back to the first user message.
@@ -921,31 +931,68 @@ audit scaffolding and dated phase notes that no longer matched the code.
   and a bundle of every local ref were kept outside the repository.
 
 ### Phase 7 — Packaging and polish
-**Status (2026-09-23): in progress** on `feat/phase-7-packaging-polish`, branched
-from `master` after the 6.5 merge. The earlier uncommitted work was ported to the
-vibewatt names and committed as the branch's first commit:
-- `vibewatt/api/app.py` serves the React build from `vibewatt/static` through a
-  catch-all route that never shadows `/api/*` or `/assets/*`; it sits behind the
-  `LocalOnly` middleware. `/api/usage`, `/api/dataset` and `ui.py` are still there:
-  removing them (with the `html` command) is left to this phase (A-054, A-126).
-- `pyproject.toml` ships `vibewatt/static/**` as a build artifact and runs
-  `scripts/build_hook.py`, which refuses a release build without the React build.
-  Keep the `tzdata; sys_platform == 'win32'` marker.
-- `web/src/App.tsx` lazy-loads each view. The modal routes have their own
-  `Suspense` boundary: with one shared boundary, loading the session modal chunk
-  unmounted the page behind it and the session deep-link test hung.
-- `tests/test_packaging.py` (6) covers SPA paths, assets, API 404s and a source
-  checkout without a build.
-- Gates on the branch: pytest 266, vitest 12, Playwright 47/47 on three
-  consecutive runs. One earlier run, right after a fresh `npm run build`, failed
-  6 design checks that all pass alone: look for a cold-start race in `vite
-  preview` before adding CI.
-- `web/openapi.json` is committed; `tests/test_security_api.py` fails when it
-  drifts. After an API change run `npm run gen:api` and commit both files. Add
-  that as a CI step.
-- Agent tooling (`.claude/`, `.codex/`, `.agents/`, `docs/CODEX-SETUP.md`) is
-  local and gitignored; shared rules are in `AGENTS.md`.
-- Lint: `ruff check` reports 18 errors, all pre-existing (A-107).
+**Status (2026-09-25): implemented and verified locally** on
+`feat/phase-7-packaging-polish`. Independent review found no remaining correctness
+or Phase 7 requirement gap. Publishing and hosted CI execution are separate.
+
+- React ships in the wheel and sdist. `app.frontend()` serves deep links with
+  explicit MIME types and the local-only guard outermost. Missing APIs and assets
+  stay 404; a source checkout without assets shows 503.
+- Build validation requires hashed JS and CSS, checks index references and
+  excludes source maps. `scripts/check_build.py` verifies incomplete source copies
+  and source-map exclusion without modifying the working build.
+- Route loading preserves separate modal boundaries. Vite 8 splits charts into
+  a 488.10 kB chunk; no chunk warning remains. npm audit reports zero findings.
+- The browser suite uses the production FastAPI static server instead of Vite
+  preview. It passes 47 checks including both themes, four widths and deep links.
+- CI on Windows and Linux checks Python, frontend, OpenAPI drift, dependency
+  floors, build guards and the installed dashboard. No hosted run is claimed.
+- README screenshots use fixture data from clean wheel installs. The actionable
+  backlog and prerequisites are in [DEFERRED.md](DEFERRED.md).
+
+Verification output:
+
+```text
+uv run pytest -q
+267 passed in 13.03s
+Python 3.11 with --resolution lowest-direct
+267 passed in 12.84s
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+69 files already formatted
+npm run test
+Test Files  2 passed (2)
+Tests  12 passed (12)
+npm run e2e
+47 passed (51.0s)
+uv build
+Successfully built dist/vibewatt-0.3.0.tar.gz
+Successfully built dist/vibewatt-0.3.0-py3-none-any.whl
+PASS release guard: complete
+PASS release guard: missing-css
+PASS release guard: missing-index
+PASS win32: clean wheel, 11 assets, SPA, APIs, fixture data, no Node.
+PASS linux: clean wheel, 11 assets, SPA, APIs, fixture data, no Node.
+PASS installed dashboard: six routes, both themes, session deep link, no runtime errors
+```
+
+The wheel checks use fresh pip-installed venvs in paths with spaces and Japanese
+characters, launch outside the checkout and hide Node from the server PATH.
+Sync idempotence and doctor use fixtures. Installed checks ran on Windows Python
+3.13 and WSL Ubuntu Python 3.14; Python 3.11 was tested separately. The browser
+controller remains on the build host. An initial floor probe omitted installing
+vibewatt and failed two subprocess tests; the corrected `--with-editable .` probe
+passes all 267. The reviewer independently reran pytest, Ruff, the distribution
+build and negative hook cases. Disposable `.tmp-review-dist` output remains
+ignored locally because command policy blocked cleanup.
+
+Name check: PyPI has the user's 0.0.1 reservation, GitHub is
+`MMALI3287/vibewatt` and npm returns 404. Nothing was published or reserved here.
+References: [FastAPI, 2026](https://fastapi.tiangolo.com/tutorial/frontend/),
+[Vite, 2026](https://vite.dev/guide/build) and
+[Vitest, 2026](https://vitest.dev/guide/migration/).
+
 **Toolchain continuation (2026-09-25):** Vite 8, plugin-react 6, Vitest 5,
 React Router 7.18.4, TypeScript 5.9 and openapi-fetch 0.17.0. Removed
 `react-router-dom` in favour of `react-router`, its supported unified imports.
@@ -954,7 +1001,13 @@ TestClient. Python now requires 3.11, FastAPI 0.141.1 and uvicorn 0.53.
 The Router 7 transition makes checkbox URL updates asynchronous; the browser
 check now clicks and waits for the controlled checked state instead of asserting
 it inside Playwright's synchronous `check()` operation.
-**Do:** ship `web/dist` into the wheel as `vibewatt/static`. `vibewatt serve` opens the React app. Windows path tests. Docs. Screenshots in the README.
+**Removal record (2026-09-25):** removed `vibewatt/ui.py`, the `html` CLI
+command and `/api/usage` and `/api/dataset`. React and the typed `/api/*`
+endpoints supersede the unsafe embedded-data renderer (A-054, A-126).
+Replaced the legacy-route success test with assertions that retired routes
+return 404. Removed redundant imports, UTC alias assignments and casts during
+lint cleanup; they carried no behaviour. No stored data or configuration was removed.
+**Do:** build directly into `vibewatt/static` and ship it in the wheel. `vibewatt serve` opens the React app. Windows path tests. Docs. Screenshots in the README.
 Added 2026-09-22 *(decided unless noted)*:
 - Name: re-check that `vibewatt` is free on PyPI, npm and GitHub. With the
   user's go-ahead, reserve the names; publishing is outward-facing.
@@ -1031,7 +1084,8 @@ Code 2.1.89 and later (section 2.4).
 
 ## 11. Deferred
 
-Append here rather than widening a phase.
+Current actionable inventory and prerequisites: [DEFERRED.md](DEFERRED.md).
+The dated entries below are retained as history; resolved items are not active work.
 
 - Codex, Gemini and other agent CLI ingestion (user will implement later).
 - PNG export of the dashboard.

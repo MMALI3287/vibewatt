@@ -24,7 +24,7 @@ import platform
 import shutil
 import sqlite3
 import sys
-from datetime import datetime, timedelta, timezone, tzinfo
+from datetime import UTC, datetime, timedelta, tzinfo
 from pathlib import Path
 from typing import Any
 
@@ -34,19 +34,19 @@ LEGACY_APP = "ccburn"
 DEFAULTS: dict[str, Any] = {
     "timezone": "local",
     "weeks": 53,
-    "session_length_hours": 5,      # Claude's rate-limit window
+    "session_length_hours": 5,  # Claude's rate-limit window
     "start_of_week": "monday",
     "include_sidechains": True,
-    "offline": False,               # skip the pricing refresh
+    "offline": False,  # skip the pricing refresh
     "monthly_budget_usd": None,
-    "plan_usd_per_month": None,     # e.g. 20 for Pro, 100/200 for Max
-    "heatmap_metric": "cost",       # cost | total | output | responses
+    "plan_usd_per_month": None,  # e.g. 20 for Pro, 100/200 for Max
+    "heatmap_metric": "cost",  # cost | total | output | responses
     "mask_projects": False,
-    "pricing_overrides": {},        # {"model-id": {"input": 1.0, "output": 5.0, ...}}
-    "project_aliases": {},          # {"-home-user-api": "API"}
-    "quota": True,                  # read account-level plan utilization
-    "day_start_hour": 0,            # 0-23; 6 counts a 20:00-04:00 session as one day
-    "sync_interval_seconds": 60,    # serve: background log sync; 0 disables
+    "pricing_overrides": {},  # {"model-id": {"input": 1.0, "output": 5.0, ...}}
+    "project_aliases": {},  # {"-home-user-api": "API"}
+    "quota": True,  # read account-level plan utilization
+    "day_start_hour": 0,  # 0-23; 6 counts a 20:00-04:00 session as one day
+    "sync_interval_seconds": 60,  # serve: background log sync; 0 disables
     "ai_summary": {
         "enabled": False,
         "model": "claude-haiku-4-5",
@@ -63,7 +63,10 @@ def deprecated(old: str, new: str) -> None:
     if old in _warned:
         return
     _warned.add(old)
-    print(f"{APP}: {old} is deprecated and will stop working next release; use {new}", file=sys.stderr)
+    print(
+        f"{APP}: {old} is deprecated and will stop working next release; use {new}",
+        file=sys.stderr,
+    )
 
 
 def env(name: str) -> str | None:
@@ -109,10 +112,15 @@ def data_dir() -> Path:
     legacy = default_data_dir(LEGACY_APP)
     if not target.exists() and legacy.is_dir():
         # Copy, never move: the old install keeps working until the user removes it.
-        shutil.copytree(legacy, target, ignore=shutil.ignore_patterns(f"{LEGACY_APP}.db*"))
+        shutil.copytree(
+            legacy, target, ignore=shutil.ignore_patterns(f"{LEGACY_APP}.db*")
+        )
         if (legacy / f"{LEGACY_APP}.db").is_file():
             copy_sqlite(legacy / f"{LEGACY_APP}.db", target / f"{APP}.db")
-        print(f"{APP}: copied {legacy} to {target}; the old copy is untouched", file=sys.stderr)
+        print(
+            f"{APP}: copied {legacy} to {target}; the old copy is untouched",
+            file=sys.stderr,
+        )
     return target
 
 
@@ -146,13 +154,19 @@ def _first_existing(current: Path, legacy: Path) -> Path:
 def load() -> dict[str, Any]:
     cfg = dict(DEFAULTS)
     candidates = [
-        _first_existing(user_config_dir() / f"{APP}.json", user_config_dir(LEGACY_APP) / f"{LEGACY_APP}.json")
+        _first_existing(
+            user_config_dir() / f"{APP}.json",
+            user_config_dir(LEGACY_APP) / f"{LEGACY_APP}.json",
+        )
     ]
     explicit = env("CONFIG")
     if explicit:
         candidates.append(Path(explicit).expanduser())
     candidates.append(
-        _first_existing(Path.cwd() / f".{APP}" / f"{APP}.json", Path.cwd() / f".{LEGACY_APP}" / f"{LEGACY_APP}.json")
+        _first_existing(
+            Path.cwd() / f".{APP}" / f"{APP}.json",
+            Path.cwd() / f".{LEGACY_APP}" / f"{LEGACY_APP}.json",
+        )
     )
     for path in candidates:
         cfg.update(_read(path))
@@ -185,7 +199,7 @@ class DayStartZone(tzinfo):
         return f"{self.base.tzname(dt)}@{int(self.shift.total_seconds() // 3600)}h"
 
     def fromutc(self, dt: datetime) -> datetime:
-        local = dt.replace(tzinfo=timezone.utc).astimezone(self.base)
+        local = dt.replace(tzinfo=UTC).astimezone(self.base)
         return (local.replace(tzinfo=None) - self.shift).replace(tzinfo=self)
 
     @property
