@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { getWrapped } from "../api/client";
 import { useFilters } from "../lib/filters";
 import { fmtCompact, fmtUsd } from "../lib/format";

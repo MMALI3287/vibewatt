@@ -15,7 +15,9 @@ test("analysis groups start collapsed and repeated-read findings survive refresh
   await page.reload();
   await page.locator("summary").filter({ hasText: "Token-waste checks" }).click();
   await expect(finding).toHaveCount(0);
-  await page.getByRole("checkbox", { name: "Show dismissed" }).check();
+  // Router 7 commits URL state in a transition; assert its eventual controlled state.
+  await page.getByRole("checkbox", { name: "Show dismissed" }).click();
+  await expect(page.getByRole("checkbox", { name: "Show dismissed" })).toBeChecked();
   // Changing this query briefly unmounts the groups while loading.
   await page.locator("summary").filter({ hasText: "Token-waste checks" }).click();
   await expect(finding).toContainText("Dismissed");

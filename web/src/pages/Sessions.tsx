@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useTitle } from "../lib/title";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { getSession, getSessions, SESSION_PAGE_SIZE, type SessionDetail } from "../api/client";
 import { useFilters } from "../lib/filters";
 import { fmtCompact, fmtPct, fmtUsd } from "../lib/format";

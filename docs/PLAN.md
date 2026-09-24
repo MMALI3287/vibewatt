@@ -946,6 +946,14 @@ vibewatt names and committed as the branch's first commit:
 - Agent tooling (`.claude/`, `.codex/`, `.agents/`, `docs/CODEX-SETUP.md`) is
   local and gitignored; shared rules are in `AGENTS.md`.
 - Lint: `ruff check` reports 18 errors, all pre-existing (A-107).
+**Toolchain continuation (2026-09-25):** Vite 8, plugin-react 6, Vitest 5,
+React Router 7.18.4, TypeScript 5.9 and openapi-fetch 0.17.0. Removed
+`react-router-dom` in favour of `react-router`, its supported unified imports.
+Removed the dev `httpx` dependency in favour of `httpx2` for Starlette's current
+TestClient. Python now requires 3.11, FastAPI 0.141.1 and uvicorn 0.53.
+The Router 7 transition makes checkbox URL updates asynchronous; the browser
+check now clicks and waits for the controlled checked state instead of asserting
+it inside Playwright's synchronous `check()` operation.
 **Do:** ship `web/dist` into the wheel as `vibewatt/static`. `vibewatt serve` opens the React app. Windows path tests. Docs. Screenshots in the README.
 Added 2026-09-22 *(decided unless noted)*:
 - Name: re-check that `vibewatt` is free on PyPI, npm and GitHub. With the
