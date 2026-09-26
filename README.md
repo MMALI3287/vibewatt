@@ -143,8 +143,8 @@ vibewatt quota         retained current quota snapshot              --json --out
 
 `status --json` and `quota --json` never sync logs or fetch network data.
 See [the versioned agent contract and exit codes](docs/AGENT-JSON.md).
-See [remaining decisions and completion tasks](docs/COMPLETION-QUESTIONS.md)
-for the finite backlog after the completed phases.
+See [the Phase 8 build plan](docs/COMPLETION-QUESTIONS.md) for the finite
+backlog after the completed phases.
 
 Shared flags: `--source {claude-code,cowork,all}`, `--since YYYY-MM-DD`, `--days N`,
 `--tz Asia/Tokyo`, `--day-start-hour H`, `--weeks N`, `--session-hours N`,
