@@ -1,22 +1,38 @@
 import { useLiveRefresh } from "./lib/liveRefresh";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Route, Routes, useLocation, type Location } from "react-router";
 import { FilterBar } from "./components/FilterBar";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
 import { Placeholder } from "./pages/Placeholder";
 import { Phase6Panels } from "./components/Phase6Panels";
+import { preloadable } from "./lib/preloadable";
 
-const Overview = lazy(() => import("./pages/Overview").then(m => ({ default: m.Overview })));
-const Sessions = lazy(() => import("./pages/Sessions").then(m => ({ default: m.Sessions })));
+const Overview = preloadable(() => import("./pages/Overview").then(m => m.Overview));
+const Sessions = preloadable(() => import("./pages/Sessions").then(m => m.Sessions));
 const SessionModal = lazy(() => import("./pages/Sessions").then(m => ({ default: m.SessionModal })));
-const Breakdown = lazy(() => import("./pages/Breakdown").then(m => ({ default: m.Breakdown })));
-const Analysis = lazy(() => import("./pages/Analysis").then(m => ({ default: m.Analysis })));
+const Breakdown = preloadable(() => import("./pages/Breakdown").then(m => m.Breakdown));
+const Analysis = preloadable(() => import("./pages/Analysis").then(m => m.Analysis));
 const FindingModal = lazy(() => import("./pages/Analysis").then(m => ({ default: m.FindingModal })));
-const Wrapped = lazy(() => import("./pages/Wrapped").then(m => ({ default: m.Wrapped })));
+const Wrapped = preloadable(() => import("./pages/Wrapped").then(m => m.Wrapped));
+const ROUTES = [Overview, Sessions, Breakdown, Analysis, Wrapped];
+
+/** Warm every route chunk once the first view is idle, so later tab switches never show the fallback. */
+function usePreloadRoutes() {
+  useEffect(() => {
+    const warm = () => ROUTES.forEach(route => void route.preload());
+    if (typeof window.requestIdleCallback === "function") {
+      const id = window.requestIdleCallback(warm);
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = window.setTimeout(warm, 1000);
+    return () => window.clearTimeout(id);
+  }, []);
+}
 
 export function App() {
   useLiveRefresh();
+  usePreloadRoutes();
   const location = useLocation();
   const state = location.state as { backgroundLocation?: Location } | null;
   const modal = location.pathname.startsWith("/sessions/") || location.pathname.startsWith("/analysis/findings/");
