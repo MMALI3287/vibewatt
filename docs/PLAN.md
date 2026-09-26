@@ -417,7 +417,10 @@ upper-bound scenarios. The spec fixture, which has no writes, still matches.
 **Verify:** fixture samples concentrated in one weekday window surface that window.
 
 ### 7.11 Context-window nudges
-**Source:** `sessions.context_used / context_max` from harvest, and the live block for local sessions.
+**Source:** `sessions.context_used / context_max` from harvest. Local sessions
+(amended 2026-09-26, Phase 8 package 2.1): the prompt size of the latest
+main-thread response over the model's verified window, for sessions active in the
+last 30 minutes. A rate-limit block is never a context source.
 **Definition:** warn above 70%, urgent above 85%.
 **Verify:** a harvested session at 451019/1000000 reports 45% and no warning; one at 900k warns.
 
@@ -432,6 +435,9 @@ upper-bound scenarios. The spec fixture, which has no writes, still matches.
 
 ### 7.14 Other agent CLIs
 **Deferred by the user.** Design `vibewatt/ingest/` so a new provider is one module exposing `discover()` and `parse()`. Do not implement Codex or Gemini now, but do not hard-code "claude" into the schema either — `turns.source` is already free text.
+**Scheduled 2026-09-26:** ChatGPT/Codex CLI and Gemini CLI/Antigravity ingestion
+are Phase 10, after the Phase 8 backlog and the Phase 9 verification. Phase 8 must
+not build them.
 
 ---
 
@@ -1038,6 +1044,165 @@ Added 2026-09-22 *(decided unless noted)*:
 **Gate:** `pip install dist/*.whl` in a clean venv on Windows and Linux, then `vibewatt serve` renders the dashboard with no Node present.
 
 ---
+
+### Post-phase deferred essentials (2026-09-26)
+
+The user authorized all eight items assessed as ready after Phases 1-7.
+These additions do not reopen the completed phases.
+
+- Stored local costs now follow the loaded pricing table and configured
+  overrides. A pricing fingerprint covers built-in, remote, fast, geographic
+  and tool rates plus the algorithm version. `sync_store` reprices retained
+  turns even when their logs are unchanged or gone. A savepoint updates costs,
+  affected rollups and generation together. Cloud-reported costs stay intact.
+  The fingerprint is store-wide because every retained turn is evaluated in
+  one atomic pass; per-turn schema expansion is unnecessary. Existing `meta`
+  stores the fingerprint and last-reprice timestamp. No migration is required.
+- `timezone: local` resolves the OS timezone with `tzlocal`, which is a new
+  dependency because portable standard-library discovery does not map Windows
+  timezone names to IANA rules. Winter and summer use their historical offsets.
+- `/api/report-context` supplies the shifted report date, named timezone,
+  day-start hour and last-sync timestamp. Date presets use that calendar date.
+- Overview compares current month-to-date local API-equivalent cost with the
+  configured full monthly plan fee. It respects source/project/model filters
+  but explicitly ignores the selected date range. It is neither actual savings
+  nor a bill. Invalid/unset plan prices omit the comparison; unpriced turns
+  suppress the multiple.
+- Header search submits to existing stored session search (title, project and
+  model). `/` focuses it except while typing into editable controls.
+- One browser timer refreshes active store-backed queries every 60 seconds
+  while visible and online. It excludes external status, paid generation and
+  sync mutations. Infinite session lists pause polling after the first page
+  to bound repeated work. Cached quota reads do not fetch external usage.
+- Provenance distinguishes computed local usage, estimated local cost,
+  cloud-reported snapshots and official quota readings. Shared labels apply
+  to groups of figures with the same origin. Local `as_of` means last sync;
+  cloud session `as_of` is its reported update time; mixed Wrapped data exposes
+  separate local sync and cloud harvest times. Missing timestamps stay unknown.
+  Analysis generation time is labelled separately from source freshness.
+- `status --json` and `quota --json` are schema-versioned store snapshots.
+  They do not sync logs or fetch network data. See `docs/AGENT-JSON.md`.
+
+Removal record: the eight completed rows were removed from the active table
+in `docs/DEFERRED.md` because this implementation resolves them. Their history
+is retained in that file and here. Fixed-offset local timezone resolution was
+replaced because it misbucketed historical DST dates. No service, stored table,
+legacy command or user data was removed. The old dashboard refresh script
+remains removed; browser refresh is implemented in React.
+
+The remaining 17 items and the release-scope choices were decided on
+2026-09-26. See "Phase 8" below and `docs/COMPLETION-QUESTIONS.md`.
+
+**Checks:** Python regression suite, Ruff check/format, frontend unit tests,
+production build, generated OpenAPI/client types and browser checks including
+the 60-second polling cycle, header search, presets, both themes and widths.
+
+Verified 2026-09-26: 292 Python tests, 15 frontend unit tests and 51 Chromium
+checks passed. Ruff check and format checks passed. A freshly built wheel was
+installed outside the checkout on Windows with Node absent from the runtime
+PATH; fixture sync, assets, APIs, all six dashboard routes, both themes and a
+session deep link passed without runtime errors. Linux/macOS clean-install
+checks were not rerun for this addition. No release was published.
+
+Pre-merge review fixes (2026-09-26). A three-reviewer pass over the unmerged
+Phase 7 and post-phase diff found six defects. Each fix has a regression test:
+
+- `timezone: local` crashed every command, statusline included, when `tzlocal`
+  raised `ZoneInfoNotFoundError` for a POSIX `TZ` string or conflicting system
+  configs. It now warns and falls back to the current UTC offset.
+- A stale pricing cache while offline loaded an empty remote table. That changed
+  the fingerprint and repriced remote-only models (Sonnet 3.5/3.7) to unpriced.
+  `refresh()` now falls back to the stale cache.
+- Restored `history.json` days priced their missing part as history cost minus
+  the repriced store cost, which could reach $0. The missing tokens are now
+  priced at current rates.
+- `status --json` never loaded the cached remote table, so restored history
+  disagreed with `vibewatt json`. It now reads the cache without fetching.
+- React Router 7 commits history in a transition. URL-backed inputs (session
+  search, date fields) lost keystrokes. `BrowserRouter` now sets
+  `useTransitions={false}`.
+- The Phase 8 handoff cited a `vibewatt reprice` command that does not exist.
+  Repricing runs inside `sync`.
+
+---
+
+### Phase 8: Backlog completion (planned 2026-09-26)
+
+**Do:** build packages 1-5 in `docs/COMPLETION-QUESTIONS.md`, which holds the
+scope, bounds and acceptance checks for each: pricing completeness, local context
+nudges and `history.jsonl` activity, multi-account and multi-machine
+export/import, PNG export and browser notifications, then macOS CI and
+three-platform clean-install checks.
+**Out of scope:** new providers (Phase 10), version bump, tag, GitHub release
+and PyPI publish (Phase 11).
+**Gate:** every package passes the CI gate. Package 5 passes on Windows, Linux
+and macOS. `DEFERRED.md` lists only Phase 10 items afterwards.
+
+Decisions (2026-09-26). The user chose: release = tagged GitHub release plus
+PyPI publish; platforms = Windows, Linux and macOS; build multi-account and
+multi-machine support; browser-only opt-in notifications for warnings and above;
+close cloud listing, localization and commit links; ChatGPT/Codex and
+Gemini/Antigravity providers after verification. The remaining calls below were
+made from the local log evidence recorded in `COMPLETION-QUESTIONS.md`.
+
+Closure record. These items were removed from the active backlog in
+`docs/DEFERRED.md` in this change. Each reason is recorded with a reopen trigger.
+
+- **Advisor-model pricing.** No advisor iterations exist in 18,049 real
+  `usage.iterations[]` entries, so overlap with top-level usage and advisor rates
+  cannot be verified. Phase 8 adds a `doctor` detection guard instead. Reopen when
+  the guard fires on real data.
+- **Opt-in cloud session listing.** User decision. `/v1/code/sessions` is
+  undocumented and needs credentials. File harvest stays supported. Reopen when a
+  documented endpoint exists.
+- **Optional OTLP receiver.** JSONL already supplies every attribution field the
+  reports use. A receiver adds a local network surface for no current gain. Reopen
+  when a needed field exists only in OTLP.
+- **Localization.** User decision: English-only release. Reopen when a named
+  language has a terminology reviewer.
+- **Drain explainer and metering drift.** Needs months of quota history with
+  version provenance. On thin history it would imply plan limits the data cannot
+  support, which section 9 forbids. Plan meters already show quota. Reopen at 90
+  or more days of retained quota history.
+- **Spend linked to commits and finding follow-up outcomes.** User decision on
+  commit links. Finding outcomes were the same backlog item and share its
+  causation risk. Reopen when the user asks for either.
+- **React 19, Router 8 and TanStack Table 9.** No concrete compatibility or
+  security need. CI runs `npm audit --omit=dev --audit-level=high`. Reopen on an
+  advisory, end of life of a current major or a blocked dependency.
+- **Webhooks and desktop (OS) notifications.** User decision: browser
+  notifications only. No webhook secret storage is needed.
+- **npm name reservation.** Not needed for a Python wheel. Reopen if a
+  JavaScript package is planned.
+
+Rescheduled, not closed: Codex, Gemini and other agent CLI ingestion moved from
+the backlog to Phase 10. No code, table, command or dependency was removed by
+this planning change.
+
+### Phase 9: Verification (planned)
+
+**Do:** an independent audit of Phase 8 against `COMPLETION-QUESTIONS.md` and
+`AGENTS.md`: rerun every gate, check each acceptance item against real behavior,
+confirm new functions have real callers and fix findings test-first.
+**Gate:** every Phase 8 acceptance box is verified, not only ticked.
+
+### Phase 10: More providers (planned)
+
+**Do:** Gemini CLI/Antigravity usage and ChatGPT/Codex CLI usage, including
+the plan rate-limit readings that Codex logs carry. Each provider is one `ingest/` module
+with `discover()` and `parse()`. Before parsing, `DATA-SOURCES.md` records its
+response identity, whether counts are cumulative or per-turn, model rates with
+cited sources and retention. Provider stats are labelled local-only and kept
+separate by `turns.source`.
+**Gate:** order-independent dedup on sanitized fixtures, no double counting of
+cumulative counts, one observed real sync per provider with local data.
+
+### Phase 11: Public launch (planned)
+
+**Do:** make the GitHub repository public for contributions, bump the version,
+write release notes, tag, create the GitHub release and publish to PyPI.
+**Gate:** each external step (visibility change, tag push, release, PyPI upload)
+is confirmed by the user separately, with the exact version and artifact hashes.
 
 ## 9. Non-goals
 
