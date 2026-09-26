@@ -20,7 +20,9 @@ from vibewatt.sources import stats_line
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--until", required=True, help="ISO time, inclusive to the second")
+    parser.add_argument(
+        "--until", required=True, help="ISO time, inclusive to the second"
+    )
     args = parser.parse_args()
     until = datetime.fromisoformat(args.until)
     limit = until.replace(microsecond=999_999)

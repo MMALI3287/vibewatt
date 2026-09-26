@@ -14,7 +14,7 @@ import random
 import sys
 import tempfile
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 ENDPOINTS = (
@@ -34,7 +34,7 @@ def build(path: Path, n: int) -> None:
     from vibewatt import store
 
     rng = random.Random(7)
-    start = datetime(2025, 9, 1, tzinfo=timezone.utc)
+    start = datetime(2025, 9, 1, tzinfo=UTC)
     models = [
         "claude-opus-5",
         "claude-sonnet-5",
@@ -87,7 +87,7 @@ def build(path: Path, n: int) -> None:
                 "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 rows,
             )
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         conn.execute(
             "INSERT OR REPLACE INTO meta VALUES ('sync_tz', ?)",
             (f"UTC|{now.utcoffset()}",),

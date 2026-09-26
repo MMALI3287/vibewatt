@@ -17,6 +17,7 @@ Built-in rates: https://platform.claude.com/docs/en/about-claude/pricing
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -43,31 +44,31 @@ class Rate(NamedTuple):
 
 # Verified 2026-09-15 against the published pricing page.
 BUILTIN: dict[str, Rate] = {
-    "claude-fable-5-1":  Rate(10.0, 12.50, 20.0, 0.25, 50.0),
+    "claude-fable-5-1": Rate(10.0, 12.50, 20.0, 0.25, 50.0),
     "claude-mythos-5-1": Rate(10.0, 12.50, 20.0, 0.25, 50.0),
-    "claude-fable-5":    Rate(10.0, 12.50, 20.0, 1.00, 50.0),
-    "claude-mythos-5":   Rate(10.0, 12.50, 20.0, 1.00, 50.0),
-    "claude-opus-5":     Rate(5.0, 6.25, 10.0, 0.50, 25.0),
-    "claude-opus-4-8":   Rate(5.0, 6.25, 10.0, 0.50, 25.0),
-    "claude-opus-4-7":   Rate(5.0, 6.25, 10.0, 0.50, 25.0),
-    "claude-opus-4-6":   Rate(5.0, 6.25, 10.0, 0.50, 25.0),
-    "claude-opus-4-5":   Rate(5.0, 6.25, 10.0, 0.50, 25.0),
-    "claude-opus-4-1":   Rate(15.0, 18.75, 30.0, 1.50, 75.0),
-    "claude-opus-4":     Rate(15.0, 18.75, 30.0, 1.50, 75.0),
-    "claude-sonnet-5":   Rate(2.0, 2.50, 4.0, 0.20, 10.0),
+    "claude-fable-5": Rate(10.0, 12.50, 20.0, 1.00, 50.0),
+    "claude-mythos-5": Rate(10.0, 12.50, 20.0, 1.00, 50.0),
+    "claude-opus-5": Rate(5.0, 6.25, 10.0, 0.50, 25.0),
+    "claude-opus-4-8": Rate(5.0, 6.25, 10.0, 0.50, 25.0),
+    "claude-opus-4-7": Rate(5.0, 6.25, 10.0, 0.50, 25.0),
+    "claude-opus-4-6": Rate(5.0, 6.25, 10.0, 0.50, 25.0),
+    "claude-opus-4-5": Rate(5.0, 6.25, 10.0, 0.50, 25.0),
+    "claude-opus-4-1": Rate(15.0, 18.75, 30.0, 1.50, 75.0),
+    "claude-opus-4": Rate(15.0, 18.75, 30.0, 1.50, 75.0),
+    "claude-sonnet-5": Rate(2.0, 2.50, 4.0, 0.20, 10.0),
     "claude-sonnet-4-6": Rate(3.0, 3.75, 6.0, 0.30, 15.0),
     "claude-sonnet-4-5": Rate(3.0, 3.75, 6.0, 0.30, 15.0),
-    "claude-sonnet-4":   Rate(3.0, 3.75, 6.0, 0.30, 15.0),
-    "claude-haiku-4-5":  Rate(1.0, 1.25, 2.0, 0.10, 5.0),
-    "claude-haiku-3-5":  Rate(0.80, 1.00, 1.60, 0.08, 4.0),
-    "claude-3-5-haiku":  Rate(0.80, 1.00, 1.60, 0.08, 4.0),
-    "claude-3-opus":     Rate(15.0, 18.75, 30.0, 1.50, 75.0),
-    "claude-3-haiku":    Rate(0.25, 0.30, 0.50, 0.03, 1.25),
+    "claude-sonnet-4": Rate(3.0, 3.75, 6.0, 0.30, 15.0),
+    "claude-haiku-4-5": Rate(1.0, 1.25, 2.0, 0.10, 5.0),
+    "claude-haiku-3-5": Rate(0.80, 1.00, 1.60, 0.08, 4.0),
+    "claude-3-5-haiku": Rate(0.80, 1.00, 1.60, 0.08, 4.0),
+    "claude-3-opus": Rate(15.0, 18.75, 30.0, 1.50, 75.0),
+    "claude-3-haiku": Rate(0.25, 0.30, 0.50, 0.03, 1.25),
 }
 
 # Fast mode replaces base input/output pricing; cache multipliers ride on top.
 FAST_MODE: dict[str, Rate] = {
-    "claude-opus-5":   Rate(10.0, 12.50, 20.0, 1.00, 50.0),
+    "claude-opus-5": Rate(10.0, 12.50, 20.0, 1.00, 50.0),
     "claude-opus-4-8": Rate(10.0, 12.50, 20.0, 1.00, 50.0),
 }
 
@@ -77,14 +78,30 @@ WEB_SEARCH_PER_CALL = 10.0 / 1000
 _remote: dict[str, Rate] | None = None
 
 
+def fingerprint(overrides: dict | None = None) -> str:
+    """Identify the current pricing inputs without triggering a network fetch."""
+    snapshot = {
+        "algorithm": 1,
+        "builtin": BUILTIN,
+        "fast": FAST_MODE,
+        "remote": _remote or {},
+        "overrides": overrides or {},
+        "geo_us": GEO_US_MULTIPLIER,
+        "web_search": WEB_SEARCH_PER_CALL,
+    }
+    return hashlib.sha256(
+        json.dumps(snapshot, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
 # Bedrock inference profiles (global., us., eu., apac., jp., au., us-gov., ...)
 # and the bare "anthropic." provider prefix (A-012).
 _PROVIDER = re.compile(r"^(?:[a-z]{2,6}(?:-[a-z]+)?\.)?anthropic[./]")
 _SUFFIXES = (
-    re.compile(r"\[1m\]$"),          # Claude Code's 1M-context marker
-    re.compile(r"@.*$"),              # Vertex snapshot: claude-opus-4-5@20251101
-    re.compile(r"-v\d+(?::\d+)?$"),   # Bedrock version: -v1:0
-    re.compile(r"-\d{8}$"),           # dated snapshot: -20250929
+    re.compile(r"\[1m\]$"),  # Claude Code's 1M-context marker
+    re.compile(r"@.*$"),  # Vertex snapshot: claude-opus-4-5@20251101
+    re.compile(r"-v\d+(?::\d+)?$"),  # Bedrock version: -v1:0
+    re.compile(r"-\d{8}$"),  # dated snapshot: -20250929
     re.compile(r"-latest$"),
 )
 
@@ -105,10 +122,10 @@ def _cache_path():
     return data_dir() / "pricing-cache.json"
 
 
-def _load_remote_cache() -> dict | None:
+def _load_remote_cache(*, allow_stale: bool = False) -> dict | None:
     path = _cache_path()
     try:
-        if time.time() - path.stat().st_mtime > CACHE_TTL_SECONDS:
+        if not allow_stale and time.time() - path.stat().st_mtime > CACHE_TTL_SECONDS:
             return None
         with path.open("r", encoding="utf-8") as fh:
             return json.load(fh)
@@ -166,7 +183,9 @@ def _parse_remote(payload: dict) -> dict[str, Rate]:
             outp = _per_million(entry["output_cost_per_token"], positive=True)
             write = entry.get("cache_creation_input_token_cost")
             read = entry.get("cache_read_input_token_cost")
-            w5 = _per_million(write, positive=False) if write is not None else inp * 1.25
+            w5 = (
+                _per_million(write, positive=False) if write is not None else inp * 1.25
+            )
             rd = _per_million(read, positive=False) if read is not None else inp * 0.1
         except (KeyError, TypeError, ValueError):
             continue
@@ -184,6 +203,10 @@ def refresh(offline: bool = False) -> int:
     payload = _load_remote_cache()
     if payload is None and not offline:
         payload = _fetch_remote()
+    if payload is None:
+        # An empty table would change the fingerprint and reprice every
+        # remote-only model to unpriced while offline. Stale rates beat none.
+        payload = _load_remote_cache(allow_stale=True)
     _remote = _parse_remote(payload) if payload else {}
     return len(_remote)
 

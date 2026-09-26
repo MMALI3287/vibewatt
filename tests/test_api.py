@@ -110,7 +110,9 @@ def test_sessions_list_filters_by_project(logs):
     matching = client.get("/api/sessions", params={"project": real_project}).json()
     assert matching and all(r["project"] == real_project for r in matching)
 
-    none_matching = client.get("/api/sessions", params={"project": "no-such-project"}).json()
+    none_matching = client.get(
+        "/api/sessions", params={"project": "no-such-project"}
+    ).json()
     assert none_matching == []
 
 
@@ -144,10 +146,17 @@ def test_sessions_obey_dates_and_search(logs):
 
 def test_sessions_cursor_keeps_equal_timestamps(tmp_path):
     client = _client()
-    client.post("/api/harvest", json=[{
-        "id": f"cloud-{i}", "created_at": "2026-09-15T00:00:00Z",
-        "external_metadata": {"usage": {"cost_usd": 1.23}},
-    } for i in range(3)])
+    client.post(
+        "/api/harvest",
+        json=[
+            {
+                "id": f"cloud-{i}",
+                "created_at": "2026-09-15T00:00:00Z",
+                "external_metadata": {"usage": {"cost_usd": 1.23}},
+            }
+            for i in range(3)
+        ],
+    )
     seen = []
     cursor = None
     for _ in range(3):
@@ -165,10 +174,16 @@ def test_session_dates_use_report_timezone_for_local_and_cloud(logs):
     app.state.tz = timezone(timedelta(hours=9))
     client = TestClient(app)
     client.post("/api/sync")
-    client.post("/api/harvest", json=[{
-        "id": "cloud-boundary", "created_at": "2026-09-15T20:00:00Z",
-        "external_metadata": {"usage": {"cost_usd": 9.87}},
-    }])
+    client.post(
+        "/api/harvest",
+        json=[
+            {
+                "id": "cloud-boundary",
+                "created_at": "2026-09-15T20:00:00Z",
+                "external_metadata": {"usage": {"cost_usd": 9.87}},
+            }
+        ],
+    )
     rows = client.get("/api/sessions?from=2026-09-16&to=2026-09-16").json()
     assert {r["id"] for r in rows} == {"s1", "cloud-boundary"}
     assert next(r for r in rows if r["id"] == "s1")["tokens"] == 40
@@ -199,14 +214,26 @@ def test_invalid_composite_cursor_is_400(logs):
 def test_session_facets_include_cloud_only_values(logs):
     client = _client()
     client.post("/api/sync")
-    client.post("/api/harvest", json=[{
-        "id": "cloud-facet", "origin": "web_claude_ai",
-        "session_context": {
-            "model": "cloud-only-model",
-            "sources": [{"git_repository": {"url": "https://github.com/example/cloud-project"}}],
-        },
-        "external_metadata": {"usage": {"cost_usd": 1.23}},
-    }])
+    client.post(
+        "/api/harvest",
+        json=[
+            {
+                "id": "cloud-facet",
+                "origin": "web_claude_ai",
+                "session_context": {
+                    "model": "cloud-only-model",
+                    "sources": [
+                        {
+                            "git_repository": {
+                                "url": "https://github.com/example/cloud-project"
+                            }
+                        }
+                    ],
+                },
+                "external_metadata": {"usage": {"cost_usd": 1.23}},
+            }
+        ],
+    )
     facets = client.get("/api/session-facets").json()
     assert set(facets["sources"]) == {"claude-code", "cowork", "web"}
     assert "cloud-project" in facets["projects"]
@@ -216,23 +243,33 @@ def test_session_facets_include_cloud_only_values(logs):
 
 def test_harvest_ingests_a_cloud_session(tmp_path):
     client = _client()
-    payload = [{
-        "id": "session_01H1",
-        "title": "cloud test session",
-        "origin": "web_claude_ai",
-        "created_at": "2026-09-15T00:00:00Z",
-        "updated_at": "2026-09-15T00:10:00Z",
-        "session_context": {"model": "claude-opus-5"},
-        "external_metadata": {
-            "usage": {"input_tokens": 100, "output_tokens": 50,
-                      "cache_read_tokens": 0, "cache_write_tokens": 0,
-                      "cost_usd": 1.23},
-        },
-    }]
+    payload = [
+        {
+            "id": "session_01H1",
+            "title": "cloud test session",
+            "origin": "web_claude_ai",
+            "created_at": "2026-09-15T00:00:00Z",
+            "updated_at": "2026-09-15T00:10:00Z",
+            "session_context": {"model": "claude-opus-5"},
+            "external_metadata": {
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 50,
+                    "cache_read_tokens": 0,
+                    "cache_write_tokens": 0,
+                    "cost_usd": 1.23,
+                },
+            },
+        }
+    ]
     resp = client.post("/api/harvest", json=payload)
     assert resp.status_code == 200
-    assert resp.json() == {"written": 1, "skipped": 0, "rejected_no_id": 0,
-                           "skipped_environment": 0}
+    assert resp.json() == {
+        "written": 1,
+        "skipped": 0,
+        "rejected_no_id": 0,
+        "skipped_environment": 0,
+    }
 
     sessions = client.get("/api/sessions").json()
     cloud_rows = [r for r in sessions if r["harvested"]]
@@ -283,8 +320,7 @@ def test_bad_date_filter_is_400(logs):
     assert resp.status_code == 400
 
 
-def test_legacy_usage_route_still_works(logs):
+def test_retired_legacy_routes_are_404(logs):
     client = _client()
-    resp = client.get("/api/usage")
-    assert resp.status_code == 200
-    assert "total" in resp.json()
+    for path in ("/api/usage", "/api/dataset"):
+        assert client.get(path).status_code == 404

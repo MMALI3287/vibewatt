@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json as jsonlib
-from datetime import datetime
+import math
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -18,17 +19,76 @@ from .dependencies import Filters, get_filters
 router = APIRouter(prefix="/api")
 
 
+def _local_provenance(conn) -> dict:
+    stamp = conn.execute("SELECT value FROM meta WHERE key='last_sync'").fetchone()
+    return {
+        "usage": "computed_local",
+        "cost": "estimate",
+        "scope": "stored_local",
+        "as_of": stamp[0] if stamp else None,
+    }
+
+
+def _session_provenance(row: dict, local: dict) -> dict:
+    if not row["harvested"]:
+        return local
+    return {
+        "usage": "cloud_reported",
+        "cost": "cloud_reported",
+        "scope": "harvested_session",
+        # A later harvest of a different session does not refresh this snapshot.
+        "as_of": row.get("ended"),
+    }
+
+
+@router.get("/report-context", response_model=schemas.ReportContextOut)
+def report_context(request: Request):
+    from ..config import clock_zone, zone_id
+
+    with store.connect() as conn:
+        provenance = _local_provenance(conn)
+    return {
+        "today": datetime.now(request.app.state.tz).date().isoformat(),
+        "timezone": zone_id(clock_zone(request.app.state.tz)),
+        "day_start_hour": int(request.app.state.cfg.get("day_start_hour") or 0),
+        "as_of": provenance["as_of"],
+    }
+
+
 @router.get("/wrapped", response_model=schemas.WrappedOut)
-def wrapped(request: Request, year: int | None = Query(None, ge=1970, le=9998),
-            filters: Filters = Depends(get_filters)):
+def wrapped(
+    request: Request,
+    year: int | None = Query(None, ge=1970, le=9998),
+    filters: Filters = Depends(get_filters),
+):
     from ..analysis.wrapped import build
 
     request.app.state.ensure_synced()
     with store.connect() as conn:
-        return build(conn, request.app.state.cfg, request.app.state.tz,
-                     year or datetime.now(request.app.state.tz).year,
-                     source=filters.source, project=_raw_projects(request, conn, filters),
-                     model=filters.model)
+        result = build(
+            conn,
+            request.app.state.cfg,
+            request.app.state.tz,
+            year or datetime.now(request.app.state.tz).year,
+            source=filters.source,
+            project=_raw_projects(request, conn, filters),
+            model=filters.model,
+        )
+        local = _local_provenance(conn)
+        stamp = conn.execute(
+            "SELECT value FROM meta WHERE key='last_harvest'"
+        ).fetchone()
+        result["local_summary"]["provenance"] = local
+        result["provenance_by_source"] = {
+            "local": local,
+            "cloud": {
+                "usage": "cloud_reported",
+                "cost": "cloud_reported",
+                "scope": "harvested_sessions",
+                "as_of": stamp[0] if stamp else None,
+            },
+        }
+        return result
 
 
 @router.get("/alerts", response_model=schemas.AlertsOut)
@@ -37,8 +97,12 @@ def alerts(request: Request):
 
     cfg = request.app.state.cfg
     with store.connect() as conn:
-        return evaluate(conn, request.app.state.tz, overrides=cfg.get("pricing_overrides"),
-                        session_hours=cfg.get("session_length_hours", 5))
+        return evaluate(
+            conn,
+            request.app.state.tz,
+            overrides=cfg.get("pricing_overrides"),
+            session_hours=cfg.get("session_length_hours", 5),
+        )
 
 
 @router.get("/status", response_model=schemas.ServiceStatusOut | None)
@@ -59,37 +123,49 @@ def weekly_summary(request: Request):
 
 
 @router.get("/concierge", response_model=schemas.ConciergeOut)
-def concierge(request: Request, project: str = Query(..., min_length=1, max_length=500)):
+def concierge(
+    request: Request, project: str = Query(..., min_length=1, max_length=500)
+):
     from ..concierge import build
 
     with store.connect() as conn:
         return build(conn, request.app.state.cfg, project)
 
 
-def _findings(request: Request, filters: Filters, kind, severity, include_dismissed,
-              force: bool):
+def _findings(
+    request: Request, filters: Filters, kind, severity, include_dismissed, force: bool
+):
     from ..analysis import current
 
     with store.connect() as conn:
         result = current(
-            conn, request.app.state.tz, force=force,
-            date_from=filters.date_from, date_to=filters.date_to,
-            source=filters.source, project=_raw_projects(request, conn, filters),
+            conn,
+            request.app.state.tz,
+            force=force,
+            date_from=filters.date_from,
+            date_to=filters.date_to,
+            source=filters.source,
+            project=_raw_projects(request, conn, filters),
             model=filters.model,
             overrides=request.app.state.cfg.get("pricing_overrides"),
         )
     result = dict(result)
-    result["findings"] = [f for f in result["findings"]
-                          if (include_dismissed or not f["dismissed"])
-                          and (not kind or f["kind"] == kind)
-                          and (not severity or f["severity"] == severity)]
+    result["findings"] = [
+        f
+        for f in result["findings"]
+        if (include_dismissed or not f["dismissed"])
+        and (not kind or f["kind"] == kind)
+        and (not severity or f["severity"] == severity)
+    ]
     return result
 
 
 @router.get("/findings", response_model=schemas.AnalysisOut)
 def findings(
-    request: Request, filters: Filters = Depends(get_filters),
-    kind: Kind | None = None, severity: Severity | None = None,
+    request: Request,
+    filters: Filters = Depends(get_filters),
+    kind: Kind | None = None,
+    severity: Severity | None = None,
     include_dismissed: bool = False,
 ):
     """The stored snapshot; recomputed only after the store changes (A-092)."""
@@ -99,16 +175,21 @@ def findings(
 
 @router.post("/analysis", response_model=schemas.AnalysisOut)
 def run_analysis(
-    request: Request, filters: Filters = Depends(get_filters),
-    kind: Kind | None = None, severity: Severity | None = None,
+    request: Request,
+    filters: Filters = Depends(get_filters),
+    kind: Kind | None = None,
+    severity: Severity | None = None,
     include_dismissed: bool = False,
 ):
     """Recompute now, whatever the snapshot says."""
     return _findings(request, filters, kind, severity, include_dismissed, force=True)
 
 
-@router.get("/findings/{finding_id}", response_model=schemas.FindingOut,
-            responses={404: {"description": "No such finding"}})
+@router.get(
+    "/findings/{finding_id}",
+    response_model=schemas.FindingOut,
+    responses={404: {"description": "No such finding"}},
+)
 def finding_detail(finding_id: str):
     """One finding, for the deep-linkable finding modal (A-046)."""
     with store.connect() as conn:
@@ -136,44 +217,98 @@ def _raw_projects(request: Request, conn, filters: Filters) -> list[str] | None:
     """The shown project name in a filter, back to the raw names behind it (A-029)."""
     from ..projects import resolve
 
-    return resolve(_labels(request, conn), filters.project,
-                   bool(request.app.state.cfg.get("mask_projects")))
+    return resolve(
+        _labels(request, conn),
+        filters.project,
+        bool(request.app.state.cfg.get("mask_projects")),
+    )
 
 
 def _report(request: Request, filters: Filters, parts: frozenset[str] | None = None):
     request.app.state.ensure_synced()
     return request.app.state.report(
-        source=filters.source, date_from=filters.date_from, date_to=filters.date_to,
-        project=filters.project, model=filters.model, parts=parts,
+        source=filters.source,
+        date_from=filters.date_from,
+        date_to=filters.date_to,
+        project=filters.project,
+        model=filters.model,
+        parts=parts,
     )
 
 
-def _quota_out(q, forecasts: list[dict] | None = None,
-               recent: list[dict] | None = None) -> schemas.QuotaOut | None:
+def _quota_out(
+    q, forecasts: list[dict] | None = None, recent: list[dict] | None = None
+) -> schemas.QuotaOut | None:
     if q is None:
         return None
     by_series = {(f["key"], f["scope"]): f for f in forecasts or []}
     windows = []
     for w in q.windows:
         f = by_series.get((w.key, w.scope), {})
-        windows.append(schemas.WindowOut(
-            key=w.key, label=w.label, scope=w.scope, source=w.source,
-            utilization=w.utilization,
-            resets_at=(w.resets_at.isoformat() if w.resets_at
-                       else f.get("resets_at")),
-            pace_delta=f.get("pace_delta"), elapsed_pct=f.get("elapsed_pct"),
-            band=f.get("band"), note=f.get("note"),
-        ))
+        windows.append(
+            schemas.WindowOut(
+                key=w.key,
+                label=w.label,
+                scope=w.scope,
+                source=w.source,
+                utilization=w.utilization,
+                resets_at=(
+                    w.resets_at.isoformat() if w.resets_at else f.get("resets_at")
+                ),
+                pace_delta=f.get("pace_delta"),
+                elapsed_pct=f.get("elapsed_pct"),
+                band=f.get("band"),
+                note=f.get("note"),
+            )
+        )
     return schemas.QuotaOut(
-        source=q.source, fetched_at=q.fetched_at.isoformat(), windows=windows,
-        recent=recent or [], notes=q.notes,
+        provenance=schemas.ProvenanceOut(
+            usage="official",
+            cost="estimate",
+            scope="account_or_org",
+            as_of=q.fetched_at.isoformat(),
+        ),
+        source=q.source,
+        fetched_at=q.fetched_at.isoformat(),
+        windows=windows,
+        recent=recent or [],
+        notes=q.notes,
     )
 
 
 @router.get("/summary", response_model=schemas.SummaryOut)
 def summary(request: Request, filters: Filters = Depends(get_filters)):
     report, *_ = _report(request, filters)
-    return climod.serialize(report)
+    payload = climod.serialize(report)
+    with store.connect() as conn:
+        payload["provenance"] = _local_provenance(conn)
+    price = request.app.state.cfg.get("plan_usd_per_month")
+    if (
+        isinstance(price, (int, float))
+        and not isinstance(price, bool)
+        and math.isfinite(price)
+        and price > 0
+    ):
+        today = datetime.now(request.app.state.tz).date()
+        start = today.replace(day=1)
+        # Date filters must not silently compare an arbitrary range with one month.
+        mtd, *_ = request.app.state.report(
+            source=filters.source,
+            project=filters.project,
+            model=filters.model,
+            date_from=start,
+            date_to=today,
+            parts=frozenset(),
+        )
+        payload["plan_comparison"] = {
+            "period_start": start.isoformat(),
+            "period_end": today.isoformat(),
+            "local_cost_usd": round(mtd.total.cost, 6),
+            "monthly_plan_usd": float(price),
+            "multiple": None if mtd.total.unpriced else mtd.total.cost / price,
+            "unpriced": mtd.total.unpriced,
+        }
+    return payload
 
 
 @router.get("/daily", response_model=dict[str, schemas.BucketOut])
@@ -197,26 +332,43 @@ _BREAKDOWNS = {"model": "by_model", "project": "by_project", "source": "by_sourc
 def breakdown(dim: str, request: Request, filters: Filters = Depends(get_filters)):
     attr = _BREAKDOWNS.get(dim)
     if attr is None:
-        raise HTTPException(404, f"unknown breakdown dimension {dim!r}, "
-                                  f"expected one of {sorted(_BREAKDOWNS)}")
+        raise HTTPException(
+            404,
+            f"unknown breakdown dimension {dim!r}, "
+            f"expected one of {sorted(_BREAKDOWNS)}",
+        )
     report, *_ = _report(request, filters, frozenset({attr}))
     return {k: climod._bucket_dict(v) for k, v in getattr(report, attr).items()}
 
 
 @router.get("/sessions", response_model=list[schemas.SessionOut])
-def sessions_list(request: Request, limit: int = Query(40, ge=1, le=500), cursor: str | None = None,
-                   q: str | None = Query(None, max_length=500),
-                   filters: Filters = Depends(get_filters)):
+def sessions_list(
+    request: Request,
+    limit: int = Query(40, ge=1, le=500),
+    cursor: str | None = None,
+    q: str | None = Query(None, max_length=500),
+    filters: Filters = Depends(get_filters),
+):
     source = None if filters.source == "all" else filters.source
     with store.connect() as conn:
         try:
-            return store.sessions(
-                conn, limit=limit, cursor=cursor,
-                source=source, project=_raw_projects(request, conn, filters),
+            rows = store.sessions(
+                conn,
+                limit=limit,
+                cursor=cursor,
+                source=source,
+                project=_raw_projects(request, conn, filters),
                 model=filters.model,
-                date_from=filters.date_from, date_to=filters.date_to,
-                tz=request.app.state.tz, search=q, labels=_labels(request, conn),
+                date_from=filters.date_from,
+                date_to=filters.date_to,
+                tz=request.app.state.tz,
+                search=q,
+                labels=_labels(request, conn),
             )
+            local = _local_provenance(conn)
+            for row in rows:
+                row["provenance"] = _session_provenance(row, local)
+            return rows
         except ValueError as exc:
             raise HTTPException(400, "invalid session cursor") from exc
 
@@ -226,6 +378,8 @@ def session_detail(session_id: str, request: Request):
     with store.connect() as conn:
         row = store.session_detail(conn, session_id)
         labels = _labels(request, conn)
+        if row is not None:
+            row["provenance"] = _session_provenance(row, _local_provenance(conn))
     if row is None:
         raise HTTPException(404, f"no session {session_id!r}")
     # Masked names everywhere, including a session's own detail (A-030).
@@ -238,6 +392,7 @@ def session_detail(session_id: str, request: Request):
 @router.get("/session-facets", response_model=schemas.SessionFacetsOut)
 def session_facets(request: Request):
     with store.connect() as conn:
+
         def values(local_column: str, cloud_column: str) -> list[str]:
             rows = conn.execute(
                 f"SELECT DISTINCT {local_column} AS value FROM turns "
@@ -254,16 +409,28 @@ def session_facets(request: Request):
 
 
 @router.get("/blocks", response_model=list[schemas.BlockOut])
-def blocks(request: Request, filters: Filters = Depends(get_filters),
-           limit: int = Query(100, ge=1, le=5000)):
+def blocks(
+    request: Request,
+    filters: Filters = Depends(get_filters),
+    limit: int = Query(100, ge=1, le=5000),
+):
     report, *_ = _report(request, filters, frozenset({"blocks"}))
     # The active block first, then newest first (A-074).
-    ordered = sorted(report.blocks, key=lambda b: (not b.is_active, -b.start.timestamp()))
+    ordered = sorted(
+        report.blocks, key=lambda b: (not b.is_active, -b.start.timestamp())
+    )
+    with store.connect() as conn:
+        provenance = _local_provenance(conn)
     return [
         schemas.BlockOut(
-            start=b.start.isoformat(), end=b.end.isoformat(), is_active=b.is_active,
-            tokens=b.bucket.total_tokens, cost_usd=round(b.bucket.cost, 6),
-            tokens_per_minute=round(b.tokens_per_minute, 2), models=sorted(b.models),
+            provenance=provenance,
+            start=b.start.isoformat(),
+            end=b.end.isoformat(),
+            is_active=b.is_active,
+            tokens=b.bucket.total_tokens,
+            cost_usd=round(b.bucket.cost, 6),
+            tokens_per_minute=round(b.tokens_per_minute, 2),
+            models=sorted(b.models),
         )
         for b in ordered[:limit]
     ]
@@ -271,7 +438,7 @@ def blocks(request: Request, filters: Filters = Depends(get_filters),
 
 @router.get("/quota", response_model=schemas.QuotaOut | None)
 def quota_endpoint(request: Request, filters: Filters = Depends(get_filters)):
-    from datetime import timedelta, timezone
+    from datetime import timedelta
 
     from .. import quota
     from ..analysis.forecast import forecast
@@ -281,12 +448,17 @@ def quota_endpoint(request: Request, filters: Filters = Depends(get_filters)):
     q, _ = quota.read(request.app.state.cfg, allow_fetch=False)
     if q is None:
         return None
-    since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    since = (datetime.now(UTC) - timedelta(days=7)).isoformat()
     with store.connect() as conn:
         forecasts = forecast(conn)
-        recent = [dict(r) for r in conn.execute(
-            "SELECT ts, key, scope, utilization, resets_at, source FROM quota_samples"
-            " WHERE ts >= ? ORDER BY ts DESC LIMIT 500", (since,))]
+        recent = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT ts, key, scope, utilization, resets_at, source FROM quota_samples"
+                " WHERE ts >= ? ORDER BY ts DESC LIMIT 500",
+                (since,),
+            )
+        ]
     return _quota_out(q, forecasts, recent)
 
 
@@ -298,8 +470,9 @@ def reconciliation(request: Request, filters: Filters = Depends(get_filters)):
     """
     request.app.state.ensure_synced()
     with store.connect() as conn:
-        return store.reconciliation(conn, request.app.state.tz, filters.date_from,
-                                    filters.date_to)
+        return store.reconciliation(
+            conn, request.app.state.tz, filters.date_from, filters.date_to
+        )
 
 
 @router.get("/health", response_model=schemas.HealthOut)
@@ -311,22 +484,32 @@ def health():
         **info,
         coverage=coverage,
         note="turns/cloud reflect the local store only; plan utilization "
-             "(GET /api/quota) is the one account-wide number.",
+        "(GET /api/quota) is the one account-wide number.",
     )
 
 
 def _sync_out(result) -> dict:
-    return {"parsed": result.parsed, "skipped": result.skipped, "turns": result.turns,
-            "duplicates": result.duplicates, "prompts": result.prompts,
-            "unreadable": result.unreadable}
+    return {
+        "parsed": result.parsed,
+        "skipped": result.skipped,
+        "turns": result.turns,
+        "duplicates": result.duplicates,
+        "prompts": result.prompts,
+        "unreadable": result.unreadable,
+    }
 
 
 @router.post(
-    "/sync", response_model=schemas.SyncResultOut,
-    responses={200: {"content": {"application/x-ndjson": {}},
-                     "description": "With `Accept: application/x-ndjson`, one"
-                                    " `{done, total}` line per batch, then the result."},
-               409: {"description": "A sync is already running"}},
+    "/sync",
+    response_model=schemas.SyncResultOut,
+    responses={
+        200: {
+            "content": {"application/x-ndjson": {}},
+            "description": "With `Accept: application/x-ndjson`, one"
+            " `{done, total}` line per batch, then the result.",
+        },
+        409: {"description": "A sync is already running"},
+    },
 )
 def sync(request: Request):
     import queue
@@ -352,8 +535,11 @@ def sync(request: Request):
     def run() -> None:
         try:
             result = climod.sync_store(
-                cfg, tz, discover(cfg),
-                progress=lambda done, total: lines.put({"done": done, "total": total}))
+                cfg,
+                tz,
+                discover(cfg),
+                progress=lambda done, total: lines.put({"done": done, "total": total}),
+            )
             request.app.state.synced = True
             lines.put({"result": _sync_out(result)})
         except Exception as exc:  # noqa: BLE001 - reported in the stream, not a broken response
@@ -374,9 +560,14 @@ def sync(request: Request):
 HARVEST_MAX_BYTES = 20 * 1024 * 1024
 
 
-@router.post("/harvest", response_model=schemas.HarvestResultOut,
-             responses={400: {"description": "Not a session listing"},
-                        413: {"description": "Body larger than 20 MiB"}})
+@router.post(
+    "/harvest",
+    response_model=schemas.HarvestResultOut,
+    responses={
+        400: {"description": "Not a session listing"},
+        413: {"description": "Body larger than 20 MiB"},
+    },
+)
 async def harvest(request: Request, body: list[dict] | schemas.HarvestEnvelope):
     # The body is typed and size-capped (A-031, A-102).
     length = request.headers.get("content-length")
@@ -391,12 +582,21 @@ async def harvest(request: Request, body: list[dict] | schemas.HarvestEnvelope):
 
 @router.get(
     "/export",
-    responses={200: {"content": {"text/csv": {"schema": {"type": "string"}},
-                                 "application/json": {"schema": {"type": "object"}}},
-                     "description": "Daily rows by model as CSV, or the summary as JSON."}},
+    responses={
+        200: {
+            "content": {
+                "text/csv": {"schema": {"type": "string"}},
+                "application/json": {"schema": {"type": "object"}},
+            },
+            "description": "Daily rows by model as CSV, or the summary as JSON.",
+        }
+    },
 )
-def export(request: Request, format: Literal["json", "csv"] = Query("json"),
-           filters: Filters = Depends(get_filters)):
+def export(
+    request: Request,
+    format: Literal["json", "csv"] = Query("json"),
+    filters: Filters = Depends(get_filters),
+):
     report, *_ = _report(request, filters)
     if format == "csv":
         return PlainTextResponse(climod.to_csv(report), media_type="text/csv")

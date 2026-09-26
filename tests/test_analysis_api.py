@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timezone
+from datetime import UTC
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -20,7 +20,7 @@ def client_with_reads():
                     Path(__file__).parent / "fixtures" / "repeated_reads.jsonl",
                 )
             ],
-            timezone.utc,
+            UTC,
             cost_of,
         )
     app = create_app({"offline": True, "quota": False, "timezone": "utc"})
@@ -86,4 +86,6 @@ def test_empty_analysis_has_coverage_and_makes_no_network_calls(monkeypatch):
     body = client.get("/api/findings").json()
     assert body["findings"] == []
     # Nothing to evaluate is "no activity", not a false "not enough history" (A-043).
-    assert "Anomaly detection: no local activity in this range." in body["anomaly_notes"]
+    assert (
+        "Anomaly detection: no local activity in this range." in body["anomaly_notes"]
+    )

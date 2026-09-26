@@ -60,10 +60,36 @@ from a page request unless noted.
 
 | Call | Method, URL | Sends | Cap, timeout | When |
 |---|---|---|---|---|
-| Pricing table | GET `raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json` | nothing | 16 MiB, 10 s | CLI reports and `serve` startup, cached 24 h; `--offline` skips |
+| Pricing table | GET `raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json` | nothing | 16 MiB, 10 s | CLI reports, explicit CLI sync and `serve` startup, cached 24 h; `--offline` skips |
 | Plan utilization | GET `api.anthropic.com/api/oauth/usage` | Claude Code OAuth token | 64 KiB, 10 s | fallback only, at most every 10 min, backs off on 429; never from a page |
 | Service status | GET `status.claude.com/api/v2/summary.json` | nothing | 512 KiB, 3 s total | dashboard banner, cached 5 min; not when offline |
 | AI weekly summary | POST `api.anthropic.com/v1/messages` | `ANTHROPIC_API_KEY`, weekly aggregates | 64 KiB each way, 15 s | a button click with `ai_summary.enabled`; off by default |
+
+## Provenance and freshness
+
+The dashboard labels shared groups of figures by origin. Local token counts are
+`computed_local`; their API-equivalent costs are `estimate`. Harvested session
+tokens and cost are `cloud_reported`. Quota readings are `official`; forecast
+bands, pace and savings are computed estimates rather than official limits.
+
+Local `as_of` is the last sync timestamp, not the current page-request time.
+A cloud session uses its reported update time or an unavailable timestamp.
+Wrapped exposes separate local-sync and cloud-harvest times because a single
+recent timestamp would hide a stale source. Analysis computation time is shown
+separately from those input timestamps. Quota freshness uses the retained sample
+time. No timestamp implies complete account-wide token coverage.
+
+Browser polling runs every 60 seconds only while visible and online. It
+refreshes active store views including cached quota. It does not invoke sync,
+external service-status calls or paid summaries. Session lists with multiple
+loaded pages pause polling to bound repeated work. The versioned CLI snapshots
+are also store-only; see [AGENT-JSON.md](AGENT-JSON.md).
+
+Stored local costs are repriced atomically during sync when the fingerprint of
+loaded pricing inputs changes. The fingerprint includes overrides and billing
+multipliers. Repricing works after transcript pruning and never substitutes
+local estimates for cloud-reported cost. Pricing is loaded at CLI sync/report
+and server startup; a long-running server uses that loaded pricing snapshot.
 
 ## Not found
 

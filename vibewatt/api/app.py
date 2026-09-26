@@ -1,24 +1,27 @@
-"""FastAPI app factory. Mounts every `/api/*` route from `routes.py` plus the
-pre-React dashboard (`/`, `/api/dataset`, `/api/usage`) so `vibewatt serve` keeps
-working until the phase 3 frontend replaces it."""
+"""FastAPI API and package-relative React dashboard serving."""
 
 from __future__ import annotations
 
-import json
 import logging
+import mimetypes
 import threading
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
 
 from .. import config as configmod
 from .. import pricing
-from ..cli import build_report, report_zone, serialize, sync_store
-from .routes import _quota_out, router
+from ..cli import build_report, report_zone, sync_store
+from .routes import router
+
+STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
 
 
-def create_app(cfg: dict | None = None, *, extra_hosts: set[str] | None = None) -> FastAPI:
+def create_app(
+    cfg: dict | None = None, *, extra_hosts: set[str] | None = None
+) -> FastAPI:
     """`extra_hosts` adds a non-loopback bind name to the Host allowlist."""
     from .security import LocalOnly
 
@@ -39,7 +42,10 @@ def create_app(cfg: dict | None = None, *, extra_hosts: set[str] | None = None) 
         # Today is part of the key: streaks and month-to-date move at midnight.
         from datetime import datetime
 
-        key = (str(datetime.now(tz).date()), *sorted((k, str(v)) for k, v in filters.items()))
+        key = (
+            str(datetime.now(tz).date()),
+            *sorted((k, str(v)) for k, v in filters.items()),
+        )
         hit = cache.get(key)
         if hit is None or hit[0] != gen:
             if len(cache) > 64:
@@ -60,8 +66,14 @@ def create_app(cfg: dict | None = None, *, extra_hosts: set[str] | None = None) 
                     quota.refresh(conn, cfg, allow_fetch=True)
         # Warm the Overview's unfiltered report so the first view after a sync
         # does not pay for building it.
-        report(source="all", date_from=None, date_to=None, project=None, model=None,
-               parts=None)
+        report(
+            source="all",
+            date_from=None,
+            date_to=None,
+            project=None,
+            model=None,
+            parts=None,
+        )
 
     def ensure_synced() -> None:
         # Reports read the store only. This covers the first request of a
@@ -99,35 +111,54 @@ def create_app(cfg: dict | None = None, *, extra_hosts: set[str] | None = None) 
     app.state.report = report
 
     app.include_router(router)
-    # Added last, so it runs first: nothing reaches a route from a foreign Host.
+
+    # Windows registry MIME entries can otherwise prevent module scripts loading.
+    for ext, mime in {
+        ".js": "text/javascript",
+        ".css": "text/css",
+        ".svg": "image/svg+xml",
+        ".woff2": "font/woff2",
+    }.items():
+        mimetypes.add_type(mime, ext)
+
+    @app.get("/api/{path:path}", include_in_schema=False)
+    @app.get("/api", include_in_schema=False)
+    def unknown_api(path: str = "") -> None:
+        raise HTTPException(404, "Not found")
+
+    @app.middleware("http")
+    async def frontend_headers(request: Request, call_next):
+        path = request.url.path
+        if "\\" in path or ".." in path.split("/"):
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse({"detail": "Not found"}, status_code=404)
+        response = await call_next(request)
+        if response.headers.get("content-type", "").startswith("text/html"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+    @app.get("/assets", include_in_schema=False)
+    def asset_root() -> None:
+        raise HTTPException(404, "Not found")
+
+    if (STATIC_DIR / "assets").is_dir():
+        app.mount(
+            "/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets"
+        )
+
+    if (STATIC_DIR / "index.html").is_file():
+        app.frontend("/", directory=STATIC_DIR, fallback="index.html")
+    else:
+
+        @app.get("/{path:path}", include_in_schema=False)
+        def missing_dashboard(path: str) -> None:
+            if path.split("/", 1)[0] == "assets":
+                raise HTTPException(404, "Not found")
+            raise HTTPException(
+                503, "Dashboard build missing. Run npm ci and npm run build in web/."
+            )
+
+    # Keep Host validation outermost, including static files and malformed paths.
     app.add_middleware(LocalOnly, extra_hosts=extra_hosts)
-
-    @app.get("/api/usage", include_in_schema=False)
-    def legacy_usage() -> JSONResponse:
-        ensure_synced()
-        report, q, *_ = build_report(cfg, tz)
-        payload = serialize(report)
-        quota_out = _quota_out(q)
-        if quota_out is not None:
-            payload["quota"] = quota_out.model_dump()
-        return JSONResponse(payload)
-
-    @app.get("/api/dataset", include_in_schema=False)
-    def legacy_dataset() -> JSONResponse:
-        from ..ui import build_dataset
-
-        ensure_synced()
-        report, q, _, duplicates, _ = build_report(cfg, tz)
-        return JSONResponse(json.loads(json.dumps(build_dataset(report, cfg, quota=q,
-                                                                  duplicates=duplicates))))
-
-    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-    @app.get("/index.html", response_class=HTMLResponse, include_in_schema=False)
-    def legacy_page() -> str:
-        from ..ui import build_dataset, build_page
-
-        ensure_synced()
-        report, q, _, duplicates, _ = build_report(cfg, tz)
-        return build_page(build_dataset(report, cfg, quota=q, duplicates=duplicates))
-
     return app

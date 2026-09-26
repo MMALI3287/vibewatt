@@ -130,3 +130,7 @@ export async function generateWeeklySummary() {
 export async function getConcierge(project: string) {
   return unwrap(await api.GET("/api/concierge", { params: { query: { project } } }));
 }
+
+export async function getReportContext() {
+  return unwrap(await api.GET("/api/report-context"));
+}

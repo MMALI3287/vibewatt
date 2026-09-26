@@ -1,3 +1,4 @@
+import { Provenance } from "./Provenance";
 import { useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -106,6 +107,7 @@ function Blocks({ filters }: { filters: Filters }) {
   return <section className="card" aria-label="Usage blocks">
     <h2>Usage blocks · local logs</h2>
     <p className="muted">Estimated windows from observed responses. These are not account-wide quota windows.</p>
+    <Provenance provenance={rows[0]?.provenance} />
     {query.isPending && <p role="status">Loading blocks…</p>}
     {query.isError && <p role="alert">Could not load blocks. <button onClick={() => query.refetch()}>Retry</button></p>}
     {query.isSuccess && <DataTable rows={rows} label="Blocks" columns={[

@@ -19,6 +19,7 @@ export function PlanMeters() {
       {quota.isError && <p className="muted">Plan utilization unavailable</p>}
       {/* No reading, or a reading with no windows, is the same to a reader (A-100). */}
       {quota.isSuccess && !quota.data?.windows.length && <p className="muted">Plan utilization unavailable</p>}
+      {quota.data && <p className="meter-note muted">Official account-wide utilization · source: {quota.data.source} · fetched <time dateTime={quota.data.fetched_at}>{quota.data.fetched_at}</time>. Forecasts are estimates.</p>}
       {quota.data?.windows.map((w) => {
         const pct = clamp(w.utilization);
         const pace = w.pace_delta;

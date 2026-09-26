@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from .aggregate import Bucket, Report
 
@@ -56,12 +56,17 @@ def money(n: float) -> str:
     return f"${n:,.2f}" if n >= 0.01 or n == 0 else f"${n:.4f}"
 
 
-def heatmap(report: Report, weeks: int = 53, color: bool = True, ramp: list[str] | None = None,
-            today: date | None = None) -> str:
+def heatmap(
+    report: Report,
+    weeks: int = 53,
+    color: bool = True,
+    ramp: list[str] | None = None,
+    today: date | None = None,
+) -> str:
     """GitHub-style grid: columns are weeks, rows are weekdays, latest at the right."""
     ramp = ramp or DARK_RAMP
     # The report's own today, in its timezone and day boundary (A-055).
-    today = today or report.today or date.today()
+    today = today or report.today or datetime.now().astimezone().date()
     # Anchor the final column to this week, starting weeks on Monday.
     end = today + timedelta(days=(6 - today.weekday()))
     start = end - timedelta(weeks=weeks) + timedelta(days=1)
@@ -97,7 +102,9 @@ def heatmap(report: Report, weeks: int = 53, color: bool = True, ramp: list[str]
                 continue
             bucket = report.by_day.get(day)
             lvl = level(bucket.total_tokens if bucket else 0, ceiling)
-            line += f"{_fg(ramp[lvl])}{cell}{RESET}" if color else (cell if lvl else "·")
+            line += (
+                f"{_fg(ramp[lvl])}{cell}{RESET}" if color else (cell if lvl else "·")
+            )
         rows.append(line)
 
     legend = "    Less "
@@ -116,7 +123,9 @@ def _row(label: str, bucket: Bucket, width: int) -> str:
     )
 
 
-def table(title: str, buckets: dict[str, Bucket], color: bool = True, limit: int | None = None) -> str:
+def table(
+    title: str, buckets: dict[str, Bucket], color: bool = True, limit: int | None = None
+) -> str:
     if not buckets:
         return ""
     items = sorted(buckets.items(), key=lambda kv: kv[1].cost, reverse=True)
@@ -124,11 +133,11 @@ def table(title: str, buckets: dict[str, Bucket], color: bool = True, limit: int
         items = items[:limit]
     width = max(len(k) for k, _ in items)
     width = max(width, len(title))
-    head = (
-        f"  {title:<{width}}  {'input':>8}  {'cache wr':>9}  {'cache rd':>9}  {'output':>8}  {'cost':>10}"
-    )
+    head = f"  {title:<{width}}  {'input':>8}  {'cache wr':>9}  {'cache rd':>9}  {'output':>8}  {'cost':>10}"
     lines = [f"{BOLD}{head}{RESET}" if color else head]
-    lines.append(f"  {'-' * width}  {'-' * 8}  {'-' * 9}  {'-' * 9}  {'-' * 8}  {'-' * 10}")
+    lines.append(
+        f"  {'-' * width}  {'-' * 8}  {'-' * 9}  {'-' * 9}  {'-' * 8}  {'-' * 10}"
+    )
     for name, bucket in items:
         lines.append(_row(name, bucket, width))
     return "\n".join(lines)
@@ -149,7 +158,10 @@ def summary(report: Report, color: bool = True) -> str:
         ("active days", str(len(report.by_day))),
         ("sessions", str(len(report.sessions))),
         ("responses", str(b.turns)),
-        ("peak day", f"{peak[0]:%d %b %y} ({human(peak[1].total_tokens)})" if peak else "-"),
+        (
+            "peak day",
+            f"{peak[0]:%d %b %y} ({human(peak[1].total_tokens)})" if peak else "-",
+        ),
         ("streak", f"{current}d (best {longest}d)"),
     ]
 
@@ -166,7 +178,7 @@ def summary(report: Report, color: bool = True) -> str:
 def bar(fraction: float, width: int = 24, color: bool = True) -> str:
     """A horizontal meter. Colour marks severity; the number carries the value."""
     fraction = max(0.0, min(1.0, fraction))
-    filled = int(round(fraction * width))
+    filled = round(fraction * width)
     hue = "#1baf7a" if fraction < 0.75 else ("#eda100" if fraction < 0.9 else "#e34948")
     body = "\u2588" * filled + "\u2591" * (width - filled)
     return f"{_fg(hue)}{body}{RESET}" if color else body
@@ -184,8 +196,10 @@ def quota_block(quota, color: bool = True) -> str:
             left = f"resets in {hours}h {rem // 60:02d}m"
         label = f"{w.label:<14}"
         pct = f"{w.utilization:5.1f}%"
-        lines.append(f"  {label} {bar(w.utilization / 100, color=color)} {pct}   "
-                     f"{DIM if color else ''}{left}{RESET if color else ''}")
+        lines.append(
+            f"  {label} {bar(w.utilization / 100, color=color)} {pct}   "
+            f"{DIM if color else ''}{left}{RESET if color else ''}"
+        )
     note = f"account-wide, via {quota.source}"
     header = f"  {DIM}{note}{RESET}" if color else f"  {note}"
     return "\n".join([header] + lines)
@@ -197,17 +211,26 @@ def block_block(report, color: bool = True) -> str:
     if active is None:
         return ""
     tokens, cost = active.project_to_end()
-    left = max(0, int((active.end - active.start).total_seconds() / 60 - active.elapsed_minutes))
+    left = max(
+        0,
+        int((active.end - active.start).total_seconds() / 60 - active.elapsed_minutes),
+    )
     rows = [
-        f"  window   {active.start:%H:%M} - {active.end:%H:%M}  "
-        f"({left}m left of {int((active.end - active.start).total_seconds() // 3600)}h)",
+        (
+            f"  window   {active.start:%H:%M} - {active.end:%H:%M}  "
+            f"({left}m left of {int((active.end - active.start).total_seconds() // 3600)}h)"
+        ),
         f"  so far   {human(active.bucket.total_tokens)} tokens   {money(active.bucket.cost)}",
         f"  rate     {human(active.tokens_per_minute)} tok/min   {money(active.cost_per_minute * 60)}/h",
         f"  at close {human(tokens)} tokens   {money(cost)}",
     ]
     if color:
-        rows = [f"{r.split('  ', 2)[0]}  {DIM}{r.split('  ', 2)[1]}{RESET}  {r.split('  ', 2)[2]}"
-                if r.count("  ") >= 2 else r for r in rows]
+        rows = [
+            f"{r.split('  ', 2)[0]}  {DIM}{r.split('  ', 2)[1]}{RESET}  {r.split('  ', 2)[2]}"
+            if r.count("  ") >= 2
+            else r
+            for r in rows
+        ]
     return "\n".join(rows)
 
 
@@ -223,7 +246,11 @@ def hour_histogram(report, color: bool = True) -> str:
         bucket = report.by_hour.get(hour)
         lvl = level(bucket.total_tokens if bucket else 0, peak)
         cell = "\u2588"
-        line += f"{_fg(ramp[lvl])}{cell}{cell}{RESET}" if color else (cell * 2 if lvl else "..")
+        line += (
+            f"{_fg(ramp[lvl])}{cell}{cell}{RESET}"
+            if color
+            else (cell * 2 if lvl else "..")
+        )
     rows.append(line)
     rows.append("  " + "".join(f"{h:<2}" if h % 3 == 0 else "  " for h in range(24)))
     return "\n".join(rows)

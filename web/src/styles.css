@@ -169,3 +169,7 @@ h1 { margin: 0; font-size: 24px; }
 .phase6-panel summary { font-weight: 600; }
 .phase6-panel h3 { font-size: 14px; }
 .phase6-status { font-size: 13px; }
+
+.header-search { display: flex; gap: 6px; min-width: 0; max-width: 100%; }
+.header-search input { min-width: 0; width: 12em; max-width: 100%; }
+.provenance { overflow-wrap: anywhere; }

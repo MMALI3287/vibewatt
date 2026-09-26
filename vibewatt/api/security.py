@@ -73,7 +73,8 @@ class LocalOnly:
             if text not in allowed:
                 return f"cross-origin request refused (Origin: {text})"
         has_body = headers.get(b"content-length", b"0") not in (b"", b"0") or (
-            b"transfer-encoding" in headers)
+            b"transfer-encoding" in headers
+        )
         content_type = headers.get(b"content-type", b"").split(b";")[0].strip().lower()
         if has_body and content_type != b"application/json":
             return "a request body must be application/json"
@@ -82,7 +83,14 @@ class LocalOnly:
 
 async def _reject(send, status: int, detail: str) -> None:
     body = json.dumps({"detail": detail}).encode()
-    await send({"type": "http.response.start", "status": status,
-                "headers": [(b"content-type", b"application/json"),
-                            (b"content-length", str(len(body)).encode())]})
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status,
+            "headers": [
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(body)).encode()),
+            ],
+        }
+    )
     await send({"type": "http.response.body", "body": body})

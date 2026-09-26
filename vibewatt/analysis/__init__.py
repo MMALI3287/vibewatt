@@ -33,8 +33,11 @@ def analyze(
     def facets(row: dict, source_key: str = "source") -> bool:
         return (
             (source == "all" or row[source_key] == source)
-            and (project is None or row["project"] in (
-                [project] if isinstance(project, str) else project))
+            and (
+                project is None
+                or row["project"]
+                in ([project] if isinstance(project, str) else project)
+            )
             and (not model or row["model"] == model)
         )
 
@@ -149,41 +152,66 @@ def analyze(
     # The snapshot a GET serves until the store changes (A-092).
     conn.execute(
         "INSERT OR REPLACE INTO meta VALUES (?, ?)",
-        (f"analysis:{scope}", json.dumps({
-            "generation": store.generation(conn), "day": today.isoformat(),
-            "notes": notes, "anomaly_notes": anomaly_notes,
-            "analyzed_at": result["analyzed_at"]})),
+        (
+            f"analysis:{scope}",
+            json.dumps(
+                {
+                    "generation": store.generation(conn),
+                    "day": today.isoformat(),
+                    "notes": notes,
+                    "anomaly_notes": anomaly_notes,
+                    "analyzed_at": result["analyzed_at"],
+                }
+            ),
+        ),
     )
     return result
 
 
 def _ordered(findings: list[dict]) -> list[dict]:
     priority = {"urgent": 0, "warning": 1, "info": 2}
-    return sorted(findings, key=lambda f: (priority[f["severity"]], -(f["savings_usd"] or 0),
-                                           f["id"]))
+    return sorted(
+        findings,
+        key=lambda f: (priority[f["severity"]], -(f["savings_usd"] or 0), f["id"]),
+    )
 
 
 def scope_of(date_from, date_to, source, project, model) -> str:
     return hashlib.sha256(
-        json.dumps([str(date_from), str(date_to), source, project, model],
-                   separators=(",", ":")).encode()
+        json.dumps(
+            [str(date_from), str(date_to), source, project, model],
+            separators=(",", ":"),
+        ).encode()
     ).hexdigest()
 
 
-def current(conn: sqlite3.Connection, tz: tzinfo, *, force: bool = False, **filters) -> dict:
+def current(
+    conn: sqlite3.Connection, tz: tzinfo, *, force: bool = False, **filters
+) -> dict:
     """The stored snapshot for these filters, recomputed only when needed.
 
     A snapshot stays valid until the store's generation or the day changes.
     Toggling visibility or dismissing a finding therefore costs a read, not a
     full analysis; `force` (POST /api/analysis) always recomputes.
     """
-    scope = scope_of(filters.get("date_from"), filters.get("date_to"),
-                     filters.get("source", "all"), filters.get("project"),
-                     filters.get("model"))
-    row = conn.execute("SELECT value FROM meta WHERE key = ?", (f"analysis:{scope}",)).fetchone()
+    scope = scope_of(
+        filters.get("date_from"),
+        filters.get("date_to"),
+        filters.get("source", "all"),
+        filters.get("project"),
+        filters.get("model"),
+    )
+    row = conn.execute(
+        "SELECT value FROM meta WHERE key = ?", (f"analysis:{scope}",)
+    ).fetchone()
     meta = json.loads(row[0]) if row else None
     today = (filters.get("now") or datetime.now(tz)).astimezone(tz).date().isoformat()
-    if force or not meta or meta["generation"] != store.generation(conn) or meta["day"] != today:
+    if (
+        force
+        or not meta
+        or meta["generation"] != store.generation(conn)
+        or meta["day"] != today
+    ):
         return analyze(conn, tz, **filters)
     return {
         "findings": _ordered(store.active_findings(conn, scope)),

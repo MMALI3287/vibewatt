@@ -4,9 +4,34 @@ command and the old dashboard emit, so the API does not invent a second one."""
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 from ..analysis.models import Kind, Severity
+
+
+class ProvenanceOut(BaseModel):
+    usage: Literal["official", "computed_local", "cloud_reported", "estimate"]
+    cost: Literal["official", "computed_local", "cloud_reported", "estimate"]
+    scope: str
+    as_of: str | None
+
+
+class ReportContextOut(BaseModel):
+    today: str
+    timezone: str
+    day_start_hour: int
+    as_of: str | None
+
+
+class PlanComparisonOut(BaseModel):
+    period_start: str
+    period_end: str
+    local_cost_usd: float
+    monthly_plan_usd: float
+    multiple: float | None
+    unpriced: int
 
 
 class BucketOut(BaseModel):
@@ -35,6 +60,8 @@ class ActiveBlockOut(BaseModel):
 
 
 class SummaryOut(BaseModel):
+    provenance: ProvenanceOut | None = None
+    plan_comparison: PlanComparisonOut | None = None
     total: BucketOut
     by_day: dict[str, BucketOut]
     by_model: dict[str, BucketOut]
@@ -80,6 +107,7 @@ class QuotaSampleOut(BaseModel):
 
 
 class QuotaOut(BaseModel):
+    provenance: ProvenanceOut | None = None
     source: str
     fetched_at: str
     windows: list[WindowOut]
@@ -88,6 +116,7 @@ class QuotaOut(BaseModel):
 
 
 class SessionOut(BaseModel):
+    provenance: ProvenanceOut | None = None
     id: str
     title: str
     surface: str | None
@@ -136,6 +165,7 @@ class SessionDetailOut(SessionOut):
 
 
 class BlockOut(BaseModel):
+    provenance: ProvenanceOut | None = None
     start: str
     end: str
     is_active: bool
@@ -314,6 +344,7 @@ class WrappedSessionOut(BaseModel):
 
 
 class WrappedOut(BaseModel):
+    provenance_by_source: dict[str, ProvenanceOut] = {}
     year: int
     timezone: str
     local_summary: SummaryOut
