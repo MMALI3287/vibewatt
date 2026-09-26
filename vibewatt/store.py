@@ -543,6 +543,59 @@ def rebuild_rollup(conn, hours: Iterable[str] | None = None) -> None:
         )
 
 
+def reprice(conn: sqlite3.Connection, overrides: dict | None = None) -> int:
+    """Atomically refresh retained local costs when pricing inputs change.
+
+    Call after syncing files using the same overrides. Cloud session totals
+    are reported by their source and must never be replaced by estimates.
+    The existing meta table tracks the complete store's pricing snapshot so
+    this also works after the original logs have disappeared.
+    """
+    from .aggregate import cost_of
+    from .pricing import fingerprint
+
+    current = fingerprint(overrides)
+    conn.execute("SAVEPOINT reprice")
+    try:
+        previous = conn.execute(
+            "SELECT value FROM meta WHERE key = 'pricing_fingerprint'"
+        ).fetchone()
+        changed = 0
+        if previous is None or previous[0] != current:
+            hours: set[str] = set()
+            for row in conn.execute(f"SELECT {TURN_COLUMNS} FROM turns"):
+                cost = cost_of(_row_turn(row), overrides)
+                if cost != row["cost"]:
+                    conn.execute(
+                        "UPDATE turns SET cost = ? WHERE msg_id = ? AND request_id = ?",
+                        (cost, row["msg_id"], row["request_id"]),
+                    )
+                    changed += 1
+                    hours.add(_hr(row["ts"]))
+            if hours:
+                rebuild_rollup(conn, hours)
+            # Savings findings depend on base rates even when a cache-only
+            # turn's charged amount is unchanged.
+            conn.execute(
+                "INSERT OR REPLACE INTO meta VALUES ('generation', ?)",
+                (str(generation(conn) + 1),),
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO meta VALUES ('pricing_fingerprint', ?)",
+                (current,),
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO meta VALUES ('last_reprice', ?)",
+                (datetime.now(UTC).isoformat(),),
+            )
+        conn.execute("RELEASE SAVEPOINT reprice")
+        return changed
+    except BaseException:
+        conn.execute("ROLLBACK TO SAVEPOINT reprice")
+        conn.execute("RELEASE SAVEPOINT reprice")
+        raise
+
+
 def _path_key(conn) -> bytes:
     """The per-install HMAC key for tool read paths, created on first use."""
     import secrets

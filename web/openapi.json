@@ -5,6 +5,24 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/report-context": {
+      "get": {
+        "summary": "Report Context",
+        "operationId": "report_context_api_report_context_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportContextOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/wrapped": {
       "get": {
         "summary": "Wrapped",
@@ -2308,6 +2326,16 @@
       },
       "BlockOut": {
         "properties": {
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProvenanceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "start": {
             "type": "string",
             "title": "Start"
@@ -2830,8 +2858,110 @@
         ],
         "title": "HealthOut"
       },
+      "PlanComparisonOut": {
+        "properties": {
+          "period_start": {
+            "type": "string",
+            "title": "Period Start"
+          },
+          "period_end": {
+            "type": "string",
+            "title": "Period End"
+          },
+          "local_cost_usd": {
+            "type": "number",
+            "title": "Local Cost Usd"
+          },
+          "monthly_plan_usd": {
+            "type": "number",
+            "title": "Monthly Plan Usd"
+          },
+          "multiple": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Multiple"
+          },
+          "unpriced": {
+            "type": "integer",
+            "title": "Unpriced"
+          }
+        },
+        "type": "object",
+        "required": [
+          "period_start",
+          "period_end",
+          "local_cost_usd",
+          "monthly_plan_usd",
+          "multiple",
+          "unpriced"
+        ],
+        "title": "PlanComparisonOut"
+      },
+      "ProvenanceOut": {
+        "properties": {
+          "usage": {
+            "type": "string",
+            "enum": [
+              "official",
+              "computed_local",
+              "cloud_reported",
+              "estimate"
+            ],
+            "title": "Usage"
+          },
+          "cost": {
+            "type": "string",
+            "enum": [
+              "official",
+              "computed_local",
+              "cloud_reported",
+              "estimate"
+            ],
+            "title": "Cost"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          }
+        },
+        "type": "object",
+        "required": [
+          "usage",
+          "cost",
+          "scope",
+          "as_of"
+        ],
+        "title": "ProvenanceOut"
+      },
       "QuotaOut": {
         "properties": {
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProvenanceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "source": {
             "type": "string",
             "title": "Source"
@@ -2963,6 +3093,41 @@
         ],
         "title": "ReconciliationOut"
       },
+      "ReportContextOut": {
+        "properties": {
+          "today": {
+            "type": "string",
+            "title": "Today"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone"
+          },
+          "day_start_hour": {
+            "type": "integer",
+            "title": "Day Start Hour"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          }
+        },
+        "type": "object",
+        "required": [
+          "today",
+          "timezone",
+          "day_start_hour",
+          "as_of"
+        ],
+        "title": "ReportContextOut"
+      },
       "ServiceStatusOut": {
         "properties": {
           "indicator": {
@@ -2988,6 +3153,16 @@
       },
       "SessionDetailOut": {
         "properties": {
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProvenanceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "type": "string",
             "title": "Id"
@@ -3159,6 +3334,16 @@
       },
       "SessionOut": {
         "properties": {
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProvenanceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "type": "string",
             "title": "Id"
@@ -3429,6 +3614,26 @@
       },
       "SummaryOut": {
         "properties": {
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProvenanceOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "plan_comparison": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanComparisonOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "total": {
             "$ref": "#/components/schemas/BucketOut"
           },
@@ -3922,6 +4127,14 @@
       },
       "WrappedOut": {
         "properties": {
+          "provenance_by_source": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ProvenanceOut"
+            },
+            "type": "object",
+            "title": "Provenance By Source",
+            "default": {}
+          },
           "year": {
             "type": "integer",
             "title": "Year"

@@ -510,13 +510,20 @@ def _add_history(conn, report: Report, date_from, date_to, model, overrides) -> 
             setattr(extra, field_name, max(0, (h[hist_field] or 0) - (stored or 0)))
         if not (extra.turns or extra.total_tokens):
             continue
-        if rate_for(h["model"], overrides=overrides) is None:
+        rate = rate_for(h["model"], overrides=overrides)
+        if rate is None:
             extra.unpriced = max(1, extra.turns)
             report.unknown_models.add(h["model"])
         else:
-            extra.cost = max(
-                0.0, (h["cost"] or 0.0) - ((have["cost"] if have else 0.0) or 0.0)
-            )
+            # Price the missing tokens at today's rates. Subtracting repriced
+            # store costs from history's old-rate cost would misprice the excess.
+            extra.cost = (
+                extra.input * rate.input
+                + extra.cache_5m * rate.cache_5m
+                + extra.cache_1h * rate.cache_1h
+                + extra.cache_read * rate.cache_read
+                + extra.output * rate.output
+            ) / MILLION + extra.web_searches * WEB_SEARCH_PER_CALL
         day = date.fromisoformat(h["day"])
         _merge_into(report.by_day[day], extra)
         _merge_into(report.by_day_model[(day, h["model"])], extra)

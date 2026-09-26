@@ -1,3 +1,4 @@
+import { Provenance } from "../components/Provenance";
 import { useQuery } from "@tanstack/react-query";
 import { getSummary, type Bucket, type Summary } from "../api/client";
 import { Hero } from "../components/Hero";
@@ -63,6 +64,8 @@ export function Overview() {
     return (
       <>
         {meters}
+        <PlanComparison summary={s} />
+        <Provenance summary={s} />
         <section className="state">
           <h1>No usage for these filters</h1>
           <p>Nothing in the local store matches. Widen the range, reset filters, or run a sync.</p>
@@ -78,6 +81,8 @@ export function Overview() {
     <>
       {meters}
       <Hero summary={s} filters={filters} />
+      <Provenance summary={s} />
+      <PlanComparison summary={s} />
       {isFiltered && historyOnlyDays > 0 && (
         <p className="notice" role="status">
           Filtered views exclude {historyOnlyDays} day{historyOnlyDays === 1 ? "" : "s"} known only from the
@@ -172,4 +177,18 @@ function ModelTable({ s, metric }: { s: Summary; metric: Metric }) {
       ]} />
     </section>
   );
+}
+
+
+function PlanComparison({ summary }: { summary: Summary }) {
+  return <>
+      {summary.plan_comparison && <section className="card" aria-label="API-equivalent versus plan">
+        <h2>Month-to-date API-equivalent / monthly plan</h2>
+        <p className="kpi-value">{summary.plan_comparison.multiple === null ? "Unavailable" : `${summary.plan_comparison.multiple.toFixed(2)}×`}</p>
+        <p>{fmtUsd(summary.plan_comparison.local_cost_usd)} estimated local API-equivalent cost / {fmtUsd(summary.plan_comparison.monthly_plan_usd)} monthly plan price.</p>
+        <p className="muted">{summary.plan_comparison.period_start} to {summary.plan_comparison.period_end}. Source, project and model filters apply. Date filters do not apply. Local logs only. This is not account-wide utilization or a subscription bill.</p>
+        {summary.plan_comparison.unpriced > 0 && <p className="notice">{summary.plan_comparison.unpriced} unpriced responses excluded. Comparison is incomplete.</p>}
+      </section>}
+      {!summary.plan_comparison && <p className="muted">API-equivalent / plan comparison unavailable: no monthly plan price configured.</p>}
+  </>;
 }

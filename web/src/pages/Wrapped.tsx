@@ -1,3 +1,4 @@
+import { Provenance } from "../components/Provenance";
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
@@ -57,7 +58,9 @@ export function Wrapped() {
     {data.stored_sessions === 0 && <p role="status">No stored usage for this year and selection. Sync local logs or choose another year.</p>}
     {data.unpriced_turns > 0 && <p className="notice">{data.unpriced_turns} unpriced responses are excluded from cost. Cost totals are incomplete.</p>}
     <section className="card" aria-label="Year figures">
-      <h2>Retained local and harvested usage</h2><p>Not account-wide. API-equivalent cost is not your subscription bill.</p>
+      <h2>Retained local and harvested usage</h2><p>Not account-wide. Local cost is an API-equivalent estimate. Harvested cost is cloud-reported. These totals are not your subscription bill.</p>
+      <Provenance provenance={data.provenance_by_source?.local} />
+      <Provenance provenance={data.provenance_by_source?.cloud} />
       <dl className="finding-metrics">
         <div><dt>Stored API-equivalent cost</dt><dd>{fmtUsd(data.stored_cost_usd)}</dd></div>
         <div><dt>Harvested portion</dt><dd>{fmtUsd(data.harvested_cost_usd)}</dd></div>

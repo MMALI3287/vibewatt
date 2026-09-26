@@ -7,7 +7,7 @@ import csv
 import io
 import json
 import sys
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, tzinfo
 from pathlib import Path
 
 from . import config as configmod
@@ -17,9 +17,21 @@ from .ingest import discover
 from .sources import CLAUDE_CODE, COWORK
 
 
-def resolve_tz(name: str | None):
+def resolve_tz(name: str | None) -> tzinfo:
     if not name or name == "local":
-        return datetime.now().astimezone().tzinfo
+        from tzlocal import get_localzone
+
+        try:
+            return get_localzone()
+        except (LookupError, ValueError) as exc:
+            # POSIX TZ strings (TZ=JST-9) and conflicting system configs have no
+            # IANA name. A fixed offset beats crashing every command, statusline included.
+            print(
+                f"vibewatt: cannot resolve the local timezone ({exc}); using the "
+                "current UTC offset. Set `timezone` in the config to an IANA name.",
+                file=sys.stderr,
+            )
+            return datetime.now().astimezone().tzinfo or UTC
     if name == "utc":
         return UTC
     try:
@@ -190,12 +202,16 @@ def sync_store(cfg, tz, files=None, progress=None):
     """Bring the store up to date with the logs. Returns the SyncResult."""
     from . import store
 
+    if pricing._remote is None:
+        pricing.refresh(offline=True)
     files = discover(cfg) if files is None else files
     overrides = cfg.get("pricing_overrides")
     with store.connect() as conn:
-        return store.sync_files(
+        result = store.sync_files(
             conn, files, tz, lambda t: cost_of(t, overrides), progress=progress
         )
+        store.reprice(conn, overrides)
+        return result
 
 
 def build_report(
@@ -314,6 +330,7 @@ def sync(args, cfg, tz) -> int:
     """Parse changed local logs into the store so later queries do not re-read them."""
     from . import store
 
+    pricing.refresh(offline=cfg.get("offline", False))
     files = discover(cfg)
 
     def progress(done: int, total: int) -> None:
@@ -380,6 +397,8 @@ def build_parser() -> argparse.ArgumentParser:
             "serve",
             "blocks",
             "statusline",
+            "status",
+            "quota",
             "json",
             "csv",
             "doctor",
@@ -388,7 +407,10 @@ def build_parser() -> argparse.ArgumentParser:
             "sessions",
         ],
         help="report (default), serve, doctor, harvest, sync, sessions, "
-        "blocks, statusline, json, csv",
+        "blocks, statusline, status, quota, json, csv",
+    )
+    p.add_argument(
+        "--json", action="store_true", help="status/quota: versioned JSON output"
     )
     p.add_argument("--source", choices=[CLAUDE_CODE, COWORK, "all"], default="all")
     p.add_argument("--since", metavar="YYYY-MM-DD")
@@ -519,6 +541,11 @@ def main(argv: list[str] | None = None) -> int:
         raw = "" if sys.stdin is None or sys.stdin.isatty() else sys.stdin.read()
         print(statusline(cfg, tz, raw))
         return 0
+
+    if args.command in ("status", "quota"):
+        from .agent_output import run
+
+        return run(args, cfg, tz)
 
     pricing.refresh(offline=cfg.get("offline", False))
 

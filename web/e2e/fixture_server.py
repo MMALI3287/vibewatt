@@ -51,6 +51,7 @@ def main() -> None:
     cfg = configmod.load()
     cfg["offline"] = True
     cfg["quota"] = False
+    cfg["plan_usd_per_month"] = 20
     with store.connect() as conn:
         store.sync_files(conn, discover(cfg), UTC, cost_of)
         reads = [

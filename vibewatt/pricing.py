@@ -17,6 +17,7 @@ Built-in rates: https://platform.claude.com/docs/en/about-claude/pricing
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -77,6 +78,22 @@ WEB_SEARCH_PER_CALL = 10.0 / 1000
 _remote: dict[str, Rate] | None = None
 
 
+def fingerprint(overrides: dict | None = None) -> str:
+    """Identify the current pricing inputs without triggering a network fetch."""
+    snapshot = {
+        "algorithm": 1,
+        "builtin": BUILTIN,
+        "fast": FAST_MODE,
+        "remote": _remote or {},
+        "overrides": overrides or {},
+        "geo_us": GEO_US_MULTIPLIER,
+        "web_search": WEB_SEARCH_PER_CALL,
+    }
+    return hashlib.sha256(
+        json.dumps(snapshot, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
 # Bedrock inference profiles (global., us., eu., apac., jp., au., us-gov., ...)
 # and the bare "anthropic." provider prefix (A-012).
 _PROVIDER = re.compile(r"^(?:[a-z]{2,6}(?:-[a-z]+)?\.)?anthropic[./]")
@@ -105,10 +122,10 @@ def _cache_path():
     return data_dir() / "pricing-cache.json"
 
 
-def _load_remote_cache() -> dict | None:
+def _load_remote_cache(*, allow_stale: bool = False) -> dict | None:
     path = _cache_path()
     try:
-        if time.time() - path.stat().st_mtime > CACHE_TTL_SECONDS:
+        if not allow_stale and time.time() - path.stat().st_mtime > CACHE_TTL_SECONDS:
             return None
         with path.open("r", encoding="utf-8") as fh:
             return json.load(fh)
@@ -186,6 +203,10 @@ def refresh(offline: bool = False) -> int:
     payload = _load_remote_cache()
     if payload is None and not offline:
         payload = _fetch_remote()
+    if payload is None:
+        # An empty table would change the fingerprint and reprice every
+        # remote-only model to unpriced while offline. Stale rates beat none.
+        payload = _load_remote_cache(allow_stale=True)
     _remote = _parse_remote(payload) if payload else {}
     return len(_remote)
 
