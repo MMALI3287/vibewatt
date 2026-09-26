@@ -1105,7 +1105,8 @@ session deep link passed without runtime errors. Linux/macOS clean-install
 checks were not rerun for this addition. No release was published.
 
 Pre-merge review fixes (2026-09-26). A three-reviewer pass over the unmerged
-Phase 7 and post-phase diff found six defects. Each fix has a regression test:
+Phase 7 and post-phase diff, a follow-up review of the fixes and the first CI
+run found these defects. Each fix has a regression test:
 
 - `timezone: local` crashed every command, statusline included, when `tzlocal`
   raised `ZoneInfoNotFoundError` for a POSIX `TZ` string or conflicting system
@@ -1120,7 +1121,14 @@ Phase 7 and post-phase diff found six defects. Each fix has a regression test:
   disagreed with `vibewatt json`. It now reads the cache without fetching.
 - React Router 7 commits history in a transition. URL-backed inputs (session
   search, date fields) lost keystrokes. `BrowserRouter` now sets
-  `useTransitions={false}`.
+  `useTransitions={false}`. Without transitions a lazy route would show its
+  Suspense fallback on first visit, so route pages use `lib/preloadable` and
+  their chunks are warmed when the browser is idle.
+- The first CI run failed on Linux only. The e2e fixture server patched
+  `app.state.tz` after `create_app` had captured the machine's local zone, so
+  results depended on the runner's timezone. The zone is now set in the config
+  before `create_app`. CI runs with `fail-fast: false` so one platform's
+  failure no longer cancels the other.
 - The Phase 8 handoff cited a `vibewatt reprice` command that does not exist.
   Repricing runs inside `sync`.
 

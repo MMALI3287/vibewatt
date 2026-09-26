@@ -67,3 +67,22 @@ test("URL-backed search keeps the caret when typing mid-value", async ({ page })
   await expect(search).toHaveValue("aXYbcd");
   await expect(page).toHaveURL(/q=aXYbcd/);
 });
+
+test("switching tabs after the first view never shows the route fallback", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByTestId("kpi-responses")).toBeVisible();
+  await page.waitForLoadState("networkidle");
+  await page.evaluate(() => {
+    const seen = { fallback: false };
+    Object.assign(window, { routeFallback: seen });
+    new MutationObserver(() => {
+      if (document.body.textContent?.includes("Loading view…")) seen.fallback = true;
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  });
+  for (const name of ["Sessions", "Analysis", "Wrapped"]) {
+    await page.getByRole("navigation", { name: "Primary" }).getByRole("link", { name, exact: true }).click();
+    await expect(page).toHaveTitle(`${name} · vibewatt`);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  }
+  expect(await page.evaluate(() => (window as unknown as { routeFallback: { fallback: boolean } }).routeFallback.fallback)).toBe(false);
+});
