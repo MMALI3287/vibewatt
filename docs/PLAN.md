@@ -1129,6 +1129,11 @@ run found these defects. Each fix has a regression test:
   results depended on the runner's timezone. The zone is now set in the config
   before `create_app`. CI runs with `fail-fast: false` so one platform's
   failure no longer cancels the other.
+- The Windows wheel gate failed intermittently while deleting its scratch
+  directory. pip's console-script launcher exits before the Python server it
+  starts, so the server still held `server.log` for about a millisecond after
+  `process.wait()` (measured in 5 of 5 local trials; longer on CI runners).
+  Cleanup now retries until the handles are released, bounded at 15 seconds.
 - The Phase 8 handoff cited a `vibewatt reprice` command that does not exist.
   Repricing runs inside `sync`.
 
