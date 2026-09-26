@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json as jsonlib
+import math
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -18,6 +19,42 @@ from .dependencies import Filters, get_filters
 router = APIRouter(prefix="/api")
 
 
+def _local_provenance(conn) -> dict:
+    stamp = conn.execute("SELECT value FROM meta WHERE key='last_sync'").fetchone()
+    return {
+        "usage": "computed_local",
+        "cost": "estimate",
+        "scope": "stored_local",
+        "as_of": stamp[0] if stamp else None,
+    }
+
+
+def _session_provenance(row: dict, local: dict) -> dict:
+    if not row["harvested"]:
+        return local
+    return {
+        "usage": "cloud_reported",
+        "cost": "cloud_reported",
+        "scope": "harvested_session",
+        # A later harvest of a different session does not refresh this snapshot.
+        "as_of": row.get("ended"),
+    }
+
+
+@router.get("/report-context", response_model=schemas.ReportContextOut)
+def report_context(request: Request):
+    from ..config import clock_zone, zone_id
+
+    with store.connect() as conn:
+        provenance = _local_provenance(conn)
+    return {
+        "today": datetime.now(request.app.state.tz).date().isoformat(),
+        "timezone": zone_id(clock_zone(request.app.state.tz)),
+        "day_start_hour": int(request.app.state.cfg.get("day_start_hour") or 0),
+        "as_of": provenance["as_of"],
+    }
+
+
 @router.get("/wrapped", response_model=schemas.WrappedOut)
 def wrapped(
     request: Request,
@@ -28,7 +65,7 @@ def wrapped(
 
     request.app.state.ensure_synced()
     with store.connect() as conn:
-        return build(
+        result = build(
             conn,
             request.app.state.cfg,
             request.app.state.tz,
@@ -37,6 +74,21 @@ def wrapped(
             project=_raw_projects(request, conn, filters),
             model=filters.model,
         )
+        local = _local_provenance(conn)
+        stamp = conn.execute(
+            "SELECT value FROM meta WHERE key='last_harvest'"
+        ).fetchone()
+        result["local_summary"]["provenance"] = local
+        result["provenance_by_source"] = {
+            "local": local,
+            "cloud": {
+                "usage": "cloud_reported",
+                "cost": "cloud_reported",
+                "scope": "harvested_sessions",
+                "as_of": stamp[0] if stamp else None,
+            },
+        }
+        return result
 
 
 @router.get("/alerts", response_model=schemas.AlertsOut)
@@ -210,6 +262,12 @@ def _quota_out(
             )
         )
     return schemas.QuotaOut(
+        provenance=schemas.ProvenanceOut(
+            usage="official",
+            cost="estimate",
+            scope="account_or_org",
+            as_of=q.fetched_at.isoformat(),
+        ),
         source=q.source,
         fetched_at=q.fetched_at.isoformat(),
         windows=windows,
@@ -221,7 +279,36 @@ def _quota_out(
 @router.get("/summary", response_model=schemas.SummaryOut)
 def summary(request: Request, filters: Filters = Depends(get_filters)):
     report, *_ = _report(request, filters)
-    return climod.serialize(report)
+    payload = climod.serialize(report)
+    with store.connect() as conn:
+        payload["provenance"] = _local_provenance(conn)
+    price = request.app.state.cfg.get("plan_usd_per_month")
+    if (
+        isinstance(price, (int, float))
+        and not isinstance(price, bool)
+        and math.isfinite(price)
+        and price > 0
+    ):
+        today = datetime.now(request.app.state.tz).date()
+        start = today.replace(day=1)
+        # Date filters must not silently compare an arbitrary range with one month.
+        mtd, *_ = request.app.state.report(
+            source=filters.source,
+            project=filters.project,
+            model=filters.model,
+            date_from=start,
+            date_to=today,
+            parts=frozenset(),
+        )
+        payload["plan_comparison"] = {
+            "period_start": start.isoformat(),
+            "period_end": today.isoformat(),
+            "local_cost_usd": round(mtd.total.cost, 6),
+            "monthly_plan_usd": float(price),
+            "multiple": None if mtd.total.unpriced else mtd.total.cost / price,
+            "unpriced": mtd.total.unpriced,
+        }
+    return payload
 
 
 @router.get("/daily", response_model=dict[str, schemas.BucketOut])
@@ -265,7 +352,7 @@ def sessions_list(
     source = None if filters.source == "all" else filters.source
     with store.connect() as conn:
         try:
-            return store.sessions(
+            rows = store.sessions(
                 conn,
                 limit=limit,
                 cursor=cursor,
@@ -278,6 +365,10 @@ def sessions_list(
                 search=q,
                 labels=_labels(request, conn),
             )
+            local = _local_provenance(conn)
+            for row in rows:
+                row["provenance"] = _session_provenance(row, local)
+            return rows
         except ValueError as exc:
             raise HTTPException(400, "invalid session cursor") from exc
 
@@ -287,6 +378,8 @@ def session_detail(session_id: str, request: Request):
     with store.connect() as conn:
         row = store.session_detail(conn, session_id)
         labels = _labels(request, conn)
+        if row is not None:
+            row["provenance"] = _session_provenance(row, _local_provenance(conn))
     if row is None:
         raise HTTPException(404, f"no session {session_id!r}")
     # Masked names everywhere, including a session's own detail (A-030).
@@ -326,8 +419,11 @@ def blocks(
     ordered = sorted(
         report.blocks, key=lambda b: (not b.is_active, -b.start.timestamp())
     )
+    with store.connect() as conn:
+        provenance = _local_provenance(conn)
     return [
         schemas.BlockOut(
+            provenance=provenance,
             start=b.start.isoformat(),
             end=b.end.isoformat(),
             is_active=b.is_active,

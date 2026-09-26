@@ -1,3 +1,4 @@
+import { Provenance } from "./Provenance";
 import { useQuery } from "@tanstack/react-query";
 import { getSummary } from "../api/client";
 import { Kpis } from "../pages/Overview";
@@ -11,6 +12,7 @@ export function UsageSummary() {
     {query.isPending ? <p role="status">Loading usage…</p> : query.isError ?
       <p role="alert">Could not load usage. <button onClick={() => query.refetch()}>Retry</button></p> : <>
         {query.data.unknown_models.length > 0 && <p className="notice">Unpriced models excluded from cost: {query.data.unknown_models.join(", ")}</p>}
+        <Provenance summary={query.data} />
         <Kpis s={query.data} />
       </>}
   </section>;

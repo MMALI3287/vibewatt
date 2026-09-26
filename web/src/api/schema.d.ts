@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/report-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Report Context */
+        get: operations["report_context_api_report_context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/wrapped": {
         parameters: {
             query?: never;
@@ -485,6 +502,7 @@ export interface components {
         };
         /** BlockOut */
         BlockOut: {
+            provenance?: components["schemas"]["ProvenanceOut"] | null;
             /** Start */
             start: string;
             /** End */
@@ -680,8 +698,41 @@ export interface components {
             /** Note */
             note: string;
         };
+        /** PlanComparisonOut */
+        PlanComparisonOut: {
+            /** Period Start */
+            period_start: string;
+            /** Period End */
+            period_end: string;
+            /** Local Cost Usd */
+            local_cost_usd: number;
+            /** Monthly Plan Usd */
+            monthly_plan_usd: number;
+            /** Multiple */
+            multiple: number | null;
+            /** Unpriced */
+            unpriced: number;
+        };
+        /** ProvenanceOut */
+        ProvenanceOut: {
+            /**
+             * Usage
+             * @enum {string}
+             */
+            usage: "official" | "computed_local" | "cloud_reported" | "estimate";
+            /**
+             * Cost
+             * @enum {string}
+             */
+            cost: "official" | "computed_local" | "cloud_reported" | "estimate";
+            /** Scope */
+            scope: string;
+            /** As Of */
+            as_of: string | null;
+        };
         /** QuotaOut */
         QuotaOut: {
+            provenance?: components["schemas"]["ProvenanceOut"] | null;
             /** Source */
             source: string;
             /** Fetched At */
@@ -727,6 +778,17 @@ export interface components {
             /** Session Definition */
             session_definition: string;
         };
+        /** ReportContextOut */
+        ReportContextOut: {
+            /** Today */
+            today: string;
+            /** Timezone */
+            timezone: string;
+            /** Day Start Hour */
+            day_start_hour: number;
+            /** As Of */
+            as_of: string | null;
+        };
         /** ServiceStatusOut */
         ServiceStatusOut: {
             /** Indicator */
@@ -738,6 +800,7 @@ export interface components {
         };
         /** SessionDetailOut */
         SessionDetailOut: {
+            provenance?: components["schemas"]["ProvenanceOut"] | null;
             /** Id */
             id: string;
             /** Title */
@@ -783,6 +846,7 @@ export interface components {
         };
         /** SessionOut */
         SessionOut: {
+            provenance?: components["schemas"]["ProvenanceOut"] | null;
             /** Id */
             id: string;
             /** Title */
@@ -855,6 +919,8 @@ export interface components {
         };
         /** SummaryOut */
         SummaryOut: {
+            provenance?: components["schemas"]["ProvenanceOut"] | null;
+            plan_comparison?: components["schemas"]["PlanComparisonOut"] | null;
             total: components["schemas"]["BucketOut"];
             /** By Day */
             by_day: {
@@ -1017,6 +1083,13 @@ export interface components {
         };
         /** WrappedOut */
         WrappedOut: {
+            /**
+             * Provenance By Source
+             * @default {}
+             */
+            provenance_by_source: {
+                [key: string]: components["schemas"]["ProvenanceOut"];
+            };
             /** Year */
             year: number;
             /** Timezone */
@@ -1083,6 +1156,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    report_context_api_report_context_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportContextOut"];
+                };
+            };
+        };
+    };
     wrapped_api_wrapped_get: {
         parameters: {
             query?: {

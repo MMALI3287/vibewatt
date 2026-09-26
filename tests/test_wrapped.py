@@ -55,6 +55,12 @@ def test_wrapped_snapshot_and_summary_parity(logs):
     assert data["harvested_cost_usd"] == 12.345678
     # Dynamic block status is irrelevant to a historical year snapshot.
     data["local_summary"].pop("active_block", None)
+    # Source timestamps change at ingestion, independent of the year snapshot.
+    assert data["local_summary"].pop("provenance") == summary["provenance"]
+    assert data["local_summary"].pop("plan_comparison") is None
+    sources = data.pop("provenance_by_source")
+    assert sources["local"]["as_of"] is not None
+    assert sources["cloud"]["as_of"] is not None
     expected = json.loads(
         (Path(__file__).parent / "fixtures/wrapped_2026.json").read_text()
     )

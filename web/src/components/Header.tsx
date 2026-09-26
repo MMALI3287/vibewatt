@@ -1,5 +1,6 @@
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link, NavLink, useLocation } from "react-router";
+import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import { postSync } from "../api/client";
 import { useTheme } from "../lib/theme";
 
@@ -14,6 +15,21 @@ const NAV = [
 
 export function Header() {
   const { search } = useLocation();
+  const navigate = useNavigate();
+  const searchInput = useRef<HTMLInputElement>(null);
+  const [query, setQuery] = useState(new URLSearchParams(search).get("q") ?? "");
+  useEffect(() => setQuery(new URLSearchParams(search).get("q") ?? ""), [search]);
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey ||
+        (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select")))) return;
+      event.preventDefault();
+      searchInput.current?.focus();
+    };
+    document.addEventListener("keydown", shortcut);
+    return () => document.removeEventListener("keydown", shortcut);
+  }, []);
   const [theme, cycleTheme] = useTheme();
   const qc = useQueryClient();
   const sync = useMutation({ mutationFn: postSync, onSuccess: () => qc.invalidateQueries() });
@@ -30,6 +46,16 @@ export function Header() {
           </NavLink>
         ))}
       </nav>
+      <form className="header-search" role="search" onSubmit={event => {
+        event.preventDefault();
+        const next = new URLSearchParams(search);
+        if (query.trim()) next.set("q", query.trim()); else next.delete("q");
+        navigate({ pathname: "/sessions", search: next.toString() });
+      }}>
+        <input ref={searchInput} type="search" aria-label="Search all sessions" placeholder="Search sessions (/)"
+          maxLength={500} value={query} onChange={event => setQuery(event.target.value)} />
+        <button type="submit">Search</button>
+      </form>
       <div className="header-actions">
         <button type="button" onClick={() => sync.mutate()} disabled={sync.isPending}>
           {sync.isPending ? "Syncing…" : sync.isError ? "Sync failed" : "Sync"}

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { generateWeeklySummary, getAlerts, getConcierge, getServiceStatus } from "../api/client";
+import { generateWeeklySummary, getHealth, getAlerts, getConcierge, getServiceStatus } from "../api/client";
 import { useFilters } from "../lib/filters";
 import { fmtCompact, fmtUsd } from "../lib/format";
 
@@ -18,10 +18,12 @@ function ServiceStatus() {
 }
 
 function Alerts() {
+  const health = useQuery({ queryKey: ["health"], queryFn: getHealth });
   const query = useQuery({ queryKey: ["alerts"], queryFn: getAlerts, staleTime: 60_000 });
   return <details className="card phase6-panel">
     <summary>Burn and spike alerts{query.data ? ` (${query.data.alerts.length})` : ""}</summary>
-    <p>Quota trends are account-wide. Response spikes and burn rates cover stored local usage. Page filters do not apply.</p>
+    <p>Quota trends are account-wide. Response spikes and burn rates cover stored local usage. Page filters do not apply. Forecasts and burn projections are estimates.</p>
+    <p className="muted">Local store synced: {health.data?.last_sync ?? "unavailable"}. Cloud harvested: {health.data?.last_harvest ?? "unavailable"}. Quota readings retain their source timestamps in Plan utilization.</p>
     {query.isPending && <p role="status">Loading alerts…</p>}
     {query.isError && <p role="alert">Could not load alerts. <button onClick={() => query.refetch()}>Retry alerts</button></p>}
     {query.data && <>

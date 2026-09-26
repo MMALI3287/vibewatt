@@ -23,6 +23,7 @@ dependencies = [
   "uvicorn>=0.53",
   # Windows ships no IANA database, so ZoneInfo("Asia/Tokyo") fails without it (A-058).
   "tzdata>=2024.1; sys_platform == 'win32'",
+  "tzlocal>=5.3",
 ]
 
 [project.urls]

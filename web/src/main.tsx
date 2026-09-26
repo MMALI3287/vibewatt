@@ -12,7 +12,9 @@ const queryClient = new QueryClient({
 createRoot(document.getElementById("root") as HTMLElement).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
+      {/* React Router 7 commits history in a transition by default; URL-backed
+          inputs then revert to the committed value mid-keystroke. */}
+      <BrowserRouter useTransitions={false}>
         <App />
       </BrowserRouter>
     </QueryClientProvider>

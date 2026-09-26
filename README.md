@@ -94,6 +94,10 @@ covers. Anything vibewatt cannot see, it says so rather than reporting zero.
   peak windows and context warnings, each with its evidence. Dismissals persist.
 - **Wrapped:** a year in review with a shareable image card.
 - **Filters** by date, surface, project and model, kept in the URL.
+- **Report-date presets**, header session search (`/`) and visible-tab refresh
+  every 60 seconds. Usage figures show their provenance and freshness.
+- **Plan comparison:** current month-to-date local API-equivalent cost against
+  the configured monthly fee, with incomplete pricing flagged.
 - **Why the numbers differ:** your figures next to what Claude's own Stats would
   show, with the reasons.
 - **Terminal, JSON and CSV** output plus `vibewatt statusline` for Claude Code's
@@ -113,7 +117,9 @@ covers. Anything vibewatt cannot see, it says so rather than reporting zero.
   looked up by exact model id. A community table only fills gaps. A model nobody
   can price is shown as unpriced, not as $0.
 - **Days are yours.** Day boundaries follow your time zone. `day_start_hour` lets
-  a late-night session count as one day.
+  a late-night session count as one day. The local timezone keeps historical DST
+  rules. Sync also reprices retained local turns when rates or overrides change;
+  harvested cloud costs stay unchanged.
 
 [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md) documents every input and outbound
 call. [docs/ANALYSIS.md](docs/ANALYSIS.md) explains every finding and alert.
@@ -131,7 +137,14 @@ vibewatt json          full data as JSON               --out
 vibewatt csv           per day per model               --out
 vibewatt blocks        recent rate-limit windows
 vibewatt statusline    Claude Code status line: records plan utilization
+vibewatt status        retained local usage and quota snapshot     --json --out
+vibewatt quota         retained current quota snapshot              --json --out
 ```
+
+`status --json` and `quota --json` never sync logs or fetch network data.
+See [the versioned agent contract and exit codes](docs/AGENT-JSON.md).
+See [remaining decisions and completion tasks](docs/COMPLETION-QUESTIONS.md)
+for the finite backlog after the completed phases.
 
 Shared flags: `--source {claude-code,cowork,all}`, `--since YYYY-MM-DD`, `--days N`,
 `--tz Asia/Tokyo`, `--day-start-hour H`, `--weeks N`, `--session-hours N`,

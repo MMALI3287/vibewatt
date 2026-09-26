@@ -1,3 +1,4 @@
+import { useLiveRefresh } from "./lib/liveRefresh";
 import { lazy, Suspense } from "react";
 import { Route, Routes, useLocation, type Location } from "react-router";
 import { FilterBar } from "./components/FilterBar";
@@ -15,6 +16,7 @@ const FindingModal = lazy(() => import("./pages/Analysis").then(m => ({ default:
 const Wrapped = lazy(() => import("./pages/Wrapped").then(m => ({ default: m.Wrapped })));
 
 export function App() {
+  useLiveRefresh();
   const location = useLocation();
   const state = location.state as { backgroundLocation?: Location } | null;
   const modal = location.pathname.startsWith("/sessions/") || location.pathname.startsWith("/analysis/findings/");

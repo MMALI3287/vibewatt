@@ -1,6 +1,7 @@
+import { Provenance } from "../components/Provenance";
 import { useEffect, useRef } from "react";
 import { useTitle } from "../lib/title";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { getSession, getSessions, SESSION_PAGE_SIZE, type SessionDetail } from "../api/client";
 import { useFilters } from "../lib/filters";
@@ -20,6 +21,7 @@ export function Sessions({ embedded }: { embedded?: "project" | "model" }) {
   const [params, setParams] = useSearchParams();
   const location = useLocation();
   const q = params.get("q") ?? "";
+  const client = useQueryClient();
   const sentinel = useRef<HTMLDivElement>(null);
   const query = useInfiniteQuery({
     queryKey: ["sessions", filters, q], initialPageParam: undefined as string | undefined,
@@ -38,7 +40,8 @@ export function Sessions({ embedded }: { embedded?: "project" | "model" }) {
     {!embedded && <><h1>Sessions</h1><UsageSummary /></>}
     <section className="card" aria-label="Sessions">
       <h2>{embedded === "model" ? "Model sessions" : embedded === "project" ? "Project sessions" : "Local and harvested sessions"}</h2>
-      <p className="muted">Local totals follow the filters. Cloud totals are selected by start date and retain the API cost. Detail shows the full session.</p>
+      <p className="muted">Local totals follow the filters. Local cost is an API-equivalent estimate. Cloud totals are selected by start date and retain the cloud-reported cost. Detail shows the full session.</p>
+      {(query.data?.pages.length ?? 0) > 1 && <p className="muted">Live refresh paused while browsing multiple pages. <button type="button" onClick={() => void client.resetQueries({ queryKey: ["sessions", filters, q], exact: true })}>Reload latest sessions</button></p>}
       <label className="search-label">Search titles, projects or models
         <input type="search" aria-label="Search sessions" maxLength={500} value={q} onChange={event => {
           const next = new URLSearchParams(params);
@@ -57,7 +60,7 @@ export function Sessions({ embedded }: { embedded?: "project" | "model" }) {
           <td>{row.surface ?? "Unknown"}{row.harvested ? " · harvested" : ""}</td>
           <td>{row.project ?? "Unknown"}</td><td>{row.model ?? "Unknown"}</td>
           <td>{row.started ?? "Unavailable"}</td><td>{duration(row.started, row.ended)}</td>
-          <td>{fmtCompact(row.tokens)}</td><td>{fmtUsd(row.cost)}{row.unpriced_turns ? " + unpriced" : ""}</td>
+          <td>{fmtCompact(row.tokens)}</td><td title={`${row.harvested ? "Cloud-reported" : "Estimated API-equivalent"} · stored as of ${row.provenance?.as_of ?? "unavailable"}`}>{fmtUsd(row.cost)}{row.unpriced_turns ? " + unpriced" : ""}</td>
         </tr>)}</tbody>
       </table></div>}
       <div ref={sentinel} className="pager">
@@ -104,8 +107,9 @@ function SessionContents({ session: s }: { session: SessionDetail }) {
       {s.project && s.project !== "-" && <><Link to={`/projects?${projectParams}`}>{s.project}</Link><span>/</span></>}
       <span>{s.title}</span>
     </nav>
-    <p>{s.harvested ? "Harvested API totals. Per-response detail is unavailable." : "Full local session. Totals here are not restricted by the list filters."}</p>
+    <p>{s.harvested ? "Harvested API totals. Per-response detail is unavailable." : "Full local session with estimated API-equivalent cost. Totals here are not restricted by the list filters."}</p>
     <dl className="session-facts">
+      <dt>Provenance</dt><dd><Provenance provenance={s.provenance} /></dd>
       <dt>Surface</dt><dd>{s.surface ?? "Unknown"}</dd>
       <dt>Models</dt><dd>{s.model ?? "Unknown"}</dd>
       <dt>Started</dt><dd>{s.started ?? "Unavailable"}</dd>
