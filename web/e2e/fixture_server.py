@@ -8,7 +8,6 @@ import os
 import shutil
 import sys
 import tempfile
-from datetime import UTC
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,6 +44,7 @@ def main() -> None:
     from vibewatt import store
     from vibewatt.aggregate import cost_of
     from vibewatt.api import create_app
+    from vibewatt.cli import report_zone
     from vibewatt.ingest import discover
     from vibewatt.ingest.tool_reads import read_tools
 
@@ -52,8 +52,12 @@ def main() -> None:
     cfg["offline"] = True
     cfg["quota"] = False
     cfg["plan_usd_per_month"] = 20
+    # create_app captures the report zone, so it must be set here, not patched on
+    # app.state afterwards. A fixed zone keeps results machine-independent; UTC+9
+    # splits the 2026-09-15 fixture across two days so day navigation is testable.
+    cfg["timezone"] = "Asia/Tokyo"
     with store.connect() as conn:
-        store.sync_files(conn, discover(cfg), UTC, cost_of)
+        store.sync_files(conn, discover(cfg), report_zone(cfg), cost_of)
         reads = [
             dict(r, session="s1", project="demo")
             for r in read_tools("claude-code", FIXTURES / "repeated_reads.jsonl")
@@ -98,7 +102,6 @@ def main() -> None:
             ],
         )
     app = create_app(cfg)
-    app.state.tz = UTC
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 
 
