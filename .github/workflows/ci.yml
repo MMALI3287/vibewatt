@@ -5,6 +5,8 @@ permissions:
 jobs:
   verify:
     strategy:
+      # Report every platform; a Linux failure must not cancel the Windows run.
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
