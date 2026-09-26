@@ -19,7 +19,7 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone, tzinfo
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from itertools import pairwise
 from pathlib import Path
 
@@ -240,14 +240,17 @@ def _v6_titles_and_drops(conn) -> None:
         conn.execute(
             "INSERT OR REPLACE INTO titles (session, kind, rank, ts, text)"
             " SELECT session, 'last-prompt', 2, ts, text FROM prompts"
-            " ORDER BY ts IS NOT NULL, ts, text")
+            " ORDER BY ts IS NOT NULL, ts, text"
+        )
         conn.execute("DROP TABLE prompts")
     conn.execute("DELETE FROM files")
 
 
 _LEGACY_QUOTA_KEYS = {
-    "5-hour": "five_hour", "7-day": "seven_day",
-    "5-hour (Opus)": "five_hour_opus", "7-day (Opus)": "seven_day_opus",
+    "5-hour": "five_hour",
+    "7-day": "seven_day",
+    "5-hour (Opus)": "five_hour_opus",
+    "7-day (Opus)": "seven_day_opus",
 }
 
 
@@ -267,12 +270,23 @@ def _v7_quota_windows(conn) -> None:
       source      TEXT NOT NULL,
       PRIMARY KEY (ts, key, scope)
     )""")
-    conn.execute("CREATE INDEX IF NOT EXISTS quota_samples_series"
-                 " ON quota_samples(key, scope, ts)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS quota_samples_series"
+        " ON quota_samples(key, scope, ts)"
+    )
     rows = [
-        (r[0], _LEGACY_QUOTA_KEYS.get(r[1], r[1].lower().replace(" ", "_")), r[1],
-         "account", r[2], r[3], "legacy")
-        for r in conn.execute("SELECT ts, label, utilization, resets_at FROM quota_samples_v2")
+        (
+            r[0],
+            _LEGACY_QUOTA_KEYS.get(r[1], r[1].lower().replace(" ", "_")),
+            r[1],
+            "account",
+            r[2],
+            r[3],
+            "legacy",
+        )
+        for r in conn.execute(
+            "SELECT ts, label, utilization, resets_at FROM quota_samples_v2"
+        )
     ]
     conn.executemany("INSERT OR IGNORE INTO quota_samples VALUES (?,?,?,?,?,?,?)", rows)
     conn.execute("DROP TABLE quota_samples_v2")
@@ -290,7 +304,9 @@ def _v8_keyed_path_hash(conn) -> None:
 def _v9_dismissals(conn) -> None:
     # Phase 6.5f: dismissals outlive a snapshot and apply across filters for
     # session findings (A-091). Existing dismissals are carried over.
-    conn.execute("CREATE TABLE IF NOT EXISTS dismissals (key TEXT PRIMARY KEY, at TEXT)")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS dismissals (key TEXT PRIMARY KEY, at TEXT)"
+    )
     # Line counts as Claude's own Stats count them, for the reconciliation
     # panel. Filled by re-reading every file once.
     conn.execute("""
@@ -301,15 +317,20 @@ def _v9_dismissals(conn) -> None:
     )""")
     conn.execute("CREATE INDEX IF NOT EXISTS raw_lines_hr ON raw_lines(hr)")
     conn.execute("DELETE FROM files")
-    for row in conn.execute("SELECT scope, detail_json, created_at FROM findings"
-                            " WHERE dismissed = 1").fetchall():
+    for row in conn.execute(
+        "SELECT scope, detail_json, created_at FROM findings WHERE dismissed = 1"
+    ).fetchall():
         item = json.loads(row[1])
         if "rule" in item:
-            conn.execute("INSERT OR IGNORE INTO dismissals VALUES (?, ?)",
-                         (dismissal_key(item, row[0]), row[2]))
+            conn.execute(
+                "INSERT OR IGNORE INTO dismissals VALUES (?, ?)",
+                (dismissal_key(item, row[0]), row[2]),
+            )
     # Snapshots left inactive by earlier versions are not history anyone reads.
-    conn.execute("DELETE FROM findings WHERE active = 0 AND dismissed = 0"
-                 " AND scope != 'phase6-alerts'")
+    conn.execute(
+        "DELETE FROM findings WHERE active = 0 AND dismissed = 0"
+        " AND scope != 'phase6-alerts'"
+    )
 
 
 # Forward-only. Append a step and bump SCHEMA_VERSION; never drop a user's table.
@@ -335,7 +356,9 @@ def migrate(conn) -> None:
     current = schema_version(conn)
     for version in sorted(v for v in MIGRATIONS if v > current):
         MIGRATIONS[version](conn)
-        conn.execute("INSERT OR REPLACE INTO meta VALUES ('schema', ?)", (str(version),))
+        conn.execute(
+            "INSERT OR REPLACE INTO meta VALUES ('schema', ?)", (str(version),)
+        )
 
 
 # Schema work takes the write lock, so it only runs when meta says the store is
@@ -385,17 +408,28 @@ def _row_turn(row):
     from .sources import Turn
 
     return Turn(
-        source=row["source"], ts=datetime.fromisoformat(row["ts"]), model=row["model"],
-        input=row["input"], cache_5m=row["cache_5m"], cache_1h=row["cache_1h"],
-        cache_read=row["cache_read"], output=row["output"], thinking=row["thinking"],
-        web_searches=row["web_search"], fast=bool(row["fast"]), geo=row["geo"],
-        sidechain=bool(row["sidechain"]), project=row["project"], session=row["session"],
-        key=(row["msg_id"], row["request_id"]), version=row["version"],
+        source=row["source"],
+        ts=datetime.fromisoformat(row["ts"]),
+        model=row["model"],
+        input=row["input"],
+        cache_5m=row["cache_5m"],
+        cache_1h=row["cache_1h"],
+        cache_read=row["cache_read"],
+        output=row["output"],
+        thinking=row["thinking"],
+        web_searches=row["web_search"],
+        fast=bool(row["fast"]),
+        geo=row["geo"],
+        sidechain=bool(row["sidechain"]),
+        project=row["project"],
+        session=row["session"],
+        key=(row["msg_id"], row["request_id"]),
+        version=row["version"],
     )
 
 
 def _hr(ts: datetime | str) -> str:
-    text = ts if isinstance(ts, str) else ts.astimezone(timezone.utc).isoformat()
+    text = ts if isinstance(ts, str) else ts.astimezone(UTC).isoformat()
     return text[:13]
 
 
@@ -415,7 +449,9 @@ def upsert_turns(conn, turns, tz, cost_of) -> set[str]:
         return set()
     conn.execute("CREATE TEMP TABLE IF NOT EXISTS incoming (msg_id TEXT PRIMARY KEY)")
     conn.execute("DELETE FROM incoming")
-    conn.executemany("INSERT OR IGNORE INTO incoming VALUES (?)", [(t.key[0],) for t in turns])
+    conn.executemany(
+        "INSERT OR IGNORE INTO incoming VALUES (?)", [(t.key[0],) for t in turns]
+    )
     stored: dict[str, list] = defaultdict(list)
     for row in conn.execute(
         f"SELECT {TURN_COLUMNS} FROM turns WHERE msg_id IN (SELECT msg_id FROM incoming)"
@@ -444,17 +480,39 @@ def upsert_turns(conn, turns, tz, cost_of) -> set[str]:
         local = merged.ts.astimezone(tz)
         clock_hour = merged.ts.astimezone(clock_zone(tz)).hour
         hours.add(_hr(merged.ts))
-        writes.append((
-            merged.key[0], merged.key[1], merged.ts.astimezone(timezone.utc).isoformat(),
-            local.date().isoformat(), merged.source, merged.project, merged.session,
-            merged.model, merged.input, merged.cache_5m, merged.cache_1h, merged.cache_read,
-            merged.output, merged.thinking, merged.web_searches, int(merged.sidechain),
-            int(merged.fast), merged.geo, cost_of(merged), merged.version, clock_hour,
-        ))
-    conn.executemany("DELETE FROM turns WHERE msg_id = ? AND request_id = ?", sorted(deletes))
+        writes.append(
+            (
+                merged.key[0],
+                merged.key[1],
+                merged.ts.astimezone(UTC).isoformat(),
+                local.date().isoformat(),
+                merged.source,
+                merged.project,
+                merged.session,
+                merged.model,
+                merged.input,
+                merged.cache_5m,
+                merged.cache_1h,
+                merged.cache_read,
+                merged.output,
+                merged.thinking,
+                merged.web_searches,
+                int(merged.sidechain),
+                int(merged.fast),
+                merged.geo,
+                cost_of(merged),
+                merged.version,
+                clock_hour,
+            )
+        )
+    conn.executemany(
+        "DELETE FROM turns WHERE msg_id = ? AND request_id = ?", sorted(deletes)
+    )
     conn.executemany(
         f"INSERT OR REPLACE INTO turns ({TURN_COLUMNS}) VALUES "
-        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", writes)
+        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        writes,
+    )
     return hours
 
 
@@ -475,7 +533,7 @@ def rebuild_rollup(conn, hours: Iterable[str] | None = None) -> None:
         return
     ordered = sorted(set(hours))
     for i in range(0, len(ordered), 500):
-        chunk = ordered[i:i + 500]
+        chunk = ordered[i : i + 500]
         marks = ",".join("?" * len(chunk))
         conn.execute(f"DELETE FROM rollup WHERE hr IN ({marks})", chunk)
         conn.execute(
@@ -483,6 +541,59 @@ def rebuild_rollup(conn, hours: Iterable[str] | None = None) -> None:
             + _ROLLUP_SELECT.format(where=f"WHERE substr(ts, 1, 13) IN ({marks})"),
             chunk,
         )
+
+
+def reprice(conn: sqlite3.Connection, overrides: dict | None = None) -> int:
+    """Atomically refresh retained local costs when pricing inputs change.
+
+    Call after syncing files using the same overrides. Cloud session totals
+    are reported by their source and must never be replaced by estimates.
+    The existing meta table tracks the complete store's pricing snapshot so
+    this also works after the original logs have disappeared.
+    """
+    from .aggregate import cost_of
+    from .pricing import fingerprint
+
+    current = fingerprint(overrides)
+    conn.execute("SAVEPOINT reprice")
+    try:
+        previous = conn.execute(
+            "SELECT value FROM meta WHERE key = 'pricing_fingerprint'"
+        ).fetchone()
+        changed = 0
+        if previous is None or previous[0] != current:
+            hours: set[str] = set()
+            for row in conn.execute(f"SELECT {TURN_COLUMNS} FROM turns"):
+                cost = cost_of(_row_turn(row), overrides)
+                if cost != row["cost"]:
+                    conn.execute(
+                        "UPDATE turns SET cost = ? WHERE msg_id = ? AND request_id = ?",
+                        (cost, row["msg_id"], row["request_id"]),
+                    )
+                    changed += 1
+                    hours.add(_hr(row["ts"]))
+            if hours:
+                rebuild_rollup(conn, hours)
+            # Savings findings depend on base rates even when a cache-only
+            # turn's charged amount is unchanged.
+            conn.execute(
+                "INSERT OR REPLACE INTO meta VALUES ('generation', ?)",
+                (str(generation(conn) + 1),),
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO meta VALUES ('pricing_fingerprint', ?)",
+                (current,),
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO meta VALUES ('last_reprice', ?)",
+                (datetime.now(UTC).isoformat(),),
+            )
+        conn.execute("RELEASE SAVEPOINT reprice")
+        return changed
+    except BaseException:
+        conn.execute("ROLLBACK TO SAVEPOINT reprice")
+        conn.execute("RELEASE SAVEPOINT reprice")
+        raise
 
 
 def _path_key(conn) -> bytes:
@@ -494,8 +605,9 @@ def _path_key(conn) -> bytes:
         return bytes.fromhex(row[0])
     key = secrets.token_bytes(32)
     conn.execute("INSERT OR IGNORE INTO meta VALUES ('path_hash_key', ?)", (key.hex(),))
-    return bytes.fromhex(conn.execute(
-        "SELECT value FROM meta WHERE key = 'path_hash_key'").fetchone()[0])
+    return bytes.fromhex(
+        conn.execute("SELECT value FROM meta WHERE key = 'path_hash_key'").fetchone()[0]
+    )
 
 
 def generation(conn) -> int:
@@ -518,19 +630,30 @@ def import_history(conn) -> int:
         try:
             day, model = key.split("|", 1)
             date.fromisoformat(day)
-            rows.append((
-                day, model, int(row.get("responses", 0)), int(row.get("input", 0)),
-                int(row.get("cache_5m", 0)), int(row.get("cache_1h", 0)),
-                int(row.get("cache_read", 0)), int(row.get("output", 0)),
-                int(row.get("thinking", 0)), int(row.get("web_searches", 0)),
-                float(row.get("cost", 0.0)),
-            ))
+            rows.append(
+                (
+                    day,
+                    model,
+                    int(row.get("responses", 0)),
+                    int(row.get("input", 0)),
+                    int(row.get("cache_5m", 0)),
+                    int(row.get("cache_1h", 0)),
+                    int(row.get("cache_read", 0)),
+                    int(row.get("output", 0)),
+                    int(row.get("thinking", 0)),
+                    int(row.get("web_searches", 0)),
+                    float(row.get("cost", 0.0)),
+                )
+            )
         except (AttributeError, TypeError, ValueError):
             continue
     conn.executemany(
-        "INSERT OR REPLACE INTO history_days VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows)
-    conn.execute("INSERT OR REPLACE INTO meta VALUES ('history_imported', ?)",
-                 (datetime.now(timezone.utc).isoformat(),))
+        "INSERT OR REPLACE INTO history_days VALUES (?,?,?,?,?,?,?,?,?,?,?)", rows
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO meta VALUES ('history_imported', ?)",
+        (datetime.now(UTC).isoformat(),),
+    )
     return len(rows)
 
 
@@ -547,13 +670,19 @@ class SyncResult:
     skipped: int = 0
     turns: int = 0
     duplicates: int = 0
-    prompts: int = 0          # session titles written; the API field keeps its name
-    unreadable: int = 0       # files that could not be opened; retried next sync
+    prompts: int = 0  # session titles written; the API field keeps its name
+    unreadable: int = 0  # files that could not be opened; retried next sync
 
 
-def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of, *,
-               progress: Callable[[int, int], None] | None = None,
-               batch_files: int = 200) -> SyncResult:
+def sync_files(
+    conn,
+    files: list[tuple[str, Path]],
+    tz,
+    cost_of,
+    *,
+    progress: Callable[[int, int], None] | None = None,
+    batch_files: int = 200,
+) -> SyncResult:
     """Ingest only files whose (mtime, size) changed since the last sync.
 
     Turns from a file that later disappears stay in the store on purpose: that
@@ -581,20 +710,31 @@ def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of, *,
             clock = clock_zone(tz)
             for r in conn.execute("SELECT msg_id, request_id, ts FROM turns"):
                 stamp = datetime.fromisoformat(r["ts"])
-                updates.append((stamp.astimezone(tz).date().isoformat(),
-                                stamp.astimezone(clock).hour, r["msg_id"], r["request_id"]))
+                updates.append(
+                    (
+                        stamp.astimezone(tz).date().isoformat(),
+                        stamp.astimezone(clock).hour,
+                        r["msg_id"],
+                        r["request_id"],
+                    )
+                )
             conn.executemany(
                 "UPDATE turns SET day = ?, hour = ? WHERE msg_id = ? AND request_id = ?",
-                updates)
+                updates,
+            )
         conn.execute("INSERT OR REPLACE INTO meta VALUES ('sync_tz', ?)", (tz_id,))
-    known = {r["path"]: (r["mtime"], r["size"])
-             for r in conn.execute("SELECT path, mtime, size FROM files")}
+    known = {
+        r["path"]: (r["mtime"], r["size"])
+        for r in conn.execute("SELECT path, mtime, size FROM files")
+    }
     # Separate checkpoints backfill metadata once without deleting usage history
     # or invalidating the existing incremental usage cache.
     from .ingest.tool_reads import read_tools
 
-    reads_known = {r["path"]: (r["mtime"], r["size"])
-                   for r in conn.execute("SELECT * FROM tool_read_files")}
+    reads_known = {
+        r["path"]: (r["mtime"], r["size"])
+        for r in conn.execute("SELECT * FROM tool_read_files")
+    }
     changed: list[tuple[str, Path, os.stat_result]] = []
     for source, path in files:
         try:
@@ -609,9 +749,13 @@ def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of, *,
             else:
                 conn.executemany(
                     "INSERT OR IGNORE INTO tool_reads VALUES "
-                    "(:session, :tool_id, :ts, :source, :project, :model, :path_hash)", reads)
-                conn.execute("INSERT OR REPLACE INTO tool_read_files VALUES (?,?,?)",
-                             (str(path), st.st_mtime, st.st_size))
+                    "(:session, :tool_id, :ts, :source, :project, :model, :path_hash)",
+                    reads,
+                )
+                conn.execute(
+                    "INSERT OR REPLACE INTO tool_read_files VALUES (?,?,?)",
+                    (str(path), st.st_mtime, st.st_size),
+                )
         if known.get(str(path)) == (st.st_mtime, st.st_size):
             result.skipped += 1
         else:
@@ -622,7 +766,7 @@ def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of, *,
     conn.commit()
     hours: set[str] = set()
     for i in range(0, len(changed), batch_files):
-        batch = changed[i:i + batch_files]
+        batch = changed[i : i + batch_files]
         lines = []
         per_file: list[tuple[str, float, int, int, str | None]] = []
         read: list[tuple[str, Path]] = []
@@ -638,23 +782,34 @@ def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of, *,
             conn.execute("DELETE FROM raw_lines WHERE path = ?", (str(path),))
             conn.executemany(
                 "INSERT INTO raw_lines VALUES (?,?,?,?,?,?)",
-                [(str(path), source, hr, session, n, tokens)
-                 for (hr, session), (n, tokens) in raw.items()])
+                [
+                    (str(path), source, hr, session, n, tokens)
+                    for (hr, session), (n, tokens) in raw.items()
+                ],
+            )
             lines.extend(file_lines)
             read.append((source, path))
             # turn_count is responses, not lines: one response spans several lines.
-            per_file.append((str(path), st.st_mtime, st.st_size, len(dedupe(file_lines)[0]),
-                             json.dumps(dict(drops), sort_keys=True) if drops else None))
+            per_file.append(
+                (
+                    str(path),
+                    st.st_mtime,
+                    st.st_size,
+                    len(dedupe(file_lines)[0]),
+                    json.dumps(dict(drops), sort_keys=True) if drops else None,
+                )
+            )
         turns, dropped = dedupe(lines)
         result.duplicates += dropped
         result.turns += len(turns)
         hours |= upsert_turns(conn, turns, tz, cost_of)
         result.prompts += upsert_titles(conn, read_titles(read))
-        stamp = datetime.now(timezone.utc).isoformat()
+        stamp = datetime.now(UTC).isoformat()
         conn.executemany(
             "INSERT OR REPLACE INTO files (path, mtime, size, parsed_at, turn_count, dropped)"
             " VALUES (?,?,?,?,?,?)",
-            [(path, mtime, size, stamp, n, d) for path, mtime, size, n, d in per_file])
+            [(path, mtime, size, stamp, n, d) for path, mtime, size, n, d in per_file],
+        )
         result.parsed += len(read)
         conn.commit()
         if progress:
@@ -666,22 +821,30 @@ def sync_files(conn, files: list[tuple[str, Path]], tz, cost_of, *,
         rebuild_rollup(conn, hours)
     if import_history(conn) or full_rebuild or hours:
         # Report caches are keyed on this, so an unchanged store keeps them.
-        conn.execute("INSERT OR REPLACE INTO meta VALUES ('generation', ?)",
-                     (str(generation(conn) + 1),))
-    conn.execute("INSERT OR REPLACE INTO meta VALUES ('last_sync', ?)",
-                 (datetime.now(timezone.utc).isoformat(),))
+        conn.execute(
+            "INSERT OR REPLACE INTO meta VALUES ('generation', ?)",
+            (str(generation(conn) + 1),),
+        )
+    conn.execute(
+        "INSERT OR REPLACE INTO meta VALUES ('last_sync', ?)",
+        (datetime.now(UTC).isoformat(),),
+    )
     return result
 
 
 def upsert_titles(conn, titles) -> int:
     """Keep a session's title unless a better or equal kind arrives."""
-    rows = [(t["session"], t["kind"], t["rank"], t.get("ts"), t["text"])
-            for t in titles if t.get("text")]
+    rows = [
+        (t["session"], t["kind"], t["rank"], t.get("ts"), t["text"])
+        for t in titles
+        if t.get("text")
+    ]
     conn.executemany(
         "INSERT INTO titles (session, kind, rank, ts, text) VALUES (?,?,?,?,?)"
         " ON CONFLICT(session) DO UPDATE SET kind = excluded.kind, rank = excluded.rank,"
         " ts = excluded.ts, text = excluded.text WHERE excluded.rank >= titles.rank",
-        rows)
+        rows,
+    )
     return len(rows)
 
 
@@ -740,7 +903,11 @@ def upsert_cloud_sessions(conn, payload) -> dict[str, int]:
         if not isinstance(sid, str) or not sid:
             counts["rejected_no_id"] += 1
             continue
-        meta = s.get("external_metadata") if isinstance(s.get("external_metadata"), dict) else {}
+        meta = (
+            s.get("external_metadata")
+            if isinstance(s.get("external_metadata"), dict)
+            else {}
+        )
         usage = meta.get("usage") if isinstance(meta.get("usage"), dict) else {}
         if not usage:
             counts["skipped"] += 1
@@ -749,25 +916,44 @@ def upsert_cloud_sessions(conn, payload) -> dict[str, int]:
         cowork = any(t.startswith("cowork") for t in tags)
         environment = s.get("environment_kind")
         if sid in local_ids or (
-            environment is not None and environment not in _CLOUD_ENVIRONMENTS and not cowork
+            environment is not None
+            and environment not in _CLOUD_ENVIRONMENTS
+            and not cowork
         ):
             counts["skipped_environment"] += 1
             continue
-        ctx = s.get("session_context") if isinstance(s.get("session_context"), dict) else {}
+        ctx = (
+            s.get("session_context")
+            if isinstance(s.get("session_context"), dict)
+            else {}
+        )
         origin = str(s.get("origin") or "")
         surface = "cowork" if cowork else _SURFACE.get(origin, "claude-code")
-        cu = meta.get("context_usage") if isinstance(meta.get("context_usage"), dict) else {}
+        cu = (
+            meta.get("context_usage")
+            if isinstance(meta.get("context_usage"), dict)
+            else {}
+        )
         cost = usage.get("cost_usd")
         try:
             row = (
-                sid, s.get("title") if isinstance(s.get("title"), str) else None,
-                origin, surface, _repo_name(ctx), (ctx.get("model") or meta.get("model")),
-                s.get("created_at"), s.get("updated_at"),
-                _count(usage.get("input_tokens")), _count(usage.get("cache_write_tokens")),
-                _count(usage.get("cache_read_tokens")), _count(usage.get("output_tokens")),
+                sid,
+                s.get("title") if isinstance(s.get("title"), str) else None,
+                origin,
+                surface,
+                _repo_name(ctx),
+                (ctx.get("model") or meta.get("model")),
+                s.get("created_at"),
+                s.get("updated_at"),
+                _count(usage.get("input_tokens")),
+                _count(usage.get("cache_write_tokens")),
+                _count(usage.get("cache_read_tokens")),
+                _count(usage.get("output_tokens")),
                 None if cost is None else float(cost),
-                cu.get("used_tokens"), cu.get("max_tokens"),
-                1, json.dumps(s, separators=(",", ":"))[:20000],
+                cu.get("used_tokens"),
+                cu.get("max_tokens"),
+                1,
+                json.dumps(s, separators=(",", ":"))[:20000],
             )
         except (TypeError, ValueError):
             counts["skipped"] += 1
@@ -775,19 +961,30 @@ def upsert_cloud_sessions(conn, payload) -> dict[str, int]:
         rows.append(row)
         counts["written"] += 1
     conn.executemany(
-        "INSERT OR REPLACE INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+        "INSERT OR REPLACE INTO sessions VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        rows,
+    )
     if rows:
-        conn.execute("INSERT OR REPLACE INTO meta VALUES ('last_harvest', ?)",
-                     (datetime.now(timezone.utc).isoformat(),))
+        conn.execute(
+            "INSERT OR REPLACE INTO meta VALUES ('last_harvest', ?)",
+            (datetime.now(UTC).isoformat(),),
+        )
     return counts
 
 
 def sessions(
-    conn, limit: int = 40, *, cursor: str | None = None,
-    source: str | None = None, project: str | list[str] | None = None,
-    model: str | None = None, labels: dict[str, str] | None = None,
-    date_from: date | None = None, date_to: date | None = None,
-    tz: tzinfo = timezone.utc, search: str | None = None,
+    conn,
+    limit: int = 40,
+    *,
+    cursor: str | None = None,
+    source: str | None = None,
+    project: str | list[str] | None = None,
+    model: str | None = None,
+    labels: dict[str, str] | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    tz: tzinfo = UTC,
+    search: str | None = None,
 ) -> list[dict]:
     """Sessions across every surface, local and harvested, newest first.
 
@@ -815,14 +1012,16 @@ def sessions(
         if day:
             boundary = datetime.combine(day, time.min, tz) + timedelta(days=offset)
             local_clauses.append(f"ts {op} ?")
-            local_args.append(boundary.astimezone(timezone.utc).isoformat())
+            local_args.append(boundary.astimezone(UTC).isoformat())
     local = conn.execute(
         "SELECT session id, MIN(ts) started, MAX(ts) ended, project,"
         "  GROUP_CONCAT(DISTINCT model) model, COUNT(*) n, SUM(cost) cost,"
         "  SUM(cost IS NULL) unpriced_turns,"
         "  SUM(input+cache_5m+cache_1h+cache_read+output) tokens, source surface"
         f" FROM turns WHERE {' AND '.join(local_clauses)}"
-        " GROUP BY session ORDER BY started DESC", local_args).fetchall()
+        " GROUP BY session ORDER BY started DESC",
+        local_args,
+    ).fetchall()
 
     cloud_clauses = ["harvested = 1"]
     cloud_args: list = []
@@ -842,10 +1041,14 @@ def sessions(
         "SELECT id, title, started, ended, project, model, surface, context_used, context_max,"
         "  cost, input+cache_write+cache_read+output tokens"
         f" FROM sessions WHERE {' AND '.join(cloud_clauses)}"
-        " ORDER BY started DESC", cloud_args).fetchall()
+        " ORDER BY started DESC",
+        cloud_args,
+    ).fetchall()
 
-    titles = {r["session"]: r["text"] for r in
-              conn.execute("SELECT session, text FROM titles")}
+    titles = {
+        r["session"]: r["text"]
+        for r in conn.execute("SELECT session, text FROM titles")
+    }
 
     rows = []
     local_ids = {r[0] for r in conn.execute("SELECT DISTINCT session FROM turns")}
@@ -854,32 +1057,49 @@ def sessions(
             continue
         if date_from or date_to:
             try:
-                stamp = datetime.fromisoformat((r["started"] or "").replace("Z", "+00:00"))
+                stamp = datetime.fromisoformat(r["started"] or "")
                 if stamp.tzinfo is None:
-                    stamp = stamp.replace(tzinfo=timezone.utc)
+                    stamp = stamp.replace(tzinfo=UTC)
                 day = stamp.astimezone(tz).date()
             except (ValueError, TypeError):
                 continue
             if (date_from and day < date_from) or (date_to and day > date_to):
                 continue
-        rows.append({
-            "id": r["id"], "title": r["title"] or r["id"][:24], "surface": r["surface"],
-            "project": r["project"] or "-", "model": r["model"], "started": r["started"],
-            "ended": r["ended"], "tokens": r["tokens"] or 0, "cost": r["cost"] or 0.0,
-            "harvested": True,
-            # No cost_usd from the session API: unpriced, not free (A-027).
-            "unpriced_turns": int(r["cost"] is None),
-            "context_used": r["context_used"], "context_max": r["context_max"],
-        })
+        rows.append(
+            {
+                "id": r["id"],
+                "title": r["title"] or r["id"][:24],
+                "surface": r["surface"],
+                "project": r["project"] or "-",
+                "model": r["model"],
+                "started": r["started"],
+                "ended": r["ended"],
+                "tokens": r["tokens"] or 0,
+                "cost": r["cost"] or 0.0,
+                "harvested": True,
+                # No cost_usd from the session API: unpriced, not free (A-027).
+                "unpriced_turns": int(r["cost"] is None),
+                "context_used": r["context_used"],
+                "context_max": r["context_max"],
+            }
+        )
     for r in local:
         title = titles.get(r["id"], "") or r["id"][:24]
-        rows.append({
-            "id": r["id"], "title": title, "surface": r["surface"],
-            "project": r["project"] or "-", "model": r["model"], "started": r["started"],
-            "ended": r["ended"], "tokens": r["tokens"] or 0, "cost": r["cost"] or 0.0,
-            "harvested": False,
-            "unpriced_turns": r["unpriced_turns"],
-        })
+        rows.append(
+            {
+                "id": r["id"],
+                "title": title,
+                "surface": r["surface"],
+                "project": r["project"] or "-",
+                "model": r["model"],
+                "started": r["started"],
+                "ended": r["ended"],
+                "tokens": r["tokens"] or 0,
+                "cost": r["cost"] or 0.0,
+                "harvested": False,
+                "unpriced_turns": r["unpriced_turns"],
+            }
+        )
     if labels is not None:
         for row in rows:
             row["project"] = labels.get(row["project"], row["project"])
@@ -890,15 +1110,21 @@ def sessions(
     rows.sort(key=sort_key, reverse=True)
     if search:
         needle = search.casefold()
-        rows = [r for r in rows if any(
-            needle in str(r.get(key) or "").casefold()
-            for key in ("title", "project", "model")
-        )]
+        rows = [
+            r
+            for r in rows
+            if any(
+                needle in str(r.get(key) or "").casefold()
+                for key in ("title", "project", "model")
+            )
+        ]
     if cursor:
         if cursor.startswith("["):
             boundary = json.loads(cursor)
-            if not isinstance(boundary, list) or len(boundary) != 2 or not all(
-                isinstance(v, str) for v in boundary
+            if (
+                not isinstance(boundary, list)
+                or len(boundary) != 2
+                or not all(isinstance(v, str) for v in boundary)
             ):
                 raise ValueError("invalid session cursor")
             rows = [r for r in rows if sort_key(r) < tuple(boundary)]
@@ -919,39 +1145,55 @@ def session_detail(conn, session_id: str) -> dict | None:
         "SELECT msg_id, request_id, ts, day, source, project, model, input,"
         "  cache_5m, cache_1h, cache_read, output, thinking, web_search,"
         "  sidechain, fast, geo, cost FROM turns WHERE session = ? ORDER BY ts",
-        (session_id,)).fetchall()
+        (session_id,),
+    ).fetchall()
     if turns:
         title = conn.execute(
-            "SELECT text FROM titles WHERE session = ?",
-            (session_id,)).fetchone()
+            "SELECT text FROM titles WHERE session = ?", (session_id,)
+        ).fetchone()
         first, last = turns[0], turns[-1]
-        tokens = sum(t["input"] + t["cache_5m"] + t["cache_1h"] + t["cache_read"] + t["output"]
-                     for t in turns)
+        tokens = sum(
+            t["input"] + t["cache_5m"] + t["cache_1h"] + t["cache_read"] + t["output"]
+            for t in turns
+        )
         cost = sum(t["cost"] or 0 for t in turns)
         models = sorted({t["model"] for t in turns})
         return {
-            "id": session_id, "harvested": False,
+            "id": session_id,
+            "harvested": False,
             "title": (title["text"] if title else None) or session_id[:24],
-            "surface": first["source"], "project": first["project"],
-            "model": ",".join(models), "started": first["ts"], "ended": last["ts"],
-            "tokens": tokens, "cost": cost,
+            "surface": first["source"],
+            "project": first["project"],
+            "model": ",".join(models),
+            "started": first["ts"],
+            "ended": last["ts"],
+            "tokens": tokens,
+            "cost": cost,
             "unpriced_turns": sum(t["cost"] is None for t in turns),
             "turns": [dict(t) for t in turns],
         }
     cloud = conn.execute(
-        "SELECT * FROM sessions WHERE id = ? AND harvested = 1", (session_id,)).fetchone()
+        "SELECT * FROM sessions WHERE id = ? AND harvested = 1", (session_id,)
+    ).fetchone()
     if cloud is None:
         return None
     row = dict(cloud)
     return {
-        "id": row["id"], "harvested": True,
-        "title": row["title"] or row["id"][:24], "surface": row["surface"],
-        "project": row["project"], "model": row["model"],
-        "started": row["started"], "ended": row["ended"],
-        "tokens": (row["input"] or 0) + (row["cache_write"] or 0)
-                  + (row["cache_read"] or 0) + (row["output"] or 0),
+        "id": row["id"],
+        "harvested": True,
+        "title": row["title"] or row["id"][:24],
+        "surface": row["surface"],
+        "project": row["project"],
+        "model": row["model"],
+        "started": row["started"],
+        "ended": row["ended"],
+        "tokens": (row["input"] or 0)
+        + (row["cache_write"] or 0)
+        + (row["cache_read"] or 0)
+        + (row["output"] or 0),
         "cost": row["cost"] or 0.0,
-        "context_used": row["context_used"], "context_max": row["context_max"],
+        "context_used": row["context_used"],
+        "context_max": row["context_max"],
         "turns": [],
     }
 
@@ -961,17 +1203,28 @@ def summary(conn) -> dict:
         row = conn.execute(sql, args).fetchone()
         return dict(row) if row else {}
 
-    turns = one("SELECT COUNT(*) n, MIN(day) lo, MAX(day) hi, SUM(cost) cost FROM turns")
+    turns = one(
+        "SELECT COUNT(*) n, MIN(day) lo, MAX(day) hi, SUM(cost) cost FROM turns"
+    )
     cloud = one("SELECT COUNT(*) n, SUM(cost) cost FROM sessions WHERE harvested=1")
-    by_surface = [dict(r) for r in conn.execute(
-        "SELECT surface, COUNT(*) n, SUM(cost) cost FROM sessions WHERE harvested=1"
-        " GROUP BY surface ORDER BY cost DESC")]
+    by_surface = [
+        dict(r)
+        for r in conn.execute(
+            "SELECT surface, COUNT(*) n, SUM(cost) cost FROM sessions WHERE harvested=1"
+            " GROUP BY surface ORDER BY cost DESC"
+        )
+    ]
     prompts = one("SELECT COUNT(*) n FROM titles")  # the API key predates titles
     last = one("SELECT value FROM meta WHERE key='last_harvest'")
     synced = one("SELECT value FROM meta WHERE key='last_sync'")
-    return {"turns": turns, "cloud": cloud, "cloud_by_surface": by_surface,
-            "prompts": prompts, "last_harvest": last.get("value"),
-            "last_sync": synced.get("value")}
+    return {
+        "turns": turns,
+        "cloud": cloud,
+        "cloud_by_surface": by_surface,
+        "prompts": prompts,
+        "last_harvest": last.get("value"),
+        "last_sync": synced.get("value"),
+    }
 
 
 RECONCILIATION_REASONS = [
@@ -988,9 +1241,7 @@ RECONCILIATION_REASONS = [
         "Stats count messages: your lines and Claude's lines, outside subagents. vibewatt "
         "counts responses: one per API call, subagents included."
     ),
-    (
-        "Stats tokens include subagent work in the same total."
-    ),
+    ("Stats tokens include subagent work in the same total."),
     (
         "Stats cover Claude Code only (not Cowork) and may be a snapshot from when the "
         "app last refreshed."
@@ -1004,7 +1255,9 @@ SESSION_DEFINITION = (
 )
 
 
-def reconciliation(conn, tz, date_from: date | None = None, date_to: date | None = None) -> dict:
+def reconciliation(
+    conn, tz, date_from: date | None = None, date_to: date | None = None
+) -> dict:
     """vibewatt's deduped figures next to the figures Claude's Stats would show.
 
     Claude Code only, because the Stats exclude Cowork. The Stats-equivalent
@@ -1016,7 +1269,8 @@ def reconciliation(conn, tz, date_from: date | None = None, date_to: date | None
     sessions: set[str] = set()
     for hr, session, messages, tokens in conn.execute(
         "SELECT hr, session, SUM(messages), SUM(tokens) FROM raw_lines WHERE source = ?"
-        " GROUP BY hr, session", (source,)
+        " GROUP BY hr, session",
+        (source,),
     ):
         day = datetime.fromisoformat(f"{hr}:00:00+00:00").astimezone(tz).date()
         if (date_from and day < date_from) or (date_to and day > date_to):
@@ -1035,13 +1289,28 @@ def reconciliation(conn, tz, date_from: date | None = None, date_to: date | None
     row = conn.execute(
         "SELECT COALESCE(SUM(responses), 0), COALESCE(SUM(input + output), 0),"
         " COALESCE(SUM(input + cache_5m + cache_1h + cache_read + output), 0),"
-        f" COUNT(DISTINCT session) FROM rollup WHERE {' AND '.join(where)}", args).fetchone()
-    deduped = {"responses": row[0], "input_output_tokens": row[1], "all_tokens": row[2],
-               "sessions": row[3]}
-    ratio = stats["tokens"] / deduped["input_output_tokens"] if deduped["input_output_tokens"] else None
-    return {"source": source, "deduped": deduped, "stats_equivalent": stats,
-            "token_ratio": ratio, "reasons": RECONCILIATION_REASONS,
-            "session_definition": SESSION_DEFINITION}
+        f" COUNT(DISTINCT session) FROM rollup WHERE {' AND '.join(where)}",
+        args,
+    ).fetchone()
+    deduped = {
+        "responses": row[0],
+        "input_output_tokens": row[1],
+        "all_tokens": row[2],
+        "sessions": row[3],
+    }
+    ratio = (
+        stats["tokens"] / deduped["input_output_tokens"]
+        if deduped["input_output_tokens"]
+        else None
+    )
+    return {
+        "source": source,
+        "deduped": deduped,
+        "stats_equivalent": stats,
+        "token_ratio": ratio,
+        "reasons": RECONCILIATION_REASONS,
+        "session_definition": SESSION_DEFINITION,
+    }
 
 
 def coverage(conn, min_gap_days: int = 7) -> dict:
@@ -1052,21 +1321,33 @@ def coverage(conn, min_gap_days: int = 7) -> dict:
     for source in (CLAUDE_CODE, COWORK):
         files = conn.execute(
             "SELECT COUNT(*) FROM files WHERE path LIKE ?",
-            ("%audit.jsonl" if source == COWORK else "%.jsonl",)).fetchone()[0]
+            ("%audit.jsonl" if source == COWORK else "%.jsonl",),
+        ).fetchone()[0]
         if source == CLAUDE_CODE:
             files -= conn.execute(
-                "SELECT COUNT(*) FROM files WHERE path LIKE '%audit.jsonl'").fetchone()[0]
+                "SELECT COUNT(*) FROM files WHERE path LIKE '%audit.jsonl'"
+            ).fetchone()[0]
         lo, hi = conn.execute(
-            "SELECT MIN(day), MAX(day) FROM turns WHERE source = ?", (source,)).fetchone()
-        sources.append({"source": source, "files": files, "first_day": lo, "last_day": hi})
-    days = [date.fromisoformat(r[0]) for r in conn.execute(
-        "SELECT DISTINCT day FROM turns ORDER BY day")]
+            "SELECT MIN(day), MAX(day) FROM turns WHERE source = ?", (source,)
+        ).fetchone()
+        sources.append(
+            {"source": source, "files": files, "first_day": lo, "last_day": hi}
+        )
+    days = [
+        date.fromisoformat(r[0])
+        for r in conn.execute("SELECT DISTINCT day FROM turns ORDER BY day")
+    ]
     gaps = []
     for prev, cur in pairwise(days):
         missing = (cur - prev).days - 1
         if missing >= min_gap_days:
-            gaps.append({"start": (prev + timedelta(days=1)).isoformat(),
-                         "end": (cur - timedelta(days=1)).isoformat(), "days": missing})
+            gaps.append(
+                {
+                    "start": (prev + timedelta(days=1)).isoformat(),
+                    "end": (cur - timedelta(days=1)).isoformat(),
+                    "days": missing,
+                }
+            )
     return {"sources": sources, "gaps": gaps, "dropped_records": dropped_records(conn)}
 
 
@@ -1083,25 +1364,33 @@ def _with_dismissals(conn, rows) -> list[dict]:
     for r in rows:
         item = json.loads(r["detail_json"])
         key = dismissal_key(item, r["scope"]) if "rule" in item else None
-        out.append(dict(item, dismissed=bool(r["dismissed"]) or key in dismissed,
-                        created_at=r["created_at"]))
+        out.append(
+            dict(
+                item,
+                dismissed=bool(r["dismissed"]) or key in dismissed,
+                created_at=r["created_at"],
+            )
+        )
     return out
 
 
 def active_findings(conn, scope: str) -> list[dict]:
-    return _with_dismissals(conn, conn.execute(
-        "SELECT * FROM findings WHERE scope = ? AND active = 1", (scope,)))
+    return _with_dismissals(
+        conn,
+        conn.execute("SELECT * FROM findings WHERE scope = ? AND active = 1", (scope,)),
+    )
 
 
-def save_findings(conn: sqlite3.Connection, scope: str, findings: list[dict], *,
-                  prune: bool = False) -> list[dict]:
+def save_findings(
+    conn: sqlite3.Connection, scope: str, findings: list[dict], *, prune: bool = False
+) -> list[dict]:
     """Replace the active snapshot. Dismissals live in their own table.
 
     With `prune`, rows of earlier snapshots are deleted instead of kept
     inactive: every filter selection used to leave a snapshot behind for good
     (A-092). Alerts keep theirs, because a fired alert must stay known.
     """
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     if prune:
         conn.execute("DELETE FROM findings WHERE scope = ?", (scope,))
     conn.execute("UPDATE findings SET active = 0 WHERE scope = ?", (scope,))
@@ -1110,8 +1399,16 @@ def save_findings(conn: sqlite3.Connection, scope: str, findings: list[dict], *,
             "INSERT INTO findings (id, scope, kind, severity, day, subject, detail_json, created_at) "
             "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
             "severity=excluded.severity, day=excluded.day, detail_json=excluded.detail_json, active=1",
-            (finding["id"], scope, finding["kind"], finding["severity"], finding["day"],
-             finding["subject"], json.dumps(finding), now),
+            (
+                finding["id"],
+                scope,
+                finding["kind"],
+                finding["severity"],
+                finding["day"],
+                finding["subject"],
+                json.dumps(finding),
+                now,
+            ),
         )
     return active_findings(conn, scope)
 
@@ -1124,15 +1421,20 @@ def dismiss_finding(conn: sqlite3.Connection, finding_id: str, dismissed: bool) 
     if "rule" in item:
         key = dismissal_key(item, row["scope"])
         if dismissed:
-            conn.execute("INSERT OR REPLACE INTO dismissals VALUES (?, ?)",
-                         (key, datetime.now(timezone.utc).isoformat()))
+            conn.execute(
+                "INSERT OR REPLACE INTO dismissals VALUES (?, ?)",
+                (key, datetime.now(UTC).isoformat()),
+            )
         else:
             conn.execute("DELETE FROM dismissals WHERE key = ?", (key,))
-    conn.execute("UPDATE findings SET dismissed = ? WHERE id = ?", (int(dismissed), finding_id))
+    conn.execute(
+        "UPDATE findings SET dismissed = ? WHERE id = ?", (int(dismissed), finding_id)
+    )
     return True
 
 
 def finding(conn: sqlite3.Connection, finding_id: str) -> dict | None:
-    rows = _with_dismissals(conn, conn.execute(
-        "SELECT * FROM findings WHERE id = ?", (finding_id,)))
+    rows = _with_dismissals(
+        conn, conn.execute("SELECT * FROM findings WHERE id = ?", (finding_id,))
+    )
     return rows[0] if rows else None

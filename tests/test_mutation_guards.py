@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 
@@ -16,7 +16,6 @@ from vibewatt import aggregate, config, pricing, sources, store
 from vibewatt.aggregate import Bucket, Report, cost_of
 from vibewatt.sources import Turn
 
-UTC = timezone.utc
 JST = timezone(timedelta(hours=9))
 
 

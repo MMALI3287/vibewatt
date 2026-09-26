@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { getSessionFacets, getSummary } from "../api/client";
+import { getReportContext, getSessionFacets, getSummary } from "../api/client";
 import { DEFAULT_FILTERS, toSource, useFilters, type Metric } from "../lib/filters";
 
 // Options come from the unfiltered summary so picking one value never hides the others.
 export function FilterBar() {
   const [filters, update] = useFilters();
+  const context = useQuery({ queryKey: ["report-context"], queryFn: getReportContext });
   const options = useQuery({
     queryKey: ["summary", DEFAULT_FILTERS],
     queryFn: () => getSummary(DEFAULT_FILTERS),
@@ -18,6 +19,18 @@ export function FilterBar() {
 
   return (
     <form className="filters" aria-label="Filters" onSubmit={(e) => e.preventDefault()}>
+      <label>
+        Date preset
+        <select aria-label="Date preset" value="" disabled={!context.data} onChange={event => {
+          if (context.data) update(datePreset(event.target.value, context.data.today));
+        }}>
+          <option value="">Choose range</option>
+          <option value="today">Today</option>
+          <option value="week">Last 7 days</option>
+          <option value="month">This month</option>
+          <option value="all">All time</option>
+        </select>
+      </label>
       <label>
         From
         <input
@@ -91,6 +104,8 @@ export function FilterBar() {
       <button type="button" onClick={() => update(DEFAULT_FILTERS)}>
         Reset
       </button>
+      {context.data && <span className="muted">Report days: {context.data.timezone} · start {context.data.day_start_hour}:00</span>}
+      {context.isError && <span role="status">Date presets unavailable</span>}
       {(facets.isError || options.isError) && <span role="alert">
         Some filter choices could not load; the current selection still applies.{" "}
         <button type="button" onClick={() => { void facets.refetch(); void options.refetch(); }}>Retry choices</button>
@@ -102,4 +117,12 @@ export function FilterBar() {
 // A value from a shared URL must stay selectable before the options load, or the select shows "All".
 function withCurrent(list: string[], current: string | null): string[] {
   return current && !list.includes(current) ? [current, ...list] : list;
+}
+
+export function datePreset(preset: string, today: string): { from: string | null; to: string | null } {
+  if (preset === "all") return { from: null, to: null };
+  const day = new Date(`${today}T12:00:00Z`);
+  if (preset === "week") day.setUTCDate(day.getUTCDate() - 6);
+  if (preset === "month") day.setUTCDate(1);
+  return { from: day.toISOString().slice(0, 10), to: today };
 }

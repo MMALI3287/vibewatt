@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { dismissFinding, getFinding, getFindings, type Finding } from "../api/client";
 import { useFilters } from "../lib/filters";
 import { fmtUsd } from "../lib/format";
@@ -52,6 +52,7 @@ export function Analysis() {
           {query.isFetching ? "Refreshing…" : "Refresh analysis"}
         </button>
       </div>
+      <p className="muted">Findings are computed from stored evidence. Savings and forecasts are estimates. Analysis computed at <time dateTime={query.data.analyzed_at}>{query.data.analyzed_at}</time>. Local sync and cloud harvest times appear below.</p>
       <div className="analysis-controls">
         <label>Severity <select aria-label="Severity" value={severity}
           onChange={e => setParam("severity", e.target.value === "all" ? null : e.target.value)}>

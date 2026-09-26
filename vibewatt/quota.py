@@ -31,14 +31,14 @@ import subprocess
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 USER_AGENT = "vibewatt"
 FETCH_EVERY = timedelta(minutes=10)
-FRESH = timedelta(minutes=10)         # a newer sample than this needs no fetch
-STALE_DUMP = timedelta(minutes=10)    # an older statusline dump is not a sample (A-013)
+FRESH = timedelta(minutes=10)  # a newer sample than this needs no fetch
+STALE_DUMP = timedelta(minutes=10)  # an older statusline dump is not a sample (A-013)
 STATUSLINE_THROTTLE = timedelta(seconds=60)
 BACKOFF = (timedelta(minutes=10), timedelta(hours=6))
 DESKTOP_VERSIONS = {2}
@@ -69,9 +69,9 @@ def window_length(key: str) -> timedelta | None:
 @dataclass
 class Window:
     key: str
-    utilization: float          # percent, 0-100 (a spend limit can pass 100)
+    utilization: float  # percent, 0-100 (a spend limit can pass 100)
     resets_at: datetime | None
-    scope: str = "account"      # the org for desktop samples
+    scope: str = "account"  # the org for desktop samples
     source: str = ""
     label: str = ""
 
@@ -82,13 +82,13 @@ class Window:
     def remaining_seconds(self) -> float | None:
         if self.resets_at is None:
             return None
-        return max(0.0, (self.resets_at - datetime.now(timezone.utc)).total_seconds())
+        return max(0.0, (self.resets_at - datetime.now(UTC)).total_seconds())
 
 
 @dataclass
 class Quota:
     windows: list[Window]
-    source: str                 # statusline | desktop | endpoint | several
+    source: str  # statusline | desktop | endpoint | several
     fetched_at: datetime
     notes: list[str] = field(default_factory=list)
 
@@ -100,6 +100,7 @@ class Quota:
 
 
 # --- credentials ---------------------------------------------------------------
+
 
 def _credentials_path() -> Path:
     configured = os.environ.get("CLAUDE_CONFIG_DIR")
@@ -114,8 +115,17 @@ def _token_from_keychain() -> str | None:
         return None
     try:
         out = subprocess.run(
-            ["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
-            capture_output=True, text=True, timeout=5, check=False,
+            [
+                "security",
+                "find-generic-password",
+                "-s",
+                "Claude Code-credentials",
+                "-w",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -160,22 +170,22 @@ def read_token() -> str | None:
 
 # --- parsing -------------------------------------------------------------------
 
+
 def _parse_time(value) -> datetime | None:
     if value is None or isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        seconds = value / 1000 if value > 1e11 else value   # ms or s
+        seconds = value / 1000 if value > 1e11 else value  # ms or s
         try:
-            return datetime.fromtimestamp(float(seconds), tz=timezone.utc)
+            return datetime.fromtimestamp(float(seconds), tz=UTC)
         except (OverflowError, OSError, ValueError):
             return None
     if isinstance(value, str):
         try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(value)
         except ValueError:
             return None
-        return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).astimezone(
-            timezone.utc)
+        return (parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)).astimezone(UTC)
     return None
 
 
@@ -192,8 +202,11 @@ def windows_from(payload: dict, source: str, scope: str = "account") -> list[Win
         raw = entry.get("utilization", entry.get("used_percentage"))
         if isinstance(raw, bool) or not isinstance(raw, (int, float)):
             continue
-        windows.append(Window(str(key), float(raw), _parse_time(entry.get("resets_at")),
-                              scope, source))
+        windows.append(
+            Window(
+                str(key), float(raw), _parse_time(entry.get("resets_at")), scope, source
+            )
+        )
     order = {k: i for i, k in enumerate(_LABELS)}
     windows.sort(key=lambda w: (order.get(w.key, 99), w.key))
     return windows
@@ -201,12 +214,15 @@ def windows_from(payload: dict, source: str, scope: str = "account") -> list[Win
 
 def from_statusline_json(blob: object, now: datetime | None = None) -> Quota | None:
     """Claude Code's statusline stdin: live, so it is always a sample."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     limits = blob.get("rate_limits") if isinstance(blob, dict) else None
     if not isinstance(limits, dict):
         return None
-    windows = [w for w in windows_from(limits, "statusline")
-               if w.resets_at is None or w.resets_at > now]
+    windows = [
+        w
+        for w in windows_from(limits, "statusline")
+        if w.resets_at is None or w.resets_at > now
+    ]
     return Quota(windows, "statusline", now) if windows else None
 
 
@@ -217,12 +233,12 @@ def from_statusline(path: str | Path, now: datetime | None = None) -> Quota | No
     saved reading re-read later is not a new sample (A-013). A window whose
     reset has passed is dropped, not rewritten to 0 %.
     """
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     target = Path(path).expanduser()
     try:
         with target.open("r", encoding="utf-8") as fh:
             blob = json.load(fh)
-        mtime = datetime.fromtimestamp(target.stat().st_mtime, timezone.utc)
+        mtime = datetime.fromtimestamp(target.stat().st_mtime, UTC)
     except (OSError, json.JSONDecodeError):
         return None
     captured = _parse_time(blob.get("captured_at")) if isinstance(blob, dict) else None
@@ -281,12 +297,22 @@ def desktop_samples(path: Path | None = None) -> tuple[list[tuple], str]:
             value = sample["u"].get(short)
             if isinstance(value, bool) or not isinstance(value, (int, float)):
                 continue
-            rows.append((stamp.isoformat(), key, label_for(key), f"org:{org}",
-                         float(value), None, "desktop"))
+            rows.append(
+                (
+                    stamp.isoformat(),
+                    key,
+                    label_for(key),
+                    f"org:{org}",
+                    float(value),
+                    None,
+                    "desktop",
+                )
+            )
     return rows, ""
 
 
 # --- the endpoint ----------------------------------------------------------------
+
 
 class RateLimited(Exception):
     pass
@@ -324,10 +350,11 @@ def fetch(token: str | None = None, timeout: float = 10.0) -> Quota | None:
     if not isinstance(payload, dict):
         return None
     windows = windows_from(payload, "endpoint")
-    return Quota(windows, "endpoint", datetime.now(timezone.utc)) if windows else None
+    return Quota(windows, "endpoint", datetime.now(UTC)) if windows else None
 
 
 # --- the sample series ---------------------------------------------------------------
+
 
 def record(conn, quota: Quota | None, *, throttle: timedelta | None = None) -> int:
     """Append one sample per window. Returns rows written.
@@ -338,22 +365,33 @@ def record(conn, quota: Quota | None, *, throttle: timedelta | None = None) -> i
     """
     if quota is None or not quota.windows:
         return 0
-    ts = quota.fetched_at.astimezone(timezone.utc)
+    ts = quota.fetched_at.astimezone(UTC)
     rows = []
     for w in quota.windows:
         if throttle is not None:
             last = conn.execute(
                 "SELECT ts, utilization, resets_at FROM quota_samples"
                 " WHERE key = ? AND scope = ? ORDER BY ts DESC LIMIT 1",
-                (w.key, w.scope)).fetchone()
+                (w.key, w.scope),
+            ).fetchone()
             resets = w.resets_at.isoformat() if w.resets_at else None
-            if last and ts - datetime.fromisoformat(last[0]) < throttle and (
-                last[1] == w.utilization and last[2] == resets
+            if (
+                last
+                and ts - datetime.fromisoformat(last[0]) < throttle
+                and (last[1] == w.utilization and last[2] == resets)
             ):
                 continue
-        rows.append((ts.isoformat(), w.key, w.label, w.scope, float(w.utilization),
-                     w.resets_at.isoformat() if w.resets_at else None,
-                     w.source or quota.source))
+        rows.append(
+            (
+                ts.isoformat(),
+                w.key,
+                w.label,
+                w.scope,
+                float(w.utilization),
+                w.resets_at.isoformat() if w.resets_at else None,
+                w.source or quota.source,
+            )
+        )
     before = conn.total_changes
     conn.executemany("INSERT OR IGNORE INTO quota_samples VALUES (?,?,?,?,?,?,?)", rows)
     return conn.total_changes - before
@@ -373,15 +411,21 @@ def canonical_scope(conn):
     The statusline and the endpoint do not name the org; the desktop history
     does. With one org they are the same series and must not show twice.
     """
-    orgs = [r[0] for r in conn.execute(
-        "SELECT DISTINCT scope FROM quota_samples WHERE scope LIKE 'org:%'")]
+    orgs = [
+        r[0]
+        for r in conn.execute(
+            "SELECT DISTINCT scope FROM quota_samples WHERE scope LIKE 'org:%'"
+        )
+    ]
     target = orgs[0] if len(orgs) == 1 else None
     return lambda scope: target if target and scope == "account" else scope
 
 
-def latest(conn, *, now: datetime | None = None, max_age: timedelta | None = None) -> Quota | None:
+def latest(
+    conn, *, now: datetime | None = None, max_age: timedelta | None = None
+) -> Quota | None:
     """The newest sample of every window, from any source."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     canon = canonical_scope(conn)
     newest_rows: dict[tuple[str, str], object] = {}
     for r in conn.execute(
@@ -400,12 +444,15 @@ def latest(conn, *, now: datetime | None = None, max_age: timedelta | None = Non
         if max_age is not None and now - stamp > max_age:
             continue
         if resets is not None and resets <= now:
-            continue            # that window has rolled over since
+            continue  # that window has rolled over since
         length = window_length(r["key"])
         if resets is None and length is not None and now - stamp > length:
             continue
-        windows.append(Window(r["key"], r["utilization"], resets, r["scope"], r["source"],
-                              r["label"]))
+        windows.append(
+            Window(
+                r["key"], r["utilization"], resets, r["scope"], r["source"], r["label"]
+            )
+        )
         newest = max(newest or stamp, stamp)
     if not windows:
         return None
@@ -426,7 +473,7 @@ def _set_meta(conn, key: str, value: str) -> None:
 
 def maybe_fetch(conn, config: dict, now: datetime | None = None) -> str:
     """Call the endpoint only when every rule allows it. Returns a note."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     if config.get("offline") or not config.get("quota", True):
         return "offline"
     if latest(conn, now=now, max_age=FRESH):
@@ -440,7 +487,7 @@ def maybe_fetch(conn, config: dict, now: datetime | None = None) -> str:
     try:
         quota = fetch()
     except RateLimited:
-        wait = min(BACKOFF[1], BACKOFF[0] * (2 ** strikes))
+        wait = min(BACKOFF[1], BACKOFF[0] * (2**strikes))
         _set_meta(conn, "quota_429s", str(strikes + 1))
         _set_meta(conn, "quota_fetch_after", (now + wait).isoformat())
         return "endpoint rate limited; backing off"
@@ -452,7 +499,9 @@ def maybe_fetch(conn, config: dict, now: datetime | None = None) -> str:
     return ""
 
 
-def refresh(conn, config: dict, *, allow_fetch: bool, now: datetime | None = None) -> list[str]:
+def refresh(
+    conn, config: dict, *, allow_fetch: bool, now: datetime | None = None
+) -> list[str]:
     """Pull every local source into the series, then the endpoint if allowed."""
     notes = []
     _, note = import_desktop(conn)
@@ -491,6 +540,8 @@ def read(config: dict, *, allow_fetch: bool = True) -> tuple[Quota | None, str]:
                 return live, ""
         return None, f"store unavailable: {exc}"
     if quota is None:
-        return None, "; ".join(notes) or "no reading yet: run `vibewatt statusline` from Claude Code"
+        return None, "; ".join(
+            notes
+        ) or "no reading yet: run `vibewatt statusline` from Claude Code"
     quota.notes = notes
     return quota, ""

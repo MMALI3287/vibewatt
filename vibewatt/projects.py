@@ -32,7 +32,9 @@ def project_map(conn, cfg: dict) -> dict[str, str]:
     return {raw: pseudonym[label] for raw, label in labels.items()}
 
 
-def resolve(mapping: dict[str, str], value: str | None, masked: bool) -> list[str] | None:
+def resolve(
+    mapping: dict[str, str], value: str | None, masked: bool
+) -> list[str] | None:
     """A shown name back to every raw name behind it. None means no filter.
 
     Unmasked, a raw name still matches itself, so an old link keeps working.

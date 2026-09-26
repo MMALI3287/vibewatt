@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 from conftest import JST
 
@@ -43,7 +43,9 @@ def test_v1_store_migrates_forward_without_losing_rows(tmp_path):
     raw = sqlite3.connect(path)
     raw.executescript(store.SCHEMA)
     raw.execute("INSERT INTO meta VALUES ('schema', '1')")
-    raw.execute("CREATE TABLE prompts (session TEXT NOT NULL, ts TEXT, text TEXT NOT NULL, PRIMARY KEY (session, text))")  # pre-schema-6 table
+    raw.execute(
+        "CREATE TABLE prompts (session TEXT NOT NULL, ts TEXT, text TEXT NOT NULL, PRIMARY KEY (session, text))"
+    )  # pre-schema-6 table
     raw.execute("INSERT INTO prompts VALUES ('s', NULL, 'kept')")
     raw.commit()
     raw.close()
@@ -86,7 +88,9 @@ def test_sync_reparses_a_changed_file(tmp_path, logs):
         assert _turn_count(conn) == 4
 
     assert (result.parsed, result.skipped) == (1, 1)
-    assert recorded == 3  # responses in the file (A-114), not the lines that repeat them
+    assert (
+        recorded == 3
+    )  # responses in the file (A-114), not the lines that repeat them
 
 
 def test_response_replayed_across_files_counts_once(tmp_path, logs):
@@ -134,8 +138,8 @@ def _quota(when: datetime) -> quota.Quota:
 
 
 def test_same_quota_reading_is_stored_once(tmp_path):
-    reading = _quota(datetime(2026, 9, 15, 11, tzinfo=timezone.utc))
-    later = _quota(datetime(2026, 9, 15, 11, 5, tzinfo=timezone.utc))
+    reading = _quota(datetime(2026, 9, 15, 11, tzinfo=UTC))
+    later = _quota(datetime(2026, 9, 15, 11, 5, tzinfo=UTC))
     with store.connect(tmp_path / "db.sqlite") as conn:
         assert store.upsert_quota_samples(conn, reading) == 2
         assert store.upsert_quota_samples(conn, reading) == 0
@@ -144,21 +148,24 @@ def test_same_quota_reading_is_stored_once(tmp_path):
 
 
 def test_quota_read_persists_samples(monkeypatch):
-    reading = _quota(datetime.now(timezone.utc))
+    reading = _quota(datetime.now(UTC))
     monkeypatch.setattr(quota, "read_token", lambda: "token")
     monkeypatch.setattr(quota, "fetch", lambda *a, **k: reading)
 
     q, note = quota.read({"quota": True})
 
     assert note == ""
-    assert [(w.key, w.utilization) for w in q.windows] == [("five_hour", 60.0), ("seven_day", 40.0)]
+    assert [(w.key, w.utilization) for w in q.windows] == [
+        ("five_hour", 60.0),
+        ("seven_day", 40.0),
+    ]
     with store.connect() as conn:
         labels = {r[0] for r in conn.execute("SELECT label FROM quota_samples")}
     assert labels == {"5-hour", "7-day"}
 
 
 def test_quota_read_survives_a_broken_store(monkeypatch):
-    reading = _quota(datetime.now(timezone.utc))
+    reading = _quota(datetime.now(UTC))
     monkeypatch.setattr(quota, "read_token", lambda: "token")
     monkeypatch.setattr(quota, "fetch", lambda *a, **k: reading)
 
@@ -188,7 +195,7 @@ def test_store_from_first_phase1_attempt_gets_quota_key_and_resync(tmp_path):
     raw.commit()
     raw.close()
 
-    reading = _quota(datetime(2026, 9, 15, 11, tzinfo=timezone.utc))
+    reading = _quota(datetime(2026, 9, 15, 11, tzinfo=UTC))
     with store.connect(path) as conn:
         assert store.schema_version(conn) == store.SCHEMA_VERSION
         assert conn.execute("SELECT COUNT(*) FROM quota_samples").fetchone()[0] == 1
@@ -200,7 +207,7 @@ def test_store_from_first_phase1_attempt_gets_quota_key_and_resync(tmp_path):
 def test_changing_timezone_rebuckets_unchanged_files(tmp_path, logs):
     files = ingest.discover()
     with store.connect(tmp_path / "db.sqlite") as conn:
-        store.sync_files(conn, files, timezone.utc, _cost)
+        store.sync_files(conn, files, UTC, _cost)
         utc_day = conn.execute("SELECT day FROM turns WHERE msg_id = 'm1'").fetchone()[
             0
         ]
@@ -236,7 +243,7 @@ def test_statusline_without_captured_at_is_one_sample(tmp_path, monkeypatch):
 def test_timezone_change_rebuckets_turns_whose_file_is_gone(tmp_path, logs):
     # History outlives pruned transcripts, so re-parsing alone cannot fix its days.
     with store.connect(tmp_path / "db.sqlite") as conn:
-        store.sync_files(conn, ingest.discover(), timezone.utc, _cost)
+        store.sync_files(conn, ingest.discover(), UTC, _cost)
         os.remove(logs["claude-code"])
         store.sync_files(conn, ingest.discover(), JST, _cost)
         day = conn.execute("SELECT day FROM turns WHERE msg_id = 'm1'").fetchone()[0]

@@ -8,7 +8,7 @@ import os
 import subprocess
 import sys
 from collections import Counter
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -18,7 +18,6 @@ from vibewatt.aggregate import Report, cost_of, from_store
 from vibewatt.ingest import walk
 from vibewatt.sources import CLAUDE_CODE, TITLE_RANK, read_file, read_titles
 
-UTC = timezone.utc
 TOKYO = ZoneInfo("Asia/Tokyo")
 
 

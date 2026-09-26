@@ -9,6 +9,9 @@ it. `docs/PLAN.md` is the spec and the phase plan. `docs/DATA-SOURCES.md` says
 where every number comes from. `docs/ANALYSIS.md` explains how findings, alerts
 and Wrapped are computed.
 
+Current work is Phase 8 (backlog completion). Its build plan, scope limits and
+acceptance checks are in `docs/COMPLETION-QUESTIONS.md`. Start there.
+
 ## Commands
 
 ```bash

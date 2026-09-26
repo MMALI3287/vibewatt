@@ -12,11 +12,14 @@ export function Footer() {
         {health.isError && "Store status unavailable"}
         {health.data &&
           (turns?.hi ? `Local logs ${turns.lo} to ${turns.hi}` : "No local logs synced yet")}
+        {health.data && ` · local sync ${health.data.last_sync ?? "time unavailable"}`}
         {health.data?.last_harvest && ` · last cloud harvest ${health.data.last_harvest}`}
       </span>
       <span>
         Overview, Projects and Models count local logs. Sessions and Wrapped add harvested
-        cloud sessions. Plan utilization is the one account-wide number.
+        cloud sessions. Local cost is an API-equivalent estimate. Harvested cost is cloud-reported.
+        Plan utilization is the one account-wide number. Store views refresh every 60 seconds while visible.
+        Multi-page session lists require a manual reload.
       </span>
       <nav aria-label="About vibewatt" className="footer-links">
         <a href="https://github.com/MMALI3287/vibewatt">Source</a>

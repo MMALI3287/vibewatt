@@ -1,0 +1,46 @@
+name: Quality and wheel
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  verify:
+    strategy:
+      # Report every platform; a Linux failure must not cancel the Windows run.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.27"
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: uv sync --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: npm ci
+        working-directory: web
+      - run: npm run build
+        working-directory: web
+      - run: npm run test
+        working-directory: web
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: web
+      - run: npm run gen:api
+        working-directory: web
+      - run: git diff --exit-code -- web/openapi.json web/src/api/schema.d.ts
+      - run: uv run pytest -q
+      - run: uv run --isolated --no-project --resolution lowest-direct --with-editable . --with "pytest>=8" --with httpx2 python -m pytest -q
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      - run: npm run e2e
+        working-directory: web
+      - run: uv build
+      - run: uv run python scripts/check_build.py dist/vibewatt-0.3.0.tar.gz
+      - run: uv run python scripts/check_wheel.py dist/vibewatt-0.3.0-py3-none-any.whl --browser
