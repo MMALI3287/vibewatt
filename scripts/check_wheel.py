@@ -14,10 +14,35 @@ import tempfile
 import time
 import venv
 import zipfile
-from contextlib import closing
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+
+@contextmanager
+def scratch_dir(prefix: str, release_timeout: float = 15.0) -> Iterator[Path]:
+    """A temporary directory removed once every process has let go of it.
+
+    On Windows the pip console-script launcher exits before the Python server
+    it started, so that child can still hold server.log and the venv open for
+    a moment after `process.wait()`. Retry until the handles are released,
+    within a bound, instead of failing on the race.
+    """
+    root = Path(tempfile.mkdtemp(prefix=prefix))
+    try:
+        yield root
+    finally:
+        deadline = time.monotonic() + release_timeout
+        while True:
+            try:
+                shutil.rmtree(root)
+                break
+            except PermissionError:
+                if time.monotonic() > deadline:
+                    raise
+                time.sleep(0.2)
 
 
 def main() -> None:
@@ -49,8 +74,7 @@ def main() -> None:
         assert any(n.endswith(".js") for n in assets) and any(
             n.endswith(".css") for n in assets
         )
-    with tempfile.TemporaryDirectory(prefix="vibewatt wheel 日本語 ") as temporary:
-        root = Path(temporary)
+    with scratch_dir(prefix="vibewatt wheel 日本語 ") as root:
         envdir = root / "venv"
         venv.EnvBuilder(with_pip=True).create(envdir)
         bindir = envdir / ("Scripts" if os.name == "nt" else "bin")
