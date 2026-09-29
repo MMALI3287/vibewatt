@@ -173,7 +173,7 @@ def test_active_block_first():  # A-074
         for i, ago in enumerate((30, 20, 10, 0.5)):
             ts = (now - timedelta(hours=ago)).isoformat()
             conn.execute(
-                f"INSERT INTO turns ({store.TURN_COLUMNS}) VALUES "
+                f"INSERT INTO turns ({','.join(store.TURN_COLUMNS.split(',')[:21])}) VALUES "
                 "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     f"m{i}",

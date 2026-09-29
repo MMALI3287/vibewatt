@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from ..pricing import MILLION, normalize, rate_for
 from .models import Finding
 
@@ -57,9 +59,26 @@ def detect(
         known = True
         for row in fast:
             billed = rate_for(
-                row["model"], fast=True, geo=row["geo"], overrides=overrides
+                row["model"],
+                ts=datetime.fromisoformat(row["ts"]),
+                prompt_tokens=row["input"]
+                + row["cache_read"]
+                + row["cache_5m"]
+                + row["cache_1h"],
+                fast=True,
+                geo=row["geo"],
+                overrides=overrides,
             )
-            standard = rate_for(row["model"], geo=row["geo"], overrides=overrides)
+            standard = rate_for(
+                row["model"],
+                ts=datetime.fromisoformat(row["ts"]),
+                prompt_tokens=row["input"]
+                + row["cache_read"]
+                + row["cache_5m"]
+                + row["cache_1h"],
+                geo=row["geo"],
+                overrides=overrides,
+            )
             if billed is None or standard is None:
                 known = False
                 continue

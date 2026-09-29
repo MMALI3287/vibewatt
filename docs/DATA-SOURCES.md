@@ -113,3 +113,29 @@ and server startup; a long-running server uses that loaded pricing snapshot.
 startup. Setting it to `0` disables transcript writing entirely rather than
 keeping them forever — it is a trap. Recommend 3650. Nothing can recover what was
 already deleted; the SQLite store only preserves from first sync forward.
+
+
+## Phase 8 pricing evidence (retrieved 2026-09-26)
+
+Historical fast rates are bounded by verified dates. Opus 4.6 has a verified
+$30/$150 period from 2026-05-12 through 2026-06-28, using the dated release note
+that Opus 4.7 launched fast mode at the same rates. Opus 4.7 uses those rates
+from 2026-05-12 through 2026-07-23. Earlier Opus 4.6 launch/promotion periods
+remain unpriced because their effective rates were not verified from a dated
+official source. Current Opus 4.8/5 rates are valid from their release dates.
+Sources: [release notes](https://platform.claude.com/docs/en/release-notes/overview)
+and [historical official pricing](https://platform.claude.com/docs/en/about-claude/pricing?38d7aa68_page=5&fcdaa149_page=1&fcdaa149_sort_date=desc&query=deliverability).
+
+The >200,000 prompt-token premium is verified for Opus 4.6 from launch through
+2026-03-12 and Sonnet 4 from 2025-08-12 through 2026-04-29. Prompt size includes
+input, cache reads and both cache-write TTLs. Other unverified model/date
+combinations above 200,000 tokens carry `context_premium_unknown`; that cost is
+potentially understated. Sonnet 4.5 and pre-GA Sonnet 4.6 premium periods remain
+unverified. Sources: [Opus launch](https://www.anthropic.com/news/claude-opus-4-6),
+[Sonnet 1M launch](https://claude.com/blog/1m-context) and the release notes.
+
+Web fetch has no per-request fee. Code execution counts do not establish billed
+container time or eligibility for free usage so cost is labelled unavailable,
+never zero. Non-message iterations are counted once per deduped response and
+reported by doctor; their nested tokens are not added to top-level usage.
+Source: [tool pricing](https://platform.claude.com/docs/en/about-claude/pricing).

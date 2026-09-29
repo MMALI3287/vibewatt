@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import sqlite3
 from collections import defaultdict
-from datetime import date, timedelta, tzinfo
+from datetime import date, datetime, timedelta, tzinfo
 
 from .. import cli, store
 from ..aggregate import from_store
@@ -117,6 +117,11 @@ def build(
         item["tokens"] += tokens
         rate = rate_for(
             row["model"],
+            ts=datetime.fromisoformat(row["ts"]),
+            prompt_tokens=row["input"]
+            + row["cache_read"]
+            + row["cache_5m"]
+            + row["cache_1h"],
             fast=bool(row["fast"]),
             geo=row["geo"],
             overrides=cfg.get("pricing_overrides"),

@@ -24,6 +24,7 @@ import re
 import time
 import urllib.error
 import urllib.request
+from datetime import UTC, datetime
 from typing import NamedTuple
 
 MILLION = 1_000_000
@@ -44,6 +45,12 @@ class Rate(NamedTuple):
 
 # Verified 2026-09-15 against the published pricing page.
 BUILTIN: dict[str, Rate] = {
+    # Retrieved 2026-09-26: https://www.anthropic.com/news/claude-3-7-sonnet
+    # Cache multipliers: https://platform.claude.com/docs/en/about-claude/pricing
+    "claude-3-5-sonnet": Rate(3, 3.75, 6, 0.30, 15),
+    "claude-3-7-sonnet": Rate(3, 3.75, 6, 0.30, 15),
+    # Retrieved 2026-09-26: https://www.anthropic.com/project/glasswing
+    "claude-mythos-preview": Rate(25, 31.25, 50, 2.50, 125),
     "claude-fable-5-1": Rate(10.0, 12.50, 20.0, 0.25, 50.0),
     "claude-mythos-5-1": Rate(10.0, 12.50, 20.0, 0.25, 50.0),
     "claude-fable-5": Rate(10.0, 12.50, 20.0, 1.00, 50.0),
@@ -72,6 +79,18 @@ FAST_MODE: dict[str, Rate] = {
     "claude-opus-4-8": Rate(10.0, 12.50, 20.0, 1.00, 50.0),
 }
 
+# Historical availability and rates retrieved 2026-09-26:
+# https://platform.claude.com/docs/en/release-notes/overview
+# https://platform.claude.com/docs/en/about-claude/pricing?38d7aa68_page=5&fcdaa149_page=1&fcdaa149_sort_date=desc&query=deliverability
+# Earlier launch/promotion rates are intentionally unpriced until verified.
+FAST_PERIODS = {
+    "claude-opus-4-6": (("2026-05-12", "2026-06-29", Rate(30, 37.5, 60, 3, 150)),),
+    "claude-opus-4-7": (("2026-05-12", "2026-07-24", Rate(30, 37.5, 60, 3, 150)),),
+}
+
+# Launch dates: same release-notes source, retrieved 2026-09-26.
+FAST_CURRENT_START = {"claude-opus-4-8": "2026-05-28", "claude-opus-5": "2026-07-24"}
+
 GEO_US_MULTIPLIER = 1.1
 WEB_SEARCH_PER_CALL = 10.0 / 1000
 
@@ -81,9 +100,12 @@ _remote: dict[str, Rate] | None = None
 def fingerprint(overrides: dict | None = None) -> str:
     """Identify the current pricing inputs without triggering a network fetch."""
     snapshot = {
-        "algorithm": 1,
+        "algorithm": 2,
         "builtin": BUILTIN,
         "fast": FAST_MODE,
+        "fast_periods": FAST_PERIODS,
+        "fast_current_start": FAST_CURRENT_START,
+        "long_context": LONG_CONTEXT,
         "remote": _remote or {},
         "overrides": overrides or {},
         "geo_us": GEO_US_MULTIPLIER,
@@ -215,6 +237,8 @@ def rate_for(
     model: str | None,
     *,
     fast: bool = False,
+    ts: datetime | None = None,
+    prompt_tokens: int = 0,
     geo: str | None = None,
     overrides: dict | None = None,
 ) -> Rate | None:
@@ -243,7 +267,17 @@ def rate_for(
                     float(entry.get("output", float(base) * 5.0)),
                 )
     if rate is None and fast:
-        rate = FAST_MODE.get(m)
+        if m in FAST_PERIODS:
+            day = ts.astimezone(UTC).date().isoformat() if ts else ""
+            rate = next(
+                (r for start, end, r in FAST_PERIODS[m] if start <= day < end), None
+            )
+        else:
+            if ts is not None and ts.astimezone(
+                UTC
+            ).date().isoformat() < FAST_CURRENT_START.get(m, "9999"):
+                return None
+            rate = FAST_MODE.get(m)
         if rate is None:
             return None
     if rate is None:
@@ -252,6 +286,53 @@ def rate_for(
         rate = _remote.get(m)
     if rate is None:
         return None
+    if not fast and prompt_tokens > 200_000 and ts is not None:
+        day = ts.astimezone(UTC).date().isoformat()
+        period = LONG_CONTEXT.get(m)
+        if period and period[0] <= day < period[1]:
+            rate = Rate(
+                rate.input * 2,
+                rate.cache_5m * 2,
+                rate.cache_1h * 2,
+                rate.cache_read * 2,
+                rate.output * 1.5,
+            )
     if geo == "us":
         rate = Rate(*(v * GEO_US_MULTIPLIER for v in rate))
     return rate
+
+
+# Retrieved 2026-09-26. Launch premium and GA removal:
+# https://www.anthropic.com/news/claude-opus-4-6
+# https://platform.claude.com/docs/en/release-notes/overview#march-13-2026
+# Sonnet 4 threshold/rates: https://claude.com/blog/1m-context (2025-08-12).
+# Beta end: release notes 2026-04-30. Retrieved 2026-09-26.
+LONG_CONTEXT = {
+    "claude-opus-4-6": ("2026-02-05", "2026-03-13"),
+    "claude-sonnet-4": ("2025-08-12", "2026-04-30"),
+}
+
+
+def context_premium_unknown(turn) -> bool:
+    """Flag large prompts whose date/model premium is not verified."""
+    if turn.input + turn.cache_read + turn.cache_5m + turn.cache_1h <= 200_000:
+        return False
+    model = normalize(turn.model)
+    day = turn.ts.astimezone(UTC).date().isoformat()
+    if model in LONG_CONTEXT and LONG_CONTEXT[model][0] <= day < LONG_CONTEXT[model][1]:
+        return False
+    # Current first-party docs explicitly exempt these model families.
+    exempt = {
+        "claude-opus-4-6",
+        "claude-opus-4-7",
+        "claude-opus-4-8",
+        "claude-opus-5",
+        "claude-sonnet-4-6",
+        "claude-sonnet-5",
+        "claude-fable-5",
+        "claude-fable-5-1",
+        "claude-mythos-5",
+        "claude-mythos-5-1",
+        "claude-mythos-preview",
+    }
+    return not (model in exempt and day >= "2026-03-13")

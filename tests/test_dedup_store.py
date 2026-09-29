@@ -174,7 +174,7 @@ def test_pre_6_5b_row_without_request_id_is_absorbed(tmp_path):
     )
     with store.connect(tmp_path / "db") as conn:
         conn.execute(
-            f"INSERT INTO turns ({store.TURN_COLUMNS}) VALUES "
+            f"INSERT INTO turns ({','.join(store.TURN_COLUMNS.split(',')[:21])}) VALUES "
             "('m9','','2026-09-15T01:00:00+00:00','2026-09-15','cowork','demo','s1',"
             "'claude-opus-5',10,0,0,0,3,0,0,0,0,NULL,1.0,NULL,1)"
         )

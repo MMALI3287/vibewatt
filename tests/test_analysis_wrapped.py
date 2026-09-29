@@ -68,7 +68,7 @@ def _client(**cfg) -> TestClient:
 def _seed_cache_finding(project: str = "demo", session: str = "s1") -> None:
     with store.connect() as conn:
         conn.execute(
-            f"INSERT INTO turns ({store.TURN_COLUMNS}) VALUES "
+            f"INSERT INTO turns ({','.join(store.TURN_COLUMNS.split(',')[:21])}) VALUES "
             "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 f"m-{session}",
@@ -106,6 +106,8 @@ def test_findings_get_reads_the_snapshot(monkeypatch):  # A-092
     c.app.state.synced = True
     first = c.get("/api/findings").json()
     assert first["findings"]
+    original_analyze = analysis.analyze
+    isolated_path = store.db_path()
     monkeypatch.setattr(
         analysis,
         "analyze",
@@ -119,7 +121,8 @@ def test_findings_get_reads_the_snapshot(monkeypatch):  # A-092
     again = c.get("/api/findings", params={"include_dismissed": True}).json()
     assert next(f for f in again["findings"] if f["id"] == fid)["dismissed"]
     assert c.get(f"/api/findings/{fid}").json()["dismissed"]
-    monkeypatch.undo()
+    monkeypatch.setattr(analysis, "analyze", original_analyze)
+    assert store.db_path() == isolated_path
     assert c.post("/api/analysis").status_code == 200  # an explicit run recomputes
 
 
