@@ -47,6 +47,7 @@ test("visible live refresh makes one store cycle without external status calls",
   await page.goto("/");
   await expect(page.getByTestId("kpi-responses")).toBeVisible();
   await expect(page.locator(".footer")).not.toContainText("Checking data freshness");
+  await expect(page.getByText("Loading plan utilization…", { exact: true })).toBeHidden();
   requests.length = 0;
   await page.clock.fastForward(60_000);
   await expect.poll(() => requests.filter(path => path === "/api/summary").length).toBe(1);
