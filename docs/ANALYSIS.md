@@ -103,3 +103,19 @@ after dedup.
   Git runs without a shell, with optional locks and fsmonitor off, capped at
   64 KiB and three seconds. `TODO.md` must sit inside the mapped directory, may
   not be a symlink and is capped at 64 KiB.
+
+## Local context and activity (Phase 8)
+
+Overview shows local context nudges from the latest main-thread response of each
+session active within 30 minutes. Input plus all cache reads/writes forms the
+prompt size. It reuses the cloud thresholds: above 70% warning and above 85%
+urgent. Capacity is conservatively 200K unless the model id includes `[1m]` or a
+prior main-thread response in that session exceeded 200K. Unknown models receive
+no guessed denominator. Quota and sidechain activity never affect the nudge.
+The API reads stored responses at request time so idle sessions expire.
+
+Activity is separately derived from retained history timestamps and projects.
+Its calendar and streak use the report timezone and day-start setting. The panel
+shows the 91 days ending at the latest activity date; streaks use all retained
+activity. It deliberately ignores usage filters because history has no reliable
+model/token information. It contributes no tokens or cost.

@@ -53,6 +53,14 @@ export async function getHealth(): Promise<Health> {
   return unwrap(await api.GET("/api/health"));
 }
 
+export async function getActivity() {
+  return unwrap(await api.GET("/api/activity"));
+}
+
+export async function getLocalContext() {
+  return unwrap(await api.GET("/api/context"));
+}
+
 export async function postSync() {
   return unwrap(await api.POST("/api/sync"));
 }

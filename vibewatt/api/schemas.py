@@ -11,6 +11,22 @@ from pydantic import BaseModel
 from ..analysis.models import Kind, Severity
 
 
+class ActivityOut(BaseModel):
+    days: dict[str, int]
+    current_streak: int
+    longest_streak: int
+    truncated: bool
+
+
+class LocalContextOut(BaseModel):
+    session: str
+    source: str
+    used_tokens: int
+    max_tokens: int
+    severity: Literal["warning", "urgent"]
+    snapshot_at: str
+
+
 class ProvenanceOut(BaseModel):
     usage: Literal["official", "computed_local", "cloud_reported", "estimate"]
     cost: Literal["official", "computed_local", "cloud_reported", "estimate"]

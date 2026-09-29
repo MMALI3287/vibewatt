@@ -131,8 +131,8 @@ def test_migration_backs_up_prior_schema_before_altering(tmp_path):
     conn.commit()
     conn.close()
     with store.connect(path) as conn:
-        assert store.schema_version(conn) == 10
-    backups = list(tmp_path.glob("old.db.pre-v10-*.bak"))
+        assert store.schema_version(conn) == store.SCHEMA_VERSION
+    backups = list(tmp_path.glob(f"old.db.pre-v{store.SCHEMA_VERSION}-*.bak"))
     assert len(backups) == 1
     with sqlite3.connect(backups[0]) as before:
         assert (
