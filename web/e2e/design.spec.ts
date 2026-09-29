@@ -65,8 +65,8 @@ test("skip link, one heatmap tab stop, arrow keys and per-route titles", async (
   await skip.press("Enter");
   await expect(page.locator("#main")).toBeFocused();
   const cells = page.getByRole("gridcell");
-  expect(await cells.count()).toBeGreaterThan(1);
-  expect(await page.locator('[role="gridcell"][tabindex="0"]').count()).toBe(1);
+  await expect(cells.nth(1)).toBeVisible();
+  await expect(page.locator('[role="gridcell"][tabindex="0"]')).toHaveCount(1);
   await page.locator('[role="gridcell"][tabindex="0"]').focus();
   const before = await page.evaluate(() => document.activeElement?.getAttribute("aria-label"));
   await page.keyboard.press("ArrowUp");
