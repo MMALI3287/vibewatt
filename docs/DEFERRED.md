@@ -12,11 +12,6 @@ under "Phase 8" in `PLAN.md`.
 
 | Item | Package |
 |---|---|
-| Missing model rows, including Mythos preview and retired Sonnet 3.5/3.7 | 1.1 |
-| Historical Opus 4.6/4.7 fast-mode pricing | 1.2 |
-| Historical over-200k context premiums | 1.3 |
-| Web-fetch and code-execution usage | 1.4 |
-| Advisor-model usage in `usage.iterations[]` (detection guard only) | 1.5 |
 | Local context-window nudges | 2.1 |
 | `history.jsonl` activity backfill | 2.2 |
 | Multi-account and multi-machine support | 3 |

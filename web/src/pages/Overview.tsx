@@ -112,6 +112,7 @@ export function Kpis({ s }: { s: Summary }) {
     { label: "Cache hit rate", value: fmtPct(s.cache_hit_rate) },
   ];
   return (
+    <>
     <section className="kpis" aria-label="Key figures (local logs)">
       {items.map((k) => (
         <div className="kpi" key={k.label}>
@@ -122,6 +123,9 @@ export function Kpis({ s }: { s: Summary }) {
         </div>
       ))}
     </section>
+    {(s.total.web_fetch > 0 || s.total.code_execution > 0) && <p className="muted">Web fetches: {fmtInt(s.total.web_fetch)} (tokens only). Code executions: {fmtInt(s.total.code_execution)}. {s.total.code_execution > 0 && "Code execution cost: unavailable. Execution time is not in local logs."}</p>}
+    {s.total.context_premium_unknown > 0 && <p className="notice">{fmtInt(s.total.context_premium_unknown)} responses have an unverified context premium. Cost may be understated.</p>}
+    </>
   );
 }
 

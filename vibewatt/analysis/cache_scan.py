@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from ..pricing import MILLION, rate_for
 from .models import Finding, input_tokens
 
@@ -15,7 +17,15 @@ def detect(session: str, rows: list[dict], overrides: dict | None) -> list[Findi
     unpriced = False
     for row in rows:
         rate = rate_for(
-            row["model"], fast=bool(row["fast"]), geo=row["geo"], overrides=overrides
+            row["model"],
+            ts=datetime.fromisoformat(row["ts"]),
+            prompt_tokens=row["input"]
+            + row["cache_read"]
+            + row["cache_5m"]
+            + row["cache_1h"],
+            fast=bool(row["fast"]),
+            geo=row["geo"],
+            overrides=overrides,
         )
         if rate is None:
             unpriced = True

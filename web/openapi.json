@@ -2410,6 +2410,35 @@
             "type": "integer",
             "title": "Thinking"
           },
+          "web_fetch": {
+            "type": "integer",
+            "title": "Web Fetch",
+            "default": 0
+          },
+          "code_execution": {
+            "type": "integer",
+            "title": "Code Execution",
+            "default": 0
+          },
+          "code_execution_cost": {
+            "type": "string",
+            "enum": [
+              "unavailable",
+              "not_used"
+            ],
+            "title": "Code Execution Cost",
+            "default": "not_used"
+          },
+          "nonstandard_iterations": {
+            "type": "integer",
+            "title": "Nonstandard Iterations",
+            "default": 0
+          },
+          "context_premium_unknown": {
+            "type": "integer",
+            "title": "Context Premium Unknown",
+            "default": 0
+          },
           "web_searches": {
             "type": "integer",
             "title": "Web Searches"

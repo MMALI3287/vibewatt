@@ -170,9 +170,16 @@ def run(cfg: dict, tz) -> int:
                 "SELECT value FROM meta WHERE key = 'last_sync'"
             ).fetchone()
             dropped = store.dropped_records(conn)
+            iterations = conn.execute(
+                "SELECT COALESCE(SUM(nonstandard_iterations), 0) FROM turns"
+            ).fetchone()[0]
         say(f"    {store.db_path()}")
         say(f"    {row['n']:,} response(s)  {row['lo']} .. {row['hi']}")
         say(f"    last sync {last[0] if last else 'never'}")
+        if iterations:
+            say(
+                f"    WARNING nonstandard_iterations: {iterations}; advisor cost unavailable, iteration tokens excluded"
+            )
         if dropped:
             reasons = ", ".join(
                 f"{reason} {n}" for reason, n in sorted(dropped.items())

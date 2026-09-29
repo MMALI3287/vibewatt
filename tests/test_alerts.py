@@ -58,7 +58,7 @@ def conn(tmp_path):
 
 def response(conn, index, cost, minutes_ago):
     conn.execute(
-        f"INSERT INTO turns ({store.TURN_COLUMNS}) VALUES "
+        f"INSERT INTO turns ({','.join(store.TURN_COLUMNS.split(',')[:21])}) VALUES "
         "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             f"m{index}",

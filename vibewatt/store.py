@@ -25,7 +25,7 @@ from pathlib import Path
 
 from .config import clock_zone, copy_sqlite, data_dir, zone_id
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -333,6 +333,24 @@ def _v9_dismissals(conn) -> None:
     )
 
 
+def _v10_tool_usage(conn) -> None:
+    for table in ("turns", "rollup"):
+        for column in (
+            "web_fetch",
+            "code_execution",
+            "nonstandard_iterations",
+            "context_premium_unknown",
+        ):
+            if column not in {
+                row[1] for row in conn.execute(f"PRAGMA table_info({table})")
+            }:
+                conn.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"
+                )
+    # Re-read retained transcripts once to populate newly available counters.
+    conn.execute("UPDATE files SET mtime = -1")
+
+
 # Forward-only. Append a step and bump SCHEMA_VERSION; never drop a user's table.
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _v2_files_and_quota_samples,
@@ -343,6 +361,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     7: _v7_quota_windows,
     8: _v8_keyed_path_hash,
     9: _v9_dismissals,
+    10: _v10_tool_usage,
 }
 assert max(MIGRATIONS) == SCHEMA_VERSION
 
@@ -386,6 +405,17 @@ def connect(path: Path | None = None):
         conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
         if _current(conn) < SCHEMA_VERSION:
             with _migrate_lock:
+                if _current(conn) > 0:
+                    backup = target.with_name(
+                        target.name
+                        + ".pre-v"
+                        + str(SCHEMA_VERSION)
+                        + "-"
+                        + datetime.now(UTC).strftime("%Y%m%dT%H%M%S%f")
+                        + ".bak"
+                    )
+                    with sqlite3.connect(backup) as destination:
+                        conn.backup(destination)
                 conn.execute("PRAGMA journal_mode=WAL")
                 conn.executescript(SCHEMA)
                 migrate(conn)
@@ -400,7 +430,7 @@ def connect(path: Path | None = None):
 TURN_COLUMNS = (
     "msg_id, request_id, ts, day, source, project, session, model, input, cache_5m,"
     " cache_1h, cache_read, output, thinking, web_search, sidechain, fast, geo, cost,"
-    " version, hour"
+    " version, hour, web_fetch, code_execution, nonstandard_iterations, context_premium_unknown"
 )
 
 
@@ -425,6 +455,9 @@ def _row_turn(row):
         session=row["session"],
         key=(row["msg_id"], row["request_id"]),
         version=row["version"],
+        web_fetch=row["web_fetch"],
+        code_execution=row["code_execution"],
+        nonstandard_iterations=row["nonstandard_iterations"],
     )
 
 
@@ -442,6 +475,7 @@ def upsert_turns(conn, turns, tz, cost_of) -> set[str]:
     main-thread message is ignored. A pre-6.5b row keyed without its request id
     is absorbed by the keyed row that replaces it.
     """
+    from .pricing import context_premium_unknown
     from .sources import merge
 
     turns = list(turns)
@@ -503,6 +537,10 @@ def upsert_turns(conn, turns, tz, cost_of) -> set[str]:
                 cost_of(merged),
                 merged.version,
                 clock_hour,
+                merged.web_fetch,
+                merged.code_execution,
+                merged.nonstandard_iterations,
+                int(context_premium_unknown(merged)),
             )
         )
     conn.executemany(
@@ -510,7 +548,7 @@ def upsert_turns(conn, turns, tz, cost_of) -> set[str]:
     )
     conn.executemany(
         f"INSERT OR REPLACE INTO turns ({TURN_COLUMNS}) VALUES "
-        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         writes,
     )
     return hours
@@ -519,7 +557,8 @@ def upsert_turns(conn, turns, tz, cost_of) -> set[str]:
 _ROLLUP_SELECT = """
     SELECT substr(ts, 1, 13), day, hour, source, project, model, session, sidechain,
       COUNT(*), SUM(input), SUM(cache_5m), SUM(cache_1h), SUM(cache_read), SUM(output),
-      SUM(thinking), SUM(web_search), SUM(cost), SUM(cost IS NULL), MIN(ts), MAX(ts)
+      SUM(thinking), SUM(web_search), SUM(cost), SUM(cost IS NULL), MIN(ts), MAX(ts),
+      SUM(web_fetch), SUM(code_execution), SUM(nonstandard_iterations), SUM(context_premium_unknown)
     FROM turns {where}
     GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
 """
@@ -552,7 +591,7 @@ def reprice(conn: sqlite3.Connection, overrides: dict | None = None) -> int:
     this also works after the original logs have disappeared.
     """
     from .aggregate import cost_of
-    from .pricing import fingerprint
+    from .pricing import context_premium_unknown, fingerprint
 
     current = fingerprint(overrides)
     conn.execute("SAVEPOINT reprice")
@@ -565,10 +604,11 @@ def reprice(conn: sqlite3.Connection, overrides: dict | None = None) -> int:
             hours: set[str] = set()
             for row in conn.execute(f"SELECT {TURN_COLUMNS} FROM turns"):
                 cost = cost_of(_row_turn(row), overrides)
-                if cost != row["cost"]:
+                unknown = int(context_premium_unknown(_row_turn(row)))
+                if cost != row["cost"] or unknown != row["context_premium_unknown"]:
                     conn.execute(
-                        "UPDATE turns SET cost = ? WHERE msg_id = ? AND request_id = ?",
-                        (cost, row["msg_id"], row["request_id"]),
+                        "UPDATE turns SET cost = ?, context_premium_unknown = ? WHERE msg_id = ? AND request_id = ?",
+                        (cost, unknown, row["msg_id"], row["request_id"]),
                     )
                     changed += 1
                     hours.add(_hr(row["ts"]))
