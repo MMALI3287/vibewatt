@@ -17,7 +17,7 @@ describe("format", () => {
   });
   it("counts tokens like the backend's total_tokens", () => {
     expect(bucketTokens({ responses: 1, input: 1, cache_write_5m: 2, cache_write_1h: 3, cache_read: 4,
-      output: 5, thinking: 99, web_searches: 0, cost_usd: 0, unpriced: 0 })).toBe(15);
+      output: 5, thinking: 99, web_searches: 0, web_fetch: 0, code_execution: 0, code_execution_cost: "not_used", nonstandard_iterations: 0, context_premium_unknown: 0, cost_usd: 0, unpriced: 0 })).toBe(15);
   });
 });
 

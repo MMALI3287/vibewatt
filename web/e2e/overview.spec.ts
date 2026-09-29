@@ -46,3 +46,17 @@ test("reloading a filtered URL restores the same view", async ({ page }) => {
   await expect(page.getByTestId("kpi-responses")).toHaveText(kpi ?? "");
   await expect(page.getByTestId("hero-number")).toHaveText(hero ?? "");
 });
+
+test("tool usage distinguishes unavailable execution cost", async ({ page }) => {
+  await page.route("**/api/summary**", async route => {
+    const response = await route.fetch();
+    const data = await response.json();
+    data.total.web_fetch = 3;
+    data.total.code_execution = 2;
+    data.total.code_execution_cost = "unavailable";
+    await route.fulfill({ response, json: data });
+  });
+  await page.goto("/");
+  await expect(page.getByText(/Web fetches: 3/)).toBeVisible();
+  await expect(page.getByText(/Code execution cost: unavailable/)).toBeVisible();
+});

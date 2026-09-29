@@ -62,6 +62,11 @@ def _bucket_dict(b) -> dict:
         "output": b.output,
         "thinking": b.thinking,
         "web_searches": b.web_searches,
+        "web_fetch": b.web_fetch,
+        "code_execution": b.code_execution,
+        "code_execution_cost": "unavailable" if b.code_execution else "not_used",
+        "nonstandard_iterations": b.nonstandard_iterations,
+        "context_premium_unknown": b.context_premium_unknown,
         "cost_usd": round(b.cost, 6),
         # Responses whose model has no known rate; cost_usd leaves them out (A-026).
         "unpriced": b.unpriced,

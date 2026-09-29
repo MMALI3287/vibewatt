@@ -43,6 +43,9 @@ class Turn:
     session: str
     key: tuple[str, str]
     version: str | None = None
+    web_fetch: int = 0
+    code_execution: int = 0
+    nonstandard_iterations: int = 0
 
 
 def _parse_ts(raw: str | None) -> datetime | None:
@@ -127,6 +130,19 @@ def _turn(source: str, path: Path, rec: dict, cwd: str | None) -> Turn | str:
         web_searches=(
             _int(server.get("web_search_requests")) if isinstance(server, dict) else 0
         ),
+        web_fetch=_int(server.get("web_fetch_requests"))
+        if isinstance(server, dict)
+        else 0,
+        code_execution=_int(server.get("code_execution_requests"))
+        if isinstance(server, dict)
+        else 0,
+        nonstandard_iterations=sum(
+            1
+            for entry in usage.get("iterations", [])
+            if isinstance(entry, dict) and entry.get("type") != "message"
+        )
+        if isinstance(usage.get("iterations"), list)
+        else 0,
         fast=usage.get("speed") == "fast",
         # Only "us" changes the price (1.1x). "global", "not_available" and any
         # other value bill at the standard rate.
@@ -259,6 +275,9 @@ TOKEN_FIELDS = (
     "output",
     "thinking",
     "web_searches",
+    "web_fetch",
+    "code_execution",
+    "nonstandard_iterations",
 )
 
 

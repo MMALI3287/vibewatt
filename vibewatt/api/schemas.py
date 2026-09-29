@@ -42,6 +42,11 @@ class BucketOut(BaseModel):
     cache_read: int
     output: int
     thinking: int
+    web_fetch: int = 0
+    code_execution: int = 0
+    code_execution_cost: Literal["unavailable", "not_used"] = "not_used"
+    nonstandard_iterations: int = 0
+    context_premium_unknown: int = 0
     web_searches: int
     cost_usd: float
     # Responses on a model with no known rate. cost_usd excludes them, so a row

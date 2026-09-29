@@ -534,6 +534,32 @@ export interface components {
             output: number;
             /** Thinking */
             thinking: number;
+            /**
+             * Web Fetch
+             * @default 0
+             */
+            web_fetch: number;
+            /**
+             * Code Execution
+             * @default 0
+             */
+            code_execution: number;
+            /**
+             * Code Execution Cost
+             * @default not_used
+             * @enum {string}
+             */
+            code_execution_cost: "unavailable" | "not_used";
+            /**
+             * Nonstandard Iterations
+             * @default 0
+             */
+            nonstandard_iterations: number;
+            /**
+             * Context Premium Unknown
+             * @default 0
+             */
+            context_premium_unknown: number;
             /** Web Searches */
             web_searches: number;
             /** Cost Usd */

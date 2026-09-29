@@ -22,6 +22,10 @@ class Bucket:
     output: int = 0
     thinking: int = 0
     web_searches: int = 0
+    web_fetch: int = 0
+    code_execution: int = 0
+    nonstandard_iterations: int = 0
+    context_premium_unknown: int = 0
     cost: float = 0.0
     unpriced: int = 0
 
@@ -50,6 +54,12 @@ class Bucket:
         self.output += turn.output
         self.thinking += turn.thinking
         self.web_searches += turn.web_searches
+        self.web_fetch += turn.web_fetch
+        self.code_execution += turn.code_execution
+        self.nonstandard_iterations += turn.nonstandard_iterations
+        from .pricing import context_premium_unknown
+
+        self.context_premium_unknown += int(context_premium_unknown(turn))
         if cost is None:
             self.unpriced += 1
         else:
@@ -57,7 +67,14 @@ class Bucket:
 
 
 def cost_of(turn: Turn, overrides: dict | None = None) -> float | None:
-    rate = rate_for(turn.model, fast=turn.fast, geo=turn.geo, overrides=overrides)
+    rate = rate_for(
+        turn.model,
+        fast=turn.fast,
+        ts=turn.ts,
+        prompt_tokens=turn.input + turn.cache_read + turn.cache_5m + turn.cache_1h,
+        geo=turn.geo,
+        overrides=overrides,
+    )
     if rate is None:
         return None
     return (
@@ -264,7 +281,9 @@ _SUMS = (
     "SUM(responses) turns, SUM(input) input, SUM(cache_5m) cache_5m,"
     " SUM(cache_1h) cache_1h, SUM(cache_read) cache_read, SUM(output) output,"
     " SUM(thinking) thinking, SUM(web_search) web_searches,"
-    " COALESCE(SUM(cost), 0) cost, SUM(unpriced) unpriced"
+    " COALESCE(SUM(cost), 0) cost, SUM(unpriced) unpriced,"
+    " SUM(web_fetch) web_fetch, SUM(code_execution) code_execution,"
+    " SUM(nonstandard_iterations) nonstandard_iterations, SUM(context_premium_unknown) context_premium_unknown"
 )
 _BUCKET_FIELDS = (
     "turns",
@@ -275,6 +294,10 @@ _BUCKET_FIELDS = (
     "output",
     "thinking",
     "web_searches",
+    "web_fetch",
+    "code_execution",
+    "nonstandard_iterations",
+    "context_premium_unknown",
     "cost",
     "unpriced",
 )
@@ -284,7 +307,9 @@ _CELL_SUMS = (
     "SUM(turns) turns, SUM(input) input, SUM(cache_5m) cache_5m,"
     " SUM(cache_1h) cache_1h, SUM(cache_read) cache_read, SUM(output) output,"
     " SUM(thinking) thinking, SUM(web_searches) web_searches,"
-    " COALESCE(SUM(cost), 0) cost, SUM(unpriced) unpriced"
+    " COALESCE(SUM(cost), 0) cost, SUM(unpriced) unpriced,"
+    " SUM(web_fetch) web_fetch, SUM(code_execution) code_execution,"
+    " SUM(nonstandard_iterations) nonstandard_iterations, SUM(context_premium_unknown) context_premium_unknown"
 )
 REPORT_PARTS = frozenset(
     {

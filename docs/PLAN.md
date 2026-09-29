@@ -1192,6 +1192,22 @@ Rescheduled, not closed: Codex, Gemini and other agent CLI ingestion moved from
 the backlog to Phase 10. No code, table, command or dependency was removed by
 this planning change.
 
+Package 1 implementation (2026-09-26): removed the five pricing rows from
+`DEFERRED.md` because retained repricing now has retired Sonnet and Mythos
+Preview rates, dated fast-mode lookup, verified historical context premiums,
+usage counters and an advisor detection guard. Unsupported historical intervals
+remain explicitly unpriced or flagged, as required by the no-guessed-rates rule.
+Schema 10 adds counters with a pre-migration SQLite backup and invalidates file
+checkpoints once to backfill retained logs. No usage rows were removed.
+
+Validation also found a pre-existing test calling `monkeypatch.undo()` before an
+API request, which undid the home/data isolation. Replaced the broad undo with
+restoration of only the patched function. The live store migrated during the
+first run; its automatic pre-v10 backup had identical usage rows and was restored
+to schema 9 for installed-version compatibility. The migrated copy was preserved
+privately. No user usage was removed. Copied-store JSON comparison: 8,338 responses,
+$2,368.998801 before and after, with zero fast rows and zero unpriced responses.
+
 ### Phase 9: Verification (planned)
 
 **Do:** an independent audit of Phase 8 against `COMPLETION-QUESTIONS.md` and
