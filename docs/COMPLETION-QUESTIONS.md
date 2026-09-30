@@ -130,9 +130,24 @@ These are recorded with the same reasons in `docs/PLAN.md` under "Phase 8".
 
 ## Phase 8 acceptance
 
-- [ ] Packages 1-4 merged with green CI.
-- [ ] Package 5 merged with green CI on Windows, Linux and macOS.
-- [ ] Each new collector (history backfill, import) has its observed real cycle recorded in its PR.
-- [ ] `DEFERRED.md` lists only Phase 10 items. Every Phase 8 item has a removal record in `PLAN.md`.
-- [ ] A clean wheel install serves the dashboard without Node and preserves 0.3.0 data on all three platforms.
-- [ ] Nothing was tagged or published.
+Completed 2026-10-01. Packages 1-4 are PRs #13-#16. The close-out PR must pass
+the full Windows, Linux and macOS matrix at its exact head before it is merged;
+the checked acceptance below describes the resulting master state.
+
+- [x] Packages 1-4 merged with green CI.
+- [x] Package 5 merged with green CI on Windows, Linux and macOS.
+- [x] Each new collector (history backfill, import) has its observed real cycle recorded in its PR.
+- [x] `DEFERRED.md` lists only Phase 10 items. Every Phase 8 item has a removal record in `PLAN.md`.
+- [x] A clean wheel install serves the dashboard without Node and preserves 0.3.0 data on all three platforms.
+- [x] Nothing was tagged or published.
+
+Evidence: PR #14 observed 145 activity rows and a zero-row repeat with a reduced
+record cap exercised. PR #15 observed 8,338 transferred responses and unchanged
+$2,368.99880125 cost, a zero-row repeat and rejection at a reduced 10-record cap.
+PR #16 verified 24 PNG route/width/theme combinations and native Edge delivery
+with repeats suppressed. The close-out CI runs the synthetic schema 9 upgrade,
+backup verification and installed-wheel browser cycle on all three platforms.
+Local final checks passed 349 Python, 35 frontend unit and 63 browser tests.
+
+Phase 8 stops here. Phase 9 independently audits these claims. Providers and
+public publishing remain in Phases 10 and 11.

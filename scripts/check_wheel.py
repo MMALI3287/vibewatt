@@ -20,6 +20,78 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+LEGACY_QUERIES = {
+    "turns": (
+        "SELECT msg_id,request_id,ts,day,source,project,session,model,input,cache_5m,"
+        "cache_1h,cache_read,output,thinking,web_search,sidechain,fast,geo,cost,version,hour"
+        " FROM turns WHERE msg_id LIKE 'legacy-%' ORDER BY msg_id,request_id"
+    ),
+    "rollup": (
+        "SELECT hr,day,hour,source,project,model,session,sidechain,responses,input,"
+        "cache_5m,cache_1h,cache_read,output,thinking,web_search,cost,unpriced,first_ts,last_ts"
+        " FROM rollup WHERE session = 'legacy-local' ORDER BY hr,model"
+    ),
+    "sessions": "SELECT * FROM sessions WHERE id = 'legacy-cloud'",
+    "titles": "SELECT * FROM titles WHERE session = 'legacy-local'",
+    "history_days": "SELECT * FROM history_days ORDER BY day,model",
+    "user_keep": "SELECT * FROM user_keep ORDER BY id",
+}
+
+
+def legacy_rows(connection: sqlite3.Connection) -> dict[str, list[tuple]]:
+    return {
+        table: connection.execute(query).fetchall()
+        for table, query in LEGACY_QUERIES.items()
+    }
+
+
+def seed_legacy_store(path: Path) -> dict[str, list[tuple]]:
+    """Restore only synthetic data produced by the original 0.3.0 store code."""
+    fixture = Path(__file__).resolve().parents[1] / "tests/fixtures/legacy_030.sql"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    assert not path.exists(), "Legacy seed requires a fresh database"
+    with closing(sqlite3.connect(path)) as connection:
+        connection.executescript(fixture.read_text(encoding="utf-8"))
+        assert connection.execute(
+            "SELECT value FROM meta WHERE key='schema'"
+        ).fetchone() == ("9",)
+        rows = legacy_rows(connection)
+        assert len(rows["turns"]) == 2 and len(rows["rollup"]) == 2
+        assert all(rows.values()), "Legacy fixture must exercise every preserved table"
+        return rows
+
+
+def check_legacy_upgrade(path: Path, before: dict[str, list[tuple]]) -> Path:
+    """Check the installed CLI's migration and its recoverable pre-upgrade copy."""
+    with closing(sqlite3.connect(path)) as connection:
+        version = int(
+            connection.execute("SELECT value FROM meta WHERE key='schema'").fetchone()[
+                0
+            ]
+        )
+        assert version > 9, "Installed wheel did not migrate the 0.3.0 schema"
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(turns)")}
+        assert {"web_fetch", "account_id", "machine_id"} <= columns
+        assert connection.execute(
+            "SELECT COUNT(*) FROM turns WHERE msg_id LIKE 'legacy-%'"
+            " AND account_id = 'unknown' AND machine_id != ''"
+        ).fetchone() == (2,), "Legacy identity attribution was lost"
+        for table, rows in legacy_rows(connection).items():
+            assert rows == before[table], f"Migrated {table} data changed"
+        assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    backups = list(path.parent.glob(f"{path.name}.pre-v{version}-*.bak"))
+    assert len(backups) == 1, "Expected one automatic pre-migration backup"
+    with closing(sqlite3.connect(backups[0])) as connection:
+        assert connection.execute(
+            "SELECT value FROM meta WHERE key='schema'"
+        ).fetchone() == ("9",), "Backup does not contain the old schema"
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(turns)")}
+        assert not columns & {"web_fetch", "account_id", "machine_id"}
+        for table, rows in legacy_rows(connection).items():
+            assert rows == before[table], f"Backup {table} data changed"
+        assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+    return backups[0]
+
 
 @contextmanager
 def scratch_dir(prefix: str, release_timeout: float = 15.0) -> Iterator[Path]:
@@ -131,6 +203,8 @@ def main() -> None:
         env["PATH"] = str(bindir)
         assert shutil.which("node", path=env["PATH"]) is None
         executable = bindir / ("vibewatt.exe" if os.name == "nt" else "vibewatt")
+        database = root / "data/vibewatt.db"
+        legacy = seed_legacy_store(database)
         snapshots = []
         for command in ("sync", "sync", "doctor"):
             subprocess.run(
@@ -141,13 +215,14 @@ def main() -> None:
                 stdout=subprocess.DEVNULL,
             )
             if command == "sync":
-                with closing(sqlite3.connect(root / "data/vibewatt.db")) as connection:
+                with closing(sqlite3.connect(database)) as connection:
                     snapshots.append(
                         connection.execute(
                             "SELECT COUNT(*), SUM(input), SUM(output), SUM(cost) FROM turns"
                         ).fetchone()
                     )
         assert snapshots[0] == snapshots[1] and snapshots[0][0] > 0
+        check_legacy_upgrade(database, legacy)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", args.port))
             port = sock.getsockname()[1]
@@ -198,6 +273,8 @@ def main() -> None:
                             assert (
                                 response.headers.get_content_type() == "text/javascript"
                             )
+                        elif path.endswith(".css"):
+                            assert response.headers.get_content_type() == "text/css"
                 for path in (
                     "/api/usage",
                     "/api/dataset",
@@ -216,8 +293,20 @@ def main() -> None:
                 with urlopen(base + "/api/summary", timeout=5) as response:
                     summary = json.load(response)
                     assert summary["total"]["responses"] > 0
+                for session, title in (
+                    ("legacy-local", "Synthetic 日本語 legacy title"),
+                    ("legacy-cloud", "Synthetic harvested title"),
+                ):
+                    with urlopen(
+                        base + f"/api/sessions/{session}", timeout=5
+                    ) as response:
+                        detail = json.load(response)
+                        assert detail["title"] == title
+                        if session == "legacy-cloud":
+                            assert detail["cost"] == 12.345
+                check_legacy_upgrade(database, legacy)
                 print(
-                    f"PASS {sys.platform}: clean wheel, {len(assets)} assets, SPA, APIs, fixture data, no Node. {base}",
+                    f"PASS {sys.platform}: clean wheel, {len(assets)} assets, SPA, APIs, fixture data, 0.3.0 migration and backup, no Node. {base}",
                     flush=True,
                 )
                 if args.browser:

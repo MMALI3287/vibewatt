@@ -5,14 +5,8 @@ scheduled into a phase or closed with a reason. The build plan with acceptance
 checks is [COMPLETION-QUESTIONS.md](COMPLETION-QUESTIONS.md). Historical audit
 findings remain in `PLAN.md` as evidence, not as an active backlog.
 
-## Scheduled for Phase 8 (backlog completion)
-
-The PR that finishes an item removes its row here and records the removal
-under "Phase 8" in `PLAN.md`.
-
-| Item | Package |
-|---|---|
-| macOS CI and clean-install checks on three platforms | 5 |
+Phase 8 has no active backlog rows. Its completed items and removal reasons are
+recorded under "Phase 8" in `PLAN.md`.
 
 ## Scheduled for Phase 10 (more providers)
 
