@@ -8,6 +8,15 @@ export type Quota = components["schemas"]["QuotaOut"];
 export type Health = components["schemas"]["HealthOut"];
 
 export const api = createClient<paths>({ baseUrl: "" });
+const selectedAccount = localStorage.getItem("vibewatt-account");
+api.use({ onRequest({ request }) {
+  if (selectedAccount) request.headers.set("X-Vibewatt-Account", selectedAccount);
+  return request;
+} });
+
+export async function getAccounts() {
+  return unwrap(await api.GET("/api/accounts"));
+}
 
 export class ApiError extends Error {}
 

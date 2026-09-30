@@ -156,3 +156,21 @@ blocks. The conservative capacity evidence rule is specified in
 200K. Official context and Claude Code model configuration sources retrieved
 2026-09-29: https://platform.claude.com/docs/en/build-with-claude/context-windows
 and https://code.claude.com/docs/en/model-config#extended-context.
+
+## Account and machine transfer
+
+The account UUID comes from `oauthAccount.accountUuid` in Claude Code local
+configuration. Missing identity is `unknown`. A random machine UUID is created
+once in vibewatt's user configuration directory. Each response stores both.
+Account databases are separate; CLI `--account` and the dashboard account picker
+select one account across all machines. Quota from another account is not read
+or fetched. Previously attributed transcript files and activity remain owned by
+their original account after a login switch.
+
+`vibewatt export --out file.vwx` writes gzip JSON format version 1 containing
+response inputs, retained history inputs and harvested session totals.
+`--include-titles` explicitly includes session titles. Raw logs, prompt bodies,
+credentials and quota are never exported. Import validates the full archive
+before opening a writable store, with a 200 MiB compressed/expanded cap and a
+500,000-record cap across every input table. Imported responses dedup by account,
+machine and response identity, preserving the maximum of each usage counter.

@@ -19,6 +19,13 @@ from .dependencies import Filters, get_filters
 router = APIRouter(prefix="/api")
 
 
+@router.get("/accounts", response_model=schemas.AccountsOut)
+def accounts():
+    from .. import identity
+
+    return {"selected": identity.selected_account(), "accounts": identity.accounts()}
+
+
 @router.get("/activity", response_model=schemas.ActivityOut)
 def activity_calendar(request: Request):
     from .. import activity

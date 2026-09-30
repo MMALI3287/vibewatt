@@ -360,6 +360,10 @@ def from_store(
     caller syncs with the report timezone first. `parts` limits the work to
     the Report fields an endpoint serves (see REPORT_PARTS); None builds all.
     """
+    from . import store
+
+    if tz is not None:
+        store.rebucket(conn, tz)
     want = REPORT_PARTS if parts is None else parts
     report = Report()
     report.today = datetime.now(tz).date()
@@ -507,13 +511,23 @@ def _add_history(conn, report: Report, date_from, date_to, model, overrides) -> 
         where.append("model = ?")
         args.append(model)
     cond = " AND ".join(where)
-    history = conn.execute(f"SELECT * FROM history_days WHERE {cond}", args).fetchall()
+    machine = conn.execute(
+        "SELECT value FROM meta WHERE key='history_machine_id'"
+    ).fetchone()[0]
+    history = [
+        dict(r, machine_id=machine)
+        for r in conn.execute(f"SELECT * FROM history_days WHERE {cond}", args)
+    ]
+    history += [
+        dict(r)
+        for r in conn.execute(f"SELECT * FROM imported_history WHERE {cond}", args)
+    ]
     if not history:
         return
     live = {
-        (r["day"], r["model"]): r
+        (r["machine_id"], r["day"], r["model"]): r
         for r in conn.execute(
-            f"SELECT day, model, {_SUMS} FROM rollup WHERE {cond} GROUP BY day, model",
+            f"SELECT machine_id, day, model, {_SUMS} FROM rollup WHERE {cond} GROUP BY machine_id, day, model",
             args,
         )
     }
@@ -528,7 +542,7 @@ def _add_history(conn, report: Report, date_from, date_to, model, overrides) -> 
         ("web_search", "web_searches"),
     )
     for h in history:
-        have = live.get((h["day"], h["model"]))
+        have = live.get((h["machine_id"], h["day"], h["model"]))
         extra = Bucket()
         for hist_field, field_name in pairs:
             stored = have[field_name] if have else 0
