@@ -11,6 +11,11 @@ from pydantic import BaseModel
 from ..analysis.models import Kind, Severity
 
 
+class AccountsOut(BaseModel):
+    selected: str
+    accounts: list[str]
+
+
 class ActivityOut(BaseModel):
     days: dict[str, int]
     current_streak: int

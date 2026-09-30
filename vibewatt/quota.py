@@ -503,13 +503,22 @@ def refresh(
     conn, config: dict, *, allow_fetch: bool, now: datetime | None = None
 ) -> list[str]:
     """Pull every local source into the series, then the endpoint if allowed."""
+    from . import identity
+
+    if identity.selected_account() != identity.account_id():
+        return ["selected account differs from local credentials; stored quota only"]
     notes = []
-    _, note = import_desktop(conn)
-    if note:
-        notes.append(note)
-    cached = config.get("statusline_cache_path")
-    if cached:
-        record(conn, from_statusline(cached, now), throttle=STATUSLINE_THROTTLE)
+    if identity.selected_account() == "unknown":
+        _, note = import_desktop(conn)
+        if note:
+            notes.append(note)
+        cached = config.get("statusline_cache_path")
+        if cached:
+            record(conn, from_statusline(cached, now), throttle=STATUSLINE_THROTTLE)
+    else:
+        notes.append(
+            "unattributed desktop/statusline caches excluded from identified account"
+        )
     if allow_fetch:
         note = maybe_fetch(conn, config, now)
         if note and note != "offline":
@@ -531,7 +540,13 @@ def read(config: dict, *, allow_fetch: bool = True) -> tuple[Quota | None, str]:
             quota = latest(conn)
     except (sqlite3.Error, OSError) as exc:
         # A broken store must not cost the reading; there is just no series.
-        if allow_fetch and not config.get("offline"):
+        from . import identity
+
+        if (
+            allow_fetch
+            and not config.get("offline")
+            and identity.selected_account() == identity.account_id()
+        ):
             try:
                 live = fetch()
             except RateLimited:

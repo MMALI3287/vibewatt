@@ -25,7 +25,7 @@ from pathlib import Path
 
 from .config import clock_zone, copy_sqlite, data_dir, zone_id
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -96,7 +96,9 @@ CREATE TABLE IF NOT EXISTS titles (
 
 
 def db_path() -> Path:
-    path = data_dir() / "vibewatt.db"
+    from .identity import database_path
+
+    path = database_path()
     legacy = path.with_name("ccburn.db")
     if not path.exists() and legacy.is_file():
         # A CCBURN_DATA_DIR store; the old file stays for a downgrade.
@@ -357,6 +359,55 @@ def _v11_activity(conn) -> None:
     )
 
 
+def _v12_identity(conn) -> None:
+    from . import identity
+
+    account, machine = identity.selected_account(), identity.machine_id()
+    columns = list(conn.execute("PRAGMA table_info(turns)"))
+    if "account_id" in {column[1] for column in columns}:
+        return
+    definitions = []
+    for column in columns:
+        definition = f'"{column[1]}" {column[2]}'
+        if column[3]:
+            definition += " NOT NULL"
+        if column[4] is not None:
+            definition += f" DEFAULT {column[4]}"
+        definitions.append(definition)
+    definitions += [
+        f"account_id TEXT NOT NULL DEFAULT '{account}'",
+        f"machine_id TEXT NOT NULL DEFAULT '{machine}'",
+        "PRIMARY KEY(account_id, machine_id, msg_id, request_id)",
+    ]
+    conn.execute("CREATE TABLE turns_identity (" + ",".join(definitions) + ")")
+    names = ",".join(f'"{column[1]}"' for column in columns)
+    conn.execute(
+        f"INSERT INTO turns_identity ({names},account_id,machine_id) SELECT {names},?,? FROM turns",
+        (account, machine),
+    )
+    # Replace only the table definition to expand response identity; all rows survive.
+    conn.execute("DROP TABLE turns")
+    conn.execute("ALTER TABLE turns_identity RENAME TO turns")
+    for column in ("day", "session", "model"):
+        conn.execute(f"CREATE INDEX turns_{column} ON turns({column})")
+    conn.execute("CREATE INDEX turns_hr ON turns(substr(ts, 1, 13))")
+    conn.execute("INSERT OR REPLACE INTO meta VALUES ('account_id', ?)", (account,))
+    conn.execute(
+        "INSERT OR REPLACE INTO meta VALUES ('history_machine_id', ?)", (machine,)
+    )
+    conn.execute(
+        f"ALTER TABLE rollup ADD COLUMN machine_id TEXT NOT NULL DEFAULT '{machine}'"
+    )
+    conn.execute(
+        "CREATE TABLE imported_history (machine_id TEXT NOT NULL, day TEXT NOT NULL, model TEXT NOT NULL, responses INTEGER NOT NULL DEFAULT 0, input INTEGER NOT NULL DEFAULT 0, cache_5m INTEGER NOT NULL DEFAULT 0, cache_1h INTEGER NOT NULL DEFAULT 0, cache_read INTEGER NOT NULL DEFAULT 0, output INTEGER NOT NULL DEFAULT 0, thinking INTEGER NOT NULL DEFAULT 0, web_search INTEGER NOT NULL DEFAULT 0, cost REAL, PRIMARY KEY(machine_id,day,model))"
+    )
+    if account != "unknown":
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS unattributed_quota_samples AS SELECT * FROM quota_samples"
+        )
+        conn.execute("DELETE FROM quota_samples")
+
+
 # Forward-only. Append a step and bump SCHEMA_VERSION; never drop a user's table.
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _v2_files_and_quota_samples,
@@ -369,6 +420,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     9: _v9_dismissals,
     10: _v10_tool_usage,
     11: _v11_activity,
+    12: _v12_identity,
 }
 assert max(MIGRATIONS) == SCHEMA_VERSION
 
@@ -437,7 +489,7 @@ def connect(path: Path | None = None):
 TURN_COLUMNS = (
     "msg_id, request_id, ts, day, source, project, session, model, input, cache_5m,"
     " cache_1h, cache_read, output, thinking, web_search, sidechain, fast, geo, cost,"
-    " version, hour, web_fetch, code_execution, nonstandard_iterations, context_premium_unknown"
+    " version, hour, web_fetch, code_execution, nonstandard_iterations, context_premium_unknown, account_id, machine_id"
 )
 
 
@@ -465,6 +517,8 @@ def _row_turn(row):
         web_fetch=row["web_fetch"],
         code_execution=row["code_execution"],
         nonstandard_iterations=row["nonstandard_iterations"],
+        account_id=row["account_id"],
+        machine_id=row["machine_id"],
     )
 
 
@@ -474,6 +528,32 @@ def _hr(ts: datetime | str) -> str:
 
 
 def upsert_turns(conn, turns, tz, cost_of) -> set[str]:
+    from dataclasses import replace
+
+    from . import identity
+    from .sources import dedupe
+
+    account = conn.execute("SELECT value FROM meta WHERE key='account_id'").fetchone()[
+        0
+    ]
+    grouped = defaultdict(list)
+    for turn in turns:
+        turn = replace(
+            turn,
+            account_id=turn.account_id or account,
+            machine_id=turn.machine_id or identity.machine_id(),
+        )
+        if turn.account_id != account:
+            raise ValueError("A turn cannot enter another account's store")
+        grouped[turn.machine_id].append(turn)
+    hours = set()
+    for batch in grouped.values():
+        deduped, _ = dedupe(batch)
+        hours.update(_upsert_machine(conn, deduped, tz, cost_of))
+    return hours
+
+
+def _upsert_machine(conn, turns, tz, cost_of) -> set[str]:
     """Merge deduped turns into the store. Returns the UTC hours touched.
 
     Merging is order independent: a response already stored takes the
@@ -495,7 +575,8 @@ def upsert_turns(conn, turns, tz, cost_of) -> set[str]:
     )
     stored: dict[str, list] = defaultdict(list)
     for row in conn.execute(
-        f"SELECT {TURN_COLUMNS} FROM turns WHERE msg_id IN (SELECT msg_id FROM incoming)"
+        f"SELECT {TURN_COLUMNS} FROM turns WHERE machine_id = ? AND msg_id IN (SELECT msg_id FROM incoming)",
+        (turns[0].machine_id,),
     ):
         stored[row["msg_id"]].append(row)
 
@@ -548,14 +629,17 @@ def upsert_turns(conn, turns, tz, cost_of) -> set[str]:
                 merged.code_execution,
                 merged.nonstandard_iterations,
                 int(context_premium_unknown(merged)),
+                merged.account_id,
+                merged.machine_id,
             )
         )
     conn.executemany(
-        "DELETE FROM turns WHERE msg_id = ? AND request_id = ?", sorted(deletes)
+        "DELETE FROM turns WHERE msg_id = ? AND request_id = ? AND machine_id = ?",
+        [(*key, turns[0].machine_id) for key in sorted(deletes)],
     )
     conn.executemany(
         f"INSERT OR REPLACE INTO turns ({TURN_COLUMNS}) VALUES "
-        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         writes,
     )
     return hours
@@ -565,9 +649,9 @@ _ROLLUP_SELECT = """
     SELECT substr(ts, 1, 13), day, hour, source, project, model, session, sidechain,
       COUNT(*), SUM(input), SUM(cache_5m), SUM(cache_1h), SUM(cache_read), SUM(output),
       SUM(thinking), SUM(web_search), SUM(cost), SUM(cost IS NULL), MIN(ts), MAX(ts),
-      SUM(web_fetch), SUM(code_execution), SUM(nonstandard_iterations), SUM(context_premium_unknown)
+      SUM(web_fetch), SUM(code_execution), SUM(nonstandard_iterations), SUM(context_premium_unknown), machine_id
     FROM turns {where}
-    GROUP BY 1, 2, 3, 4, 5, 6, 7, 8
+    GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, machine_id
 """
 
 
@@ -614,8 +698,14 @@ def reprice(conn: sqlite3.Connection, overrides: dict | None = None) -> int:
                 unknown = int(context_premium_unknown(_row_turn(row)))
                 if cost != row["cost"] or unknown != row["context_premium_unknown"]:
                     conn.execute(
-                        "UPDATE turns SET cost = ?, context_premium_unknown = ? WHERE msg_id = ? AND request_id = ?",
-                        (cost, unknown, row["msg_id"], row["request_id"]),
+                        "UPDATE turns SET cost = ?, context_premium_unknown = ? WHERE msg_id = ? AND request_id = ? AND machine_id = ?",
+                        (
+                            cost,
+                            unknown,
+                            row["msg_id"],
+                            row["request_id"],
+                            row["machine_id"],
+                        ),
                     )
                     changed += 1
                     hours.add(_hr(row["ts"]))
@@ -664,6 +754,11 @@ def generation(conn) -> int:
 
 def import_history(conn) -> int:
     """Copy the retired history.json into history_days, once. Returns rows read."""
+    from . import identity
+
+    original = identity.owner(data_dir() / "vibewatt.db")
+    if original and original != identity.selected_account():
+        return 0
     if conn.execute("SELECT 1 FROM meta WHERE key = 'history_imported'").fetchone():
         return 0
     rows = []
@@ -721,6 +816,38 @@ class SyncResult:
     unreadable: int = 0  # files that could not be opened; retried next sync
 
 
+def rebucket(conn, tz) -> bool:
+    """Rebucket retained UTC responses without opening any source files."""
+    tz_id = zone_id(tz)
+    row = conn.execute("SELECT value FROM meta WHERE key='sync_tz'").fetchone()
+    if row and row[0] == tz_id:
+        return False
+    updates = []
+    for r in conn.execute("SELECT msg_id,request_id,ts,machine_id FROM turns"):
+        stamp = datetime.fromisoformat(r["ts"])
+        updates.append(
+            (
+                stamp.astimezone(tz).date().isoformat(),
+                stamp.astimezone(clock_zone(tz)).hour,
+                r["msg_id"],
+                r["request_id"],
+                r["machine_id"],
+            )
+        )
+    conn.executemany(
+        "UPDATE turns SET day=?,hour=? WHERE msg_id=? AND request_id=? AND machine_id=?",
+        updates,
+    )
+    rebuild_rollup(conn)
+    conn.execute("INSERT OR REPLACE INTO meta VALUES ('sync_tz',?)", (tz_id,))
+    if updates:
+        conn.execute(
+            "INSERT OR REPLACE INTO meta VALUES ('generation',?)",
+            (str(generation(conn) + 1),),
+        )
+    return True
+
+
 def sync_files(
     conn,
     files: list[tuple[str, Path]],
@@ -743,33 +870,7 @@ def sync_files(
     from .sources import dedupe, read_titles
 
     result = SyncResult()
-    # turns.day and turns.hour are bucketed in the sync's timezone and day
-    # start. On a change every stored turn is re-bucketed from its UTC ts,
-    # including turns whose transcript has since been pruned. A named zone keeps
-    # its identity across DST, so a DST switch no longer re-reads every file
-    # (A-113); a fixed offset includes the offset, since "CST" is ambiguous.
-    tz_id = zone_id(tz)
-    row = conn.execute("SELECT value FROM meta WHERE key = 'sync_tz'").fetchone()
-    full_rebuild = row is None or row[0] != tz_id
-    if full_rebuild:
-        if row is not None:
-            updates = []
-            clock = clock_zone(tz)
-            for r in conn.execute("SELECT msg_id, request_id, ts FROM turns"):
-                stamp = datetime.fromisoformat(r["ts"])
-                updates.append(
-                    (
-                        stamp.astimezone(tz).date().isoformat(),
-                        stamp.astimezone(clock).hour,
-                        r["msg_id"],
-                        r["request_id"],
-                    )
-                )
-            conn.executemany(
-                "UPDATE turns SET day = ?, hour = ? WHERE msg_id = ? AND request_id = ?",
-                updates,
-            )
-        conn.execute("INSERT OR REPLACE INTO meta VALUES ('sync_tz', ?)", (tz_id,))
+    full_rebuild = rebucket(conn, tz)
     known = {
         r["path"]: (r["mtime"], r["size"])
         for r in conn.execute("SELECT path, mtime, size FROM files")

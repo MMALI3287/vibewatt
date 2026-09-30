@@ -46,6 +46,8 @@ class Turn:
     web_fetch: int = 0
     code_execution: int = 0
     nonstandard_iterations: int = 0
+    account_id: str = ""
+    machine_id: str = ""
 
 
 def _parse_ts(raw: str | None) -> datetime | None:

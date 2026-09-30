@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
-import { postSync } from "../api/client";
+import { getAccounts, postSync } from "../api/client";
 import { useTheme } from "../lib/theme";
 
 const NAV = [
@@ -33,6 +33,7 @@ export function Header() {
   const [theme, cycleTheme] = useTheme();
   const qc = useQueryClient();
   const sync = useMutation({ mutationFn: postSync, onSuccess: () => qc.invalidateQueries() });
+  const accounts = useQuery({ queryKey: ["accounts"], queryFn: getAccounts });
 
   return (
     <header className="header">
@@ -57,6 +58,11 @@ export function Header() {
         <button type="submit">Search</button>
       </form>
       <div className="header-actions">
+        {accounts.data && <select aria-label="Account" value={accounts.data.selected} style={{ maxWidth: "10rem" }}
+          onChange={event => { localStorage.setItem("vibewatt-account", event.target.value); window.location.reload(); }}>
+          {accounts.data.accounts.map(account => <option key={account} value={account}>{account === "unknown" ? "Unknown account" : account}</option>)}
+        </select>}
+        {accounts.isError && <button type="button" onClick={() => { localStorage.removeItem("vibewatt-account"); window.location.reload(); }}>Reset account</button>}
         <button type="button" onClick={() => sync.mutate()} disabled={sync.isPending}>
           {sync.isPending ? "Syncing…" : sync.isError ? "Sync failed" : "Sync"}
         </button>
