@@ -44,13 +44,14 @@ def isolated_home(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def logs(tmp_path):
+def logs(tmp_path, monkeypatch):
     """Lay the fixtures out where each source's discover() looks."""
+    # A separate override root works on macOS without duplicating native discovery elsewhere.
+    monkeypatch.setenv("VIBEWATT_COWORK_DIR", str(tmp_path / "cowork"))
     cc = tmp_path / "claude" / "projects" / "demo" / "session.jsonl"
     cw = (
         tmp_path
-        / "appdata"
-        / "Claude"
+        / "cowork"
         / "local-agent-mode-sessions"
         / "acct"
         / "space"

@@ -1156,7 +1156,15 @@ run found these defects. Each fix has a regression test:
   links and an actual installed-dashboard browser cycle in both themes. Local
   Windows verification passed; Linux and macOS are verified by the CI matrix.
   Merge the close-out PR only after every platform passes at its exact head.
-- Final local checks: 349 Python tests, 35 frontend unit tests and 63 browser
+- macOS CI exposed a fixture portability bug: pytest and browser fixtures
+  placed Cowork data beneath Windows application data while Darwin discovery
+  searches its native directory. Both fixture entry points now use a separate
+  temporary `cowork` root with an explicit override. The former application-data
+  fixture location and override clearing were replaced because they either
+  missed Darwin data or discovered the same files twice on Windows and Linux.
+  Production discovery is unchanged. Regressions verify all three platforms and
+  exercise the actual browser-server setup without starting a server.
+- Final local checks: 353 Python tests, 35 frontend unit tests and 63 browser
   tests. Ruff, generated API stability, build and production audit pass. A
   whole-phase independent development review found an import-order duplicate
   and retained SQLite readers; four failing regressions now pass after fixes.

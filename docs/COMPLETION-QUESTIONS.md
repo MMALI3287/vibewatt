@@ -147,7 +147,7 @@ $2,368.99880125 cost, a zero-row repeat and rejection at a reduced 10-record cap
 PR #16 verified 24 PNG route/width/theme combinations and native Edge delivery
 with repeats suppressed. The close-out CI runs the synthetic schema 9 upgrade,
 backup verification and installed-wheel browser cycle on all three platforms.
-Local final checks passed 349 Python, 35 frontend unit and 63 browser tests.
+Local final checks passed 353 Python, 35 frontend unit and 63 browser tests.
 
 Phase 8 stops here. Phase 9 independently audits these claims. Providers and
 public publishing remain in Phases 10 and 11.

@@ -21,19 +21,20 @@ def main() -> None:
         ("CLAUDE_CONFIG_DIR", "claude"),
         ("APPDATA", "appdata"),
         ("XDG_CONFIG_HOME", "appdata"),
+        # A separate root avoids duplicate native/override discovery on Windows and Linux.
+        ("VIBEWATT_COWORK_DIR", "cowork"),
         ("VIBEWATT_DATA_DIR", "data"),
         ("HOME", "home"),
         ("USERPROFILE", "home"),
     ):
         os.environ[key] = str(tmp / sub)
-    os.environ.pop("VIBEWATT_COWORK_DIR", None)
 
     layout = {
         FIXTURES / "activity.jsonl": tmp / "claude/history.jsonl",
         FIXTURES / "claude_code_session.jsonl": tmp
         / "claude/projects/demo/session.jsonl",
         FIXTURES / "cowork_audit.jsonl": tmp
-        / "appdata/Claude/local-agent-mode-sessions/acct/space/id/audit.jsonl",
+        / "cowork/local-agent-mode-sessions/acct/space/id/audit.jsonl",
     }
     for src, dst in layout.items():
         dst.parent.mkdir(parents=True, exist_ok=True)
