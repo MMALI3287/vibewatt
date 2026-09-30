@@ -12,8 +12,6 @@ under "Phase 8" in `PLAN.md`.
 
 | Item | Package |
 |---|---|
-| Dashboard PNG export | 4.1 |
-| Browser notifications | 4.2 |
 | macOS CI and clean-install checks on three platforms | 5 |
 
 ## Scheduled for Phase 10 (more providers)

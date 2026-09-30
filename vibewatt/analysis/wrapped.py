@@ -50,7 +50,7 @@ def build(
         else set([project] if isinstance(project, str) else project)
     )
     rows = []
-    all_local_ids = set(report.sessions)
+    all_local_ids = store.local_session_ids(conn)
     for raw in conn.execute("SELECT * FROM turns ORDER BY ts, msg_id, request_id"):
         row = dict(raw)
         all_local_ids.add(row["session"])

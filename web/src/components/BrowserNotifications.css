@@ -1,0 +1,13 @@
+.browser-notifications {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: 15rem;
+  gap: .25rem;
+}
+
+.browser-notifications [role="status"] {
+  color: var(--ts);
+  font-size: .75rem;
+  overflow-wrap: anywhere;
+}

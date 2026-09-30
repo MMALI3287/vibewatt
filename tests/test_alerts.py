@@ -143,6 +143,15 @@ def test_history_projecting_past_100_fires_once(conn):
     assert evaluate(conn, UTC, now=NOW)["new_count"] == 0
 
 
+def test_active_alert_preserves_severity_for_browser_delivery(conn):
+    from vibewatt.api.schemas import AlertsOut
+
+    sample(conn, NOW - timedelta(minutes=5), 100, NOW + timedelta(hours=2))
+    result = evaluate(conn, UTC, now=NOW)
+    assert result["alerts"][0]["severity"] == "warning"
+    assert AlertsOut.model_validate(result).alerts[0].severity == "warning"
+
+
 def test_not_enough_history_is_said(conn):
     past_windows(conn, 2, growth=10)
     sample(conn, NOW - timedelta(minutes=5), 50, NOW + timedelta(hours=2))

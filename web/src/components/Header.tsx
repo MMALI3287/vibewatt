@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import { getAccounts, postSync } from "../api/client";
 import { useTheme } from "../lib/theme";
+import { DashboardExport } from "./DashboardExport";
+import { BrowserNotifications } from "./BrowserNotifications";
 
 const NAV = [
   { to: "/", label: "Overview" },
@@ -58,6 +60,8 @@ export function Header() {
         <button type="submit">Search</button>
       </form>
       <div className="header-actions">
+        <DashboardExport />
+        <BrowserNotifications accountId={accounts.data?.selected} />
         {accounts.data && <select aria-label="Account" value={accounts.data.selected} style={{ maxWidth: "10rem" }}
           onChange={event => { localStorage.setItem("vibewatt-account", event.target.value); window.location.reload(); }}>
           {accounts.data.accounts.map(account => <option key={account} value={account}>{account === "unknown" ? "Unknown account" : account}</option>)}

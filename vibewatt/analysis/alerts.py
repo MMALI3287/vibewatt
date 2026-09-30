@@ -143,7 +143,10 @@ def evaluate(
         saved = store.save_findings(conn, _SCOPE, candidates)
     return {
         "alerts": [
-            {key: item[key] for key in ("id", "kind", "title", "detail", "created_at")}
+            {
+                key: item[key]
+                for key in ("id", "kind", "severity", "title", "detail", "created_at")
+            }
             for item in saved
             if not item["dismissed"]
         ],
