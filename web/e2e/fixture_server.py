@@ -29,6 +29,7 @@ def main() -> None:
     os.environ.pop("VIBEWATT_COWORK_DIR", None)
 
     layout = {
+        FIXTURES / "activity.jsonl": tmp / "claude/history.jsonl",
         FIXTURES / "claude_code_session.jsonl": tmp
         / "claude/projects/demo/session.jsonl",
         FIXTURES / "cowork_audit.jsonl": tmp

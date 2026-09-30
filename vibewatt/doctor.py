@@ -170,12 +170,24 @@ def run(cfg: dict, tz) -> int:
                 "SELECT value FROM meta WHERE key = 'last_sync'"
             ).fetchone()
             dropped = store.dropped_records(conn)
+            activity_sync = conn.execute(
+                "SELECT value FROM meta WHERE key='activity_sync'"
+            ).fetchone()
             iterations = conn.execute(
                 "SELECT COALESCE(SUM(nonstandard_iterations), 0) FROM turns"
             ).fetchone()[0]
         say(f"    {store.db_path()}")
         say(f"    {row['n']:,} response(s)  {row['lo']} .. {row['hi']}")
         say(f"    last sync {last[0] if last else 'never'}")
+        if activity_sync:
+            activity_stats = json.loads(activity_sync[0])
+            say(
+                f"    activity history: {activity_stats['records']} records, {activity_stats['bytes']} bytes scanned"
+            )
+            if activity_stats["truncated"]:
+                say(
+                    "    WARNING activity history truncated at 50 MB / 500,000 records per sync"
+                )
         if iterations:
             say(
                 f"    WARNING nonstandard_iterations: {iterations}; advisor cost unavailable, iteration tokens excluded"

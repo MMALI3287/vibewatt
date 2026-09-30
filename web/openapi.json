@@ -5,6 +5,46 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/api/activity": {
+      "get": {
+        "summary": "Activity Calendar",
+        "operationId": "activity_calendar_api_activity_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityOut"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/context": {
+      "get": {
+        "summary": "Local Context",
+        "operationId": "local_context_api_context_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LocalContextOut"
+                  },
+                  "type": "array",
+                  "title": "Response Local Context Api Context Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/report-context": {
       "get": {
         "summary": "Report Context",
@@ -2173,6 +2213,37 @@
         ],
         "title": "ActiveBlockOut"
       },
+      "ActivityOut": {
+        "properties": {
+          "days": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Days"
+          },
+          "current_streak": {
+            "type": "integer",
+            "title": "Current Streak"
+          },
+          "longest_streak": {
+            "type": "integer",
+            "title": "Longest Streak"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          }
+        },
+        "type": "object",
+        "required": [
+          "days",
+          "current_streak",
+          "longest_streak",
+          "truncated"
+        ],
+        "title": "ActivityOut"
+      },
       "AlertBlockOut": {
         "properties": {
           "tokens_per_minute": {
@@ -2886,6 +2957,48 @@
           "note"
         ],
         "title": "HealthOut"
+      },
+      "LocalContextOut": {
+        "properties": {
+          "session": {
+            "type": "string",
+            "title": "Session"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "used_tokens": {
+            "type": "integer",
+            "title": "Used Tokens"
+          },
+          "max_tokens": {
+            "type": "integer",
+            "title": "Max Tokens"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "warning",
+              "urgent"
+            ],
+            "title": "Severity"
+          },
+          "snapshot_at": {
+            "type": "string",
+            "title": "Snapshot At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session",
+          "source",
+          "used_tokens",
+          "max_tokens",
+          "severity",
+          "snapshot_at"
+        ],
+        "title": "LocalContextOut"
       },
       "PlanComparisonOut": {
         "properties": {

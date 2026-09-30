@@ -12,8 +12,6 @@ under "Phase 8" in `PLAN.md`.
 
 | Item | Package |
 |---|---|
-| Local context-window nudges | 2.1 |
-| `history.jsonl` activity backfill | 2.2 |
 | Multi-account and multi-machine support | 3 |
 | Dashboard PNG export | 4.1 |
 | Browser notifications | 4.2 |

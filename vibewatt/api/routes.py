@@ -19,6 +19,22 @@ from .dependencies import Filters, get_filters
 router = APIRouter(prefix="/api")
 
 
+@router.get("/activity", response_model=schemas.ActivityOut)
+def activity_calendar(request: Request):
+    from .. import activity
+
+    with store.connect() as conn:
+        return activity.calendar(conn, request.app.state.tz, datetime.now(UTC))
+
+
+@router.get("/context", response_model=list[schemas.LocalContextOut])
+def local_context():
+    from ..analysis import context
+
+    with store.connect() as conn:
+        return context.local(conn, datetime.now(UTC))
+
+
 def _local_provenance(conn) -> dict:
     stamp = conn.execute("SELECT value FROM meta WHERE key='last_sync'").fetchone()
     return {

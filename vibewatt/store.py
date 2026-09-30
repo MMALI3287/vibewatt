@@ -25,7 +25,7 @@ from pathlib import Path
 
 from .config import clock_zone, copy_sqlite, data_dir, zone_id
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -351,6 +351,12 @@ def _v10_tool_usage(conn) -> None:
     conn.execute("UPDATE files SET mtime = -1")
 
 
+def _v11_activity(conn) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS activity (ts TEXT NOT NULL, project TEXT NOT NULL, PRIMARY KEY(ts, project))"
+    )
+
+
 # Forward-only. Append a step and bump SCHEMA_VERSION; never drop a user's table.
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _v2_files_and_quota_samples,
@@ -362,6 +368,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     8: _v8_keyed_path_hash,
     9: _v9_dismissals,
     10: _v10_tool_usage,
+    11: _v11_activity,
 }
 assert max(MIGRATIONS) == SCHEMA_VERSION
 

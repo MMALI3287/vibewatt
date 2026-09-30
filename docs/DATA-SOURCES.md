@@ -139,3 +139,20 @@ container time or eligibility for free usage so cost is labelled unavailable,
 never zero. Non-message iterations are counted once per deduped response and
 reported by doctor; their nested tokens are not added to top-level usage.
 Source: [tool pricing](https://platform.claude.com/docs/en/about-claude/pricing).
+
+## Phase 8 activity and local context
+
+`history.jsonl` is read only during sync, with a total 50 MB / 500,000 record cap
+across configured Claude roots. Only numeric timestamp (milliseconds since epoch)
+and project string survive parsing. Malformed rows count toward the cap. Prompt
+text, pasted content and all other fields are discarded before SQLite insertion.
+Over-cap input is truncated and `doctor` reports the warning. Existing activity
+is retained when source history disappears; duplicate timestamp/project pairs
+are ignored. Activity does not imply measured billable usage.
+
+Local context uses stored per-response input/cache counters, never rate-limit
+blocks. The conservative capacity evidence rule is specified in
+`COMPLETION-QUESTIONS.md`; it is not a claim that every model API is limited to
+200K. Official context and Claude Code model configuration sources retrieved
+2026-09-29: https://platform.claude.com/docs/en/build-with-claude/context-windows
+and https://code.claude.com/docs/en/model-config#extended-context.

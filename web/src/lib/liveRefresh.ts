@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useQueryClient, type Query } from "@tanstack/react-query";
 
-const STORE_QUERIES = new Set(["quota", "summary", "health", "report-context", "session-facets", "sessions", "session", "blocks", "analysis", "finding", "reconciliation", "wrapped", "alerts"]);
+const STORE_QUERIES = new Set(["activity", "context", "quota", "summary", "health", "report-context", "session-facets", "sessions", "session", "blocks", "analysis", "finding", "reconciliation", "wrapped", "alerts"]);
 
 export function canLiveRefresh(query: Query): boolean {
   if (!STORE_QUERIES.has(String(query.queryKey[0])) || query.state.fetchStatus !== "idle") return false;

@@ -1,4 +1,5 @@
 import { Provenance } from "../components/Provenance";
+import { LocalActivity } from "../components/LocalActivity";
 import { useQuery } from "@tanstack/react-query";
 import { getSummary, type Bucket, type Summary } from "../api/client";
 import { Hero } from "../components/Hero";
@@ -32,6 +33,7 @@ export function Overview() {
       <section className="plan" aria-label="Plan utilization">
         <PlanMeters />
       </section>
+      <LocalActivity />
     </>
   );
   if (summary.isPending) {
