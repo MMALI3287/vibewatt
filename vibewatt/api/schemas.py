@@ -394,6 +394,7 @@ class WrappedOut(BaseModel):
 class AlertOut(BaseModel):
     id: str
     kind: str
+    severity: Literal["info", "warning", "serious"]
     title: str
     detail: str
     created_at: str

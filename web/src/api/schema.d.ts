@@ -531,6 +531,11 @@ export interface components {
             id: string;
             /** Kind */
             kind: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "info" | "warning" | "serious";
             /** Title */
             title: string;
             /** Detail */

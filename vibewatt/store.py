@@ -1033,6 +1033,19 @@ def _count(value) -> int:
     return int(value)
 
 
+def local_session_ids(conn: sqlite3.Connection) -> set[str]:
+    """Include original IDs so foreign-machine turns also suppress harvested totals."""
+    ids = set()
+    for session, machine in conn.execute(
+        "SELECT DISTINCT session,machine_id FROM turns"
+    ):
+        ids.add(session)
+        prefix = f"vwx:{machine}:"
+        if session.startswith(prefix):
+            ids.add(session[len(prefix) :])
+    return ids
+
+
 def upsert_cloud_sessions(conn, payload) -> dict[str, int]:
     """Ingest a session listing from the Claude Code session API.
 
@@ -1044,7 +1057,7 @@ def upsert_cloud_sessions(conn, payload) -> dict[str, int]:
     from .ingest import cloud
 
     counts = {"written": 0, "skipped": 0, "rejected_no_id": 0, "skipped_environment": 0}
-    local_ids = {r[0] for r in conn.execute("SELECT DISTINCT session FROM turns")}
+    local_ids = local_session_ids(conn)
     rows = []
     for s in cloud.parse(payload):
         sid = s.get("id")
@@ -1199,7 +1212,7 @@ def sessions(
     }
 
     rows = []
-    local_ids = {r[0] for r in conn.execute("SELECT DISTINCT session FROM turns")}
+    local_ids = local_session_ids(conn)
     for r in cloud:
         if r["id"] in local_ids:
             continue
@@ -1295,6 +1308,15 @@ def session_detail(conn, session_id: str) -> dict | None:
         "  sidechain, fast, geo, cost FROM turns WHERE session = ? ORDER BY ts",
         (session_id,),
     ).fetchall()
+    if not turns:
+        # Old cloud deep links resolve to imported local evidence after overlap suppression.
+        turns = conn.execute(
+            "SELECT msg_id, request_id, ts, day, source, project, model, input,"
+            " cache_5m, cache_1h, cache_read, output, thinking, web_search,"
+            " sidechain, fast, geo, cost FROM turns"
+            " WHERE session = 'vwx:' || machine_id || ':' || ? ORDER BY ts",
+            (session_id,),
+        ).fetchall()
     if turns:
         title = conn.execute(
             "SELECT text FROM titles WHERE session = ?", (session_id,)

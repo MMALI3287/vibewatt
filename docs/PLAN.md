@@ -1141,6 +1141,32 @@ run found these defects. Each fix has a regression test:
 
 ### Phase 8: Backlog completion (planned 2026-09-26)
 
+#### Package 4: dashboard export and browser notifications (2026-10-01)
+
+- Removed the PNG export and browser notification deferred rows because both
+  dashboard features are implemented. Export captures the selected view, active
+  filters, theme and provenance footer. Project names are masked by default;
+  including them requires an explicit checkbox. Missing masking metadata stops
+  the export instead of exposing project names.
+- The `html-to-image` dependency serializes the full HTML view because tables,
+  filter controls and the provenance footer cannot be captured by serializing
+  only the existing SVG charts. Export dimensions are bounded before rendering.
+- Notifications remain off until the user opts in and browser permission is
+  granted. Warning and serious alerts use persisted account-scoped alert IDs
+  and a six-hour cooldown per kind. Hidden or offline tabs do not deliver them.
+  There is no service worker, push service or webhook.
+- Observed a native Edge notification on Windows using the dashboard's opt-in
+  control in a disposable browser profile and synthetic alert data. The native
+  `show` event confirmed delivery. Reloading the same alert and then a different
+  alert of the same kind left the delivery count at one within the cooldown.
+- Whole-phase review found an import-order overlap: harvested data followed by
+  foreign-machine local turns could count a session twice. Shared original-ID
+  matching now suppresses the cloud row in Sessions, Wrapped and later harvests
+  in either order; existing cloud deep links resolve to local evidence. The old
+  transfer-only prefix stripping was replaced because it protected only one
+  import order. Read-only identity probes now close SQLite handles explicitly
+  so Windows can relocate a database immediately after probing it.
+
 ### Package 3: accounts and machines (2026-10-01)
 
 - Removed the multi-account/multi-machine deferred row because account selection,

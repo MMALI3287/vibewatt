@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
 from dataclasses import replace
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -11,11 +12,99 @@ from test_repricing import seed
 
 from vibewatt import store
 from vibewatt.aggregate import cost_of, from_store
+from vibewatt.sources import Turn
 
 A = "11111111-1111-4111-8111-111111111111"
 B = "22222222-2222-4222-8222-222222222222"
 M1 = "33333333-3333-4333-8333-333333333333"
 M2 = "44444444-4444-4444-8444-444444444444"
+
+
+@pytest.mark.parametrize("cloud_first", [True, False])
+def test_machine_import_suppresses_overlapping_cloud_in_either_order(
+    tmp_path, monkeypatch, cloud_first
+):
+    from vibewatt import identity, transfer
+    from vibewatt.analysis import wrapped
+
+    monkeypatch.setattr(identity, "machine_id", lambda: M1)
+    cloud_archive, local_archive = tmp_path / "cloud.vwx", tmp_path / "local.vwx"
+    with store.connect(tmp_path / "cloud.db") as conn:
+        conn.execute(
+            "INSERT INTO sessions(id,surface,model,started,ended,input,output,cost,harvested) "
+            "VALUES ('same-session','cowork','claude-sonnet-4-6',"
+            "'2026-09-29T00:00:00+00:00','2026-09-29T00:01:00+00:00',20,10,5,1)"
+        )
+        transfer.export_file(conn, cloud_archive)
+    turn = Turn(
+        "cowork",
+        datetime(2026, 9, 29, tzinfo=UTC),
+        "claude-sonnet-4-6",
+        20,
+        0,
+        0,
+        0,
+        10,
+        0,
+        0,
+        False,
+        None,
+        False,
+        "demo",
+        "same-session",
+        ("msg", "request"),
+    )
+    with store.connect(tmp_path / "local.db") as conn:
+        store.upsert_turns(conn, [turn], UTC, cost_of)
+        store.rebuild_rollup(conn)
+        transfer.export_file(conn, local_archive)
+    monkeypatch.setattr(identity, "machine_id", lambda: M2)
+    archives = (
+        [cloud_archive, local_archive]
+        if cloud_first
+        else [local_archive, cloud_archive]
+    )
+    for archive in archives:
+        transfer.import_file(archive, {}, UTC)
+    with store.connect() as conn:
+        sessions = store.sessions(conn)
+        assert len(sessions) == 1 and not sessions[0]["harvested"]
+        assert wrapped.build(conn, {}, UTC, 2026)["harvested_cost_usd"] == 0
+        detail = store.session_detail(conn, "same-session")
+        assert detail and not detail["harvested"]
+        assert detail["cost"] == pytest.approx(cost_of(turn))
+        counts = store.upsert_cloud_sessions(
+            conn,
+            [
+                {
+                    "id": "same-session",
+                    "tags": ["cowork"],
+                    "external_metadata": {
+                        "usage": {"input_tokens": 20, "output_tokens": 10},
+                        "cost_usd": 5,
+                    },
+                }
+            ],
+        )
+        assert counts["written"] == 0
+        assert counts["skipped_environment"] == 1
+
+
+@pytest.mark.skipif(
+    os.name != "nt", reason="Windows detects retained SQLite file handles"
+)
+@pytest.mark.parametrize("foreign", [False, True])
+def test_identity_probes_release_database_for_relocation(tmp_path, foreign):
+    from vibewatt import identity
+
+    path = store.db_path()
+    with store.connect() as conn:
+        seed(conn)
+    assert identity.owner(path) == "unknown"
+    if foreign:
+        with identity.scope(B):
+            assert identity.foreign_records("turns", "msg_id")
+    path.rename(tmp_path / "relocated.db")
 
 
 def test_export_title_records_respect_import_record_cap(tmp_path, monkeypatch):
