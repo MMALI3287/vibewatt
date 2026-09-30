@@ -205,11 +205,18 @@ def statusline(cfg, tz, raw: str) -> str:
 
 def sync_store(cfg, tz, files=None, progress=None):
     """Bring the store up to date with the logs. Returns the SyncResult."""
-    from . import store
+    from . import identity, store
+
+    if identity.selected_account() != identity.account_id():
+        with store.connect() as conn:
+            store.rebucket(conn, tz)
+            store.reprice(conn, cfg.get("pricing_overrides"))
+        return store.SyncResult()
 
     if pricing._remote is None:
         pricing.refresh(offline=True)
     files = discover(cfg) if files is None else files
+    files = identity.unclaimed_files(files)
     overrides = cfg.get("pricing_overrides")
     with store.connect() as conn:
         result = store.sync_files(
@@ -414,9 +421,16 @@ def build_parser() -> argparse.ArgumentParser:
             "harvest",
             "sync",
             "sessions",
+            "export",
+            "import",
         ],
         help="report (default), serve, doctor, harvest, sync, sessions, "
         "blocks, statusline, status, quota, json, csv",
+    )
+    p.add_argument("archive", nargs="?", help="import: .vwx archive")
+    p.add_argument("--account", help="OAuth account UUID or unknown")
+    p.add_argument(
+        "--include-titles", action="store_true", help="export: include session titles"
     )
     p.add_argument(
         "--json", action="store_true", help="status/quota: versioned JSON output"
@@ -484,6 +498,15 @@ def main(argv: list[str] | None = None) -> int:
     _utf8_streams()
     args = build_parser().parse_args(argv)
     cfg = configmod.load()
+    from . import identity
+
+    if args.archive and args.command != "import":
+        raise SystemExit("An archive path is accepted only by import")
+    with identity.scope(args.account or cfg.get("account") or identity.account_id()):
+        return _main(args, cfg)
+
+
+def _main(args, cfg) -> int:
     if args.tz:
         cfg["timezone"] = args.tz
     if args.day_start_hour is not None:
@@ -503,6 +526,27 @@ def main(argv: list[str] | None = None) -> int:
     if args.plan:
         cfg["plan_usd_per_month"] = args.plan
 
+    if args.command in ("export", "import"):
+        from . import store, transfer
+
+        try:
+            if args.command == "export":
+                if not args.out:
+                    raise ValueError("export requires --out file.vwx")
+                with store.connect() as conn:
+                    result = transfer.export_file(
+                        conn, Path(args.out), include_titles=args.include_titles
+                    )
+            else:
+                if not args.archive:
+                    raise ValueError("import requires file.vwx")
+                result = transfer.import_file(Path(args.archive), cfg, report_zone(cfg))
+            print(json.dumps(result))
+            return 0
+        except (OSError, ValueError) as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+
     if args.command == "serve":
         import threading
         import webbrowser
@@ -513,6 +557,9 @@ def main(argv: list[str] | None = None) -> int:
         from .api.security import is_loopback
 
         local = is_loopback(args.host)
+        from . import identity
+
+        cfg["account"] = identity.selected_account()
         app = create_app(cfg, extra_hosts=None if local else {args.host})
         shown = "127.0.0.1" if args.host in ("0.0.0.0", "::") else args.host
         url = f"http://{shown}:{args.port}/"
@@ -547,6 +594,10 @@ def main(argv: list[str] | None = None) -> int:
         return sessions_report(args, cfg, tz)
 
     if args.command == "statusline":
+        from . import identity
+
+        if identity.selected_account() != identity.account_id():
+            raise SystemExit("statusline input belongs to the current local account")
         raw = "" if sys.stdin is None or sys.stdin.isatty() else sys.stdin.read()
         print(statusline(cfg, tz, raw))
         return 0

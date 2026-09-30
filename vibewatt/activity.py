@@ -15,6 +15,9 @@ MAX_RECORDS = 500_000
 def sync(conn: sqlite3.Connection, paths: list[Path]) -> dict:
     """Discard all content fields before storing the two activity coordinates."""
     stats = {"bytes": 0, "records": 0, "inserted": 0, "truncated": False}
+    from . import identity
+
+    claimed = identity.foreign_records("activity", "ts, project")
     for path in dict.fromkeys(paths):
         try:
             with path.open("rb") as stream:
@@ -54,6 +57,8 @@ def sync(conn: sqlite3.Connection, paths: list[Path]) -> dict:
                         UnicodeError,
                         RecursionError,
                     ):
+                        continue
+                    if (when.isoformat(), project) in claimed:
                         continue
                     stats["inserted"] += conn.execute(
                         "INSERT OR IGNORE INTO activity(ts, project) VALUES (?, ?)",

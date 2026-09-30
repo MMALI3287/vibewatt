@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 
 from .. import config as configmod
-from .. import pricing
+from .. import identity, pricing
 from ..cli import build_report, report_zone, sync_store
 from .routes import router
 
@@ -26,6 +26,7 @@ def create_app(
     from .security import LocalOnly
 
     cfg = cfg or configmod.load()
+    cfg = {**cfg, "account": cfg.get("account") or identity.account_id()}
     tz = report_zone(cfg)
 
     lock = threading.Lock()
@@ -43,6 +44,7 @@ def create_app(
         from datetime import datetime
 
         key = (
+            identity.selected_account(),
             str(datetime.now(tz).date()),
             *sorted((k, str(v)) for k, v in filters.items()),
         )
@@ -57,7 +59,7 @@ def create_app(
     def sync_once() -> None:
         from .. import quota, store
 
-        with lock:
+        with identity.scope(cfg.get("account") or identity.account_id()), lock:
             sync_store(cfg, tz)
             app.state.synced = True
             if cfg.get("quota", True):
@@ -133,7 +135,20 @@ def create_app(
             from fastapi.responses import JSONResponse
 
             return JSONResponse({"detail": "Not found"}, status_code=404)
-        response = await call_next(request)
+        from fastapi.responses import JSONResponse
+
+        try:
+            account = identity.valid_account(
+                request.headers.get("X-Vibewatt-Account")
+                or cfg.get("account")
+                or identity.account_id()
+            )
+            if account not in identity.accounts():
+                return JSONResponse({"detail": "Unknown account"}, status_code=400)
+        except (ValueError, TypeError, AttributeError):
+            return JSONResponse({"detail": "Invalid account"}, status_code=400)
+        with identity.scope(account):
+            response = await call_next(request)
         if response.headers.get("content-type", "").startswith("text/html"):
             response.headers["Cache-Control"] = "no-cache"
         return response

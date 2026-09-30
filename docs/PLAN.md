@@ -1141,6 +1141,26 @@ run found these defects. Each fix has a regression test:
 
 ### Phase 8: Backlog completion (planned 2026-09-26)
 
+### Package 3: accounts and machines (2026-10-01)
+
+- Removed the multi-account/multi-machine deferred row because account selection,
+  persistent machine UUIDs and versioned local export/import are implemented.
+  Separate account databases prevent account mixing across every report path.
+- Schema 12 takes an automatic SQLite backup and replaces the old `turns`
+  definition with a machine/account-aware primary key after copying every row.
+  Existing indexes are recreated, including the indexed hourly lookup.
+  Unattributed quota samples are copied into `unattributed_quota_samples` before
+  removal from active quota history so an identified account cannot adopt them.
+- Transfers preserve per-field maxima and are idempotent. Archives omit raw
+  session data, credentials and quota; titles require `--include-titles`.
+  Both compressed and expanded input are capped at 200 MiB and 500,000 total
+  records, including titles. Failed temporary exports are discarded so they
+  cannot replace an existing archive.
+- Observed real cycle on a private store copy: 8,338 responses, 4,793,742 expanded
+  bytes and $2,368.99880125 before/after. Repeat import changed zero rows.
+  A reduced 10-record cap rejected the archive before writing.
+
+
 **Do:** build packages 1-5 in `docs/COMPLETION-QUESTIONS.md`, which holds the
 scope, bounds and acceptance checks for each: pricing completeness, local context
 nudges and `history.jsonl` activity, multi-account and multi-machine
