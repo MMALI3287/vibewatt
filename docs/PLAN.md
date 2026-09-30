@@ -1208,6 +1208,19 @@ to schema 9 for installed-version compatibility. The migrated copy was preserved
 privately. No user usage was removed. Copied-store JSON comparison: 8,338 responses,
 $2,368.998801 before and after, with zero fast rows and zero unpriced responses.
 
+Package 2 implementation (2026-09-30): removed local context-window nudges and
+`history.jsonl` activity backfill from the active deferred table because both are
+implemented. Schema 11 adds a separate activity table with a pre-migration backup.
+The prior harvested-only context restriction is superseded by the latest
+main-thread prompt snapshot for sessions active within 30 minutes. The 70%/85%
+thresholds remain unchanged; 1M capacity requires a model marker or prior
+per-response evidence in that session. Quota readings never enter this calculation.
+The activity collector accepts only timestamp/project, deduplicates both and caps
+each sync at 50 MB / 500,000 records. Calendar and streak are separately labelled
+and add no usage or cost. An observed real cycle read 145 records / 40,638 bytes;
+a repeat inserted zero and a 10-record cap stopped at 10 with truncation reported.
+No service, command or usage data was removed.
+
 ### Phase 9: Verification (planned)
 
 **Do:** an independent audit of Phase 8 against `COMPLETION-QUESTIONS.md` and

@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/api/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Activity Calendar */
+        get: operations["activity_calendar_api_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Local Context */
+        get: operations["local_context_api_context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/report-context": {
         parameters: {
             query?: never;
@@ -447,6 +481,19 @@ export interface components {
             /** Projected Cost Usd */
             projected_cost_usd: number;
         };
+        /** ActivityOut */
+        ActivityOut: {
+            /** Days */
+            days: {
+                [key: string]: number;
+            };
+            /** Current Streak */
+            current_streak: number;
+            /** Longest Streak */
+            longest_streak: number;
+            /** Truncated */
+            truncated: boolean;
+        };
         /** AlertBlockOut */
         AlertBlockOut: {
             /** Tokens Per Minute */
@@ -723,6 +770,24 @@ export interface components {
             coverage: components["schemas"]["CoverageOut"];
             /** Note */
             note: string;
+        };
+        /** LocalContextOut */
+        LocalContextOut: {
+            /** Session */
+            session: string;
+            /** Source */
+            source: string;
+            /** Used Tokens */
+            used_tokens: number;
+            /** Max Tokens */
+            max_tokens: number;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "warning" | "urgent";
+            /** Snapshot At */
+            snapshot_at: string;
         };
         /** PlanComparisonOut */
         PlanComparisonOut: {
@@ -1182,6 +1247,46 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    activity_calendar_api_activity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityOut"];
+                };
+            };
+        };
+    };
+    local_context_api_context_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalContextOut"][];
+                };
+            };
+        };
+    };
     report_context_api_report_context_get: {
         parameters: {
             query?: never;

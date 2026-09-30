@@ -216,6 +216,10 @@ def sync_store(cfg, tz, files=None, progress=None):
             conn, files, tz, lambda t: cost_of(t, overrides), progress=progress
         )
         store.reprice(conn, overrides)
+        from . import activity
+        from .ingest.claude_code import roots
+
+        activity.sync(conn, [root.parent / "history.jsonl" for root in roots()])
         return result
 
 

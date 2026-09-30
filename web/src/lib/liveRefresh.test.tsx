@@ -20,11 +20,11 @@ describe("report date presets", () => {
 describe("bounded live refresh", () => {
   it("excludes external calls, running requests and multi-page lists", () => {
     const client = new QueryClient();
-    for (const key of ["quota", "summary", "service-status", "concierge", "weekly-summary", "sessions"]) {
+    for (const key of ["quota", "summary", "activity", "context", "service-status", "concierge", "weekly-summary", "sessions"]) {
       client.setQueryData([key], key === "sessions" ? { pages: [[], []] } : {});
     }
     const eligible = client.getQueryCache().getAll().filter(canLiveRefresh).map(query => query.queryKey[0]);
-    expect(eligible).toEqual(["quota", "summary"]);
+    expect(eligible).toEqual(["quota", "summary", "activity", "context"]);
     const summary = client.getQueryCache().find({ queryKey: ["summary"] })!;
     summary.setState({ fetchStatus: "fetching" });
     expect(canLiveRefresh(summary)).toBe(false);
