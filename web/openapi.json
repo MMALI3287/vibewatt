@@ -2311,6 +2311,15 @@
             "type": "string",
             "title": "Kind"
           },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "serious"
+            ],
+            "title": "Severity"
+          },
           "title": {
             "type": "string",
             "title": "Title"
@@ -2328,6 +2337,7 @@
         "required": [
           "id",
           "kind",
+          "severity",
           "title",
           "detail",
           "created_at"

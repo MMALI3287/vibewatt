@@ -387,8 +387,7 @@ def _import_inputs(conn, history: list[dict], cloud: list[dict]) -> int:
             [merged[key] for key in cols],
         )
         changed += 1
-    local_sessions = {r[0] for r in conn.execute("SELECT DISTINCT session FROM turns")}
-    local_sessions |= {sid[41:] for sid in local_sessions if sid.startswith("vwx:")}
+    local_sessions = store.local_session_ids(conn)
     for row in cloud:
         if row["id"] in local_sessions:
             continue

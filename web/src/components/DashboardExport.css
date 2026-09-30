@@ -1,0 +1,11 @@
+.dashboard-export-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.dashboard-export-controls label { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+.dashboard-export-controls [role="alert"] { flex-basis: 100%; max-width: 28rem; overflow-wrap: anywhere; }
+.dashboard-export-host { position: fixed; left: -100000px; top: 0; pointer-events: none; }
+.dashboard-export { min-height: 0; background: var(--s1); color: var(--tp); }
+.dashboard-export-heading { padding: 12px var(--gutter); font-size: 18px; font-weight: 700; background: var(--s0); border-bottom: 1px solid var(--bd); }
+.dashboard-export .filters { position: static; z-index: auto; }
+.dashboard-export-value { display: block; color: var(--tp); overflow-wrap: anywhere; }
+.dashboard-export .table-wrap, .dashboard-export .heatmap-wrap { overflow: visible; }
+.dashboard-export .session-dialog, .dashboard-export .finding-dialog { position: static; display: block; width: auto; max-height: none; overflow: visible; margin: 0; }
+.dashboard-export [role="tooltip"] { display: none; }

@@ -6,7 +6,7 @@ import json
 import os
 import sqlite3
 import threading
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -66,7 +66,9 @@ def owner(path: Path) -> str | None:
     if not path.is_file():
         return None
     try:
-        with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as conn:
+        with closing(
+            sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
+        ) as conn:
             row = conn.execute(
                 "SELECT value FROM meta WHERE key='account_id'"
             ).fetchone()
@@ -104,7 +106,9 @@ def foreign_records(table: str, columns: str) -> set[tuple]:
     for path in [base / "vibewatt.db", *sorted((base / "accounts").glob("*.db"))]:
         if not path.is_file() or (owner(path) or account_id()) == selected_account():
             continue
-        with sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True) as conn:
+        with closing(
+            sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)
+        ) as conn:
             if conn.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
             ).fetchone():
