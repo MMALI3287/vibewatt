@@ -1139,7 +1139,43 @@ run found these defects. Each fix has a regression test:
 
 ---
 
-### Phase 8: Backlog completion (planned 2026-09-26)
+### Phase 8: Backlog completion (completed 2026-10-01)
+
+#### Package 5: platform coverage and readiness (2026-10-01)
+
+- Removed the macOS CI and three-platform clean-install deferred row because
+  the quality matrix now runs Windows, Linux and macOS. The existing lowest
+  direct dependency lane remains intact. The empty Phase 8 deferred table was
+  removed because every active item is implemented or explicitly closed below.
+- The installed-wheel gate seeds a synthetic schema 9 store generated using
+  the original 0.3.0 store implementation. It checks preserved priced/unpriced
+  turns, rollups, harvested cost, Japanese titles, history and a custom table;
+  schema 12 attribution; database integrity; and the automatic schema 9 backup.
+  These checks run again after serving the installed wheel with Node absent.
+- The same gate checks repeat sync, API data, assets and MIME types, SPA deep
+  links and an actual installed-dashboard browser cycle in both themes. Local
+  Windows verification passed; Linux and macOS are verified by the CI matrix.
+  Merge the close-out PR only after every platform passes at its exact head.
+- macOS CI exposed a fixture portability bug: pytest and browser fixtures
+  placed Cowork data beneath Windows application data while Darwin discovery
+  searches its native directory. Both fixture entry points now use a separate
+  temporary `cowork` root with an explicit override. The former application-data
+  fixture location and override clearing were replaced because they either
+  missed Darwin data or discovered the same files twice on Windows and Linux.
+  Production discovery is unchanged. Regressions verify all three platforms and
+  exercise the actual browser-server setup without starting a server.
+- Final local checks: 353 Python tests, 35 frontend unit tests and 63 browser
+  tests. Ruff, generated API stability, build and production audit pass. A
+  whole-phase independent development review found an import-order duplicate
+  and retained SQLite readers; four failing regressions now pass after fixes.
+- Temporary verification servers and the unused duplicate managed checkout
+  are stopped or archived after verification because the reused Phase 8
+  checkout holds the implementation. Verification scratch profiles and stores
+  remain private and are not distributed. Merged package branches can be
+  removed after their implementation is retained on master.
+- The completed implementation handoff replaces the earlier "current Phase
+  8" guidance. Phase 9 is the next independent audit. No Phase 9 implementation,
+  provider work, version bump, tag, release or publish is included here.
 
 #### Package 4: dashboard export and browser notifications (2026-10-01)
 
