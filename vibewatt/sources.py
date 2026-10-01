@@ -269,6 +269,8 @@ def response_key(
     return f"{session}:{ts.isoformat()}", ""
 
 
+DEDUPE_VERSION = 1
+
 TOKEN_FIELDS = (
     "input",
     "cache_5m",
@@ -301,7 +303,8 @@ def merge(a: Turn, b: Turn) -> Turn:
         keep,
         **{f: max(getattr(a, f), getattr(b, f)) for f in TOKEN_FIELDS},
         fast=a.fast or b.fast,
-        geo=a.geo or b.geo,
+        # Keep the observed US surcharge even when a later replay says global.
+        geo=max((a.geo, b.geo), key=lambda geo: (geo == "us", geo or "")),
         version=max(a.version or "", b.version or "") or None,
     )
 

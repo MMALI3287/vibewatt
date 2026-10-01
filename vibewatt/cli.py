@@ -206,6 +206,7 @@ def statusline(cfg, tz, raw: str) -> str:
 def sync_store(cfg, tz, files=None, progress=None):
     """Bring the store up to date with the logs. Returns the SyncResult."""
     from . import identity, store
+    from .sources import DEDUPE_VERSION
 
     if identity.selected_account() != identity.account_id():
         with store.connect() as conn:
@@ -219,8 +220,18 @@ def sync_store(cfg, tz, files=None, progress=None):
     files = identity.unclaimed_files(files)
     overrides = cfg.get("pricing_overrides")
     with store.connect() as conn:
+        dedupe_version = conn.execute(
+            "SELECT value FROM meta WHERE key='dedupe_version'"
+        ).fetchone()
+        if dedupe_version is None or dedupe_version[0] != str(DEDUPE_VERSION):
+            # Old checkpoints can hide geo evidence discarded by the previous merge.
+            conn.execute("UPDATE files SET mtime=-1")
         result = store.sync_files(
             conn, files, tz, lambda t: cost_of(t, overrides), progress=progress
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO meta VALUES ('dedupe_version',?)",
+            (str(DEDUPE_VERSION),),
         )
         store.reprice(conn, overrides)
         from . import activity

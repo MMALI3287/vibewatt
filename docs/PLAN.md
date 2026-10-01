@@ -1141,6 +1141,29 @@ run found these defects. Each fix has a regression test:
 
 ### Phase 8: Backlog completion (completed 2026-10-01)
 
+Final implementer check (2026-10-01): replaced the first-nonempty geo merge
+because duplicate `global` and `us` observations produced different stored
+costs depending on block or sync order. Geo now retains the highest observed
+surcharge with deterministic ties. Six regression cases cover permutations,
+separate syncs, rollup cost and repair from unchanged logs. Old file checkpoints
+are invalidated once through a dedup version so retained logs can restore geo
+evidence discarded by the old merge. Checkpoint rows and retained usage remain;
+missing transcripts cannot supply lost evidence and are never guessed.
+Stopped the verified leftover local Playwright fixture server because its
+listener on port 8778 prevented a fresh browser gate from starting.
+
+The corrected-code local gates passed: Ruff, 359 Python tests, 35 frontend
+tests, 63 browser checks, the production build, unchanged generated API files
+and zero production dependency advisories. A fresh Windows wheel passed
+Node-free serving, the original 0.3.0 database upgrade, backup integrity and
+the installed dashboard browser checks. A temporary copy of the real store
+synced offline from 9,383 responses / $2,497.529639 to 9,824 responses /
+$2,581.702276 after discovering newer logs. The repeat parsed zero files and
+left every reported total unchanged. Original databases were opened read-only.
+The baseline master already passed every CI step on Linux, Windows and macOS;
+the correction requires the same exact-head CI gate before integration.
+Claude's independent Phase 9 audit remains the next phase.
+
 #### Package 5: platform coverage and readiness (2026-10-01)
 
 - Removed the macOS CI and three-platform clean-install deferred row because
