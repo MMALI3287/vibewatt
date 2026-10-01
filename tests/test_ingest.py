@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import inspect
+import runpy
+from pathlib import Path
+
+import pytest
 
 from vibewatt import ingest
 from vibewatt.ingest import cloud
@@ -11,6 +15,50 @@ def test_discover_finds_every_local_source(logs):
     found = set(ingest.discover())
     assert (CLAUDE_CODE, logs["claude-code"]) in found
     assert (COWORK, logs["cowork"]) in found
+
+
+@pytest.mark.parametrize("system", ["Darwin", "Windows", "Linux"])
+def test_fixture_sources_are_discovered_on_every_platform(logs, monkeypatch, system):
+    monkeypatch.setattr("vibewatt.ingest.cowork.platform.system", lambda: system)
+    files = ingest.discover()
+    assert len(files) == 2
+    assert set(files) == {
+        (CLAUDE_CODE, logs["claude-code"]),
+        (COWORK, logs["cowork"]),
+    }
+
+
+def test_e2e_fixture_includes_cowork_on_darwin(tmp_path, monkeypatch):
+    import uvicorn
+
+    from vibewatt import store
+
+    monkeypatch.setattr("vibewatt.ingest.cowork.platform.system", lambda: "Darwin")
+    monkeypatch.setattr("tempfile.mkdtemp", lambda **kwargs: str(tmp_path / "e2e"))
+    monkeypatch.setattr("sys.argv", ["fixture_server.py"])
+    for key in (
+        "CLAUDE_CONFIG_DIR",
+        "APPDATA",
+        "XDG_CONFIG_HOME",
+        "VIBEWATT_DATA_DIR",
+        "VIBEWATT_COWORK_DIR",
+        "HOME",
+        "USERPROFILE",
+    ):
+        monkeypatch.setenv(key, str(tmp_path / "isolated"))
+
+    def inspect_store(app, **kwargs):
+        with store.connect() as conn:
+            assert (
+                conn.execute(
+                    "SELECT COUNT(*) FROM turns WHERE source = 'cowork'"
+                ).fetchone()[0]
+                == 1
+            )
+
+    monkeypatch.setattr(uvicorn, "run", inspect_store)
+    server = Path(__file__).parents[1] / "web/e2e/fixture_server.py"
+    runpy.run_path(str(server))["main"]()
 
 
 def test_discover_ignores_files_outside_source_roots(tmp_path, logs):
