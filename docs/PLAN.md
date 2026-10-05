@@ -1326,7 +1326,7 @@ and add no usage or cost. An observed real cycle read 145 records / 40,638 bytes
 a repeat inserted zero and a 10-record cap stopped at 10 with truncation reported.
 No service, command or usage data was removed.
 
-### Phase 9: Verification (in progress 2026-10-05)
+### Phase 9: Verification (completed 2026-10-05)
 
 **Do:** an independent audit of Phase 8 against `COMPLETION-QUESTIONS.md` and
 `AGENTS.md`: rerun every gate, check each acceptance item against real behavior,
@@ -1371,8 +1371,11 @@ Audit record (2026-10-05, Claude Code):
   functions with none (`terminal.hour_histogram`, `alerts._time` and the
   test-only `store.upsert_quota_samples` wrapper) are left for a separate
   cleanup PR with their own removal records.
-- Branch protection still requires only the Linux and Windows checks. Adding
-  `verify (macos-latest)` is pending the user's confirmation.
+- Branch protection now requires `verify (macos-latest)` alongside the Linux
+  and Windows checks (user approved 2026-10-05). The job already ran on every
+  push, so this adds no CI time.
+- Closed: every Phase 8 acceptance item was rerun against real behavior. The
+  three findings are fixed in #19 and dated pricing is in #20.
 - Dated pricing (2026-10-05, user request): community rates are now recorded
   as dated changes in `pricing-history.json`, so a discount or price change
   applies only from the day it is observed instead of repricing all history.
