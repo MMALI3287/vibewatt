@@ -9,9 +9,9 @@ it. `docs/PLAN.md` is the spec and the phase plan. `docs/DATA-SOURCES.md` says
 where every number comes from. `docs/ANALYSIS.md` explains how findings, alerts
 and Wrapped are computed.
 
-Phase 8 (backlog completion) is implemented and Phase 9 (its independent audit)
-is complete. Both are recorded in `docs/PLAN.md`. The next work is Phase 10, more
-providers, in `docs/PLAN.md`. Publishing is Phase 11.
+Phases 1 to 10 are complete; Phase 10 added Codex, Copilot Chat and Antigravity.
+Phase 11, the public launch, is recorded in `docs/PLAN.md`. Releases are cut by
+pushing a version tag; the procedure is in `CONTRIBUTING.md`.
 
 ## Commands
 

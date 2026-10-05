@@ -433,7 +433,7 @@ def sessions_report(args, cfg, tz) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="vibewatt",
-        description="Token usage, cost and plan utilization for Claude Code and Cowork.",
+        description="Token usage, cost and plan utilization for Claude Code, Cowork and other agents.",
     )
     p.add_argument(
         "command",
