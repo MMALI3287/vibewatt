@@ -24,7 +24,8 @@ test("reloading a filtered URL restores the same view", async ({ page }) => {
 
   const source = page.locator('select[name="source"]');
   const options = await source.locator("option").evaluateAll((els) =>
-    els.map((e) => (e as HTMLOptionElement).value).filter((v) => v !== "all"),
+    // "all" and "claude" are scopes, not single sources; the fixture has only Claude data.
+    els.map((e) => (e as HTMLOptionElement).value).filter((v) => v !== "all" && v !== "claude"),
   );
   expect(options.length).toBeGreaterThan(1);
   await source.selectOption(options[0]);
