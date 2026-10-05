@@ -1,4 +1,4 @@
-"""Mutation guards from the 2026-09-22 audit (docs/AUDIT-2026-09-22.md, d9).
+"""Mutation guards from the 2026-09-22 audit (finding d9; summary in docs/PLAN.md section 11).
 
 Each test fails under one mutant that survived the phase 1-6 suite. The
 history.restore guard was dropped with history.py in Phase 6.5b; live-day

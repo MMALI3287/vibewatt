@@ -49,7 +49,7 @@ Working and verified against a real account:
 | Dashboard server | `vibewatt/api/app.py` | FastAPI with local-only middleware |
 
 **Audit 2026-09-22:** phases 1-6 were audited against this plan. 128 findings,
-evidence in `docs/AUDIT-2026-09-22.md`, one line each in section 11, scheduled
+evidence in the 2026-09-22 audit report (removed in Phase 11), one line each in section 11, scheduled
 as Phase 6.5a-g below. Phase 7 refreshes the table above to reflect the store-only reporting pipeline.
 
 Numbers proven on real data: content-block dedup avoids a **2.8x** overcount of
@@ -483,7 +483,7 @@ correctness gaps. Coverage and bounds: `docs/ANALYSIS.md`.
 **Gate:** Wrapped snapshot test; alert fires once not per sample; AI summary makes no network call when disabled; dashboard renders with the status fetch stubbed to fail.
 
 ### Phase 6.5: Audit fixes and spec corrections (added 2026-09-22)
-**Why:** the phase 1-6 audit (`docs/AUDIT-2026-09-22.md`) found 128 issues:
+**Why:** the phase 1-6 audit of 2026-09-22 (report removed in Phase 11) found 128 issues:
 1 critical, 6 high, 55 medium, 50 low, 16 info. The worst ones change headline
 numbers. Output tokens are undercounted by 7.6-16% and pruned days lose usage
 permanently. Localhost security is open. The burn alert almost never fires.
@@ -524,7 +524,7 @@ as-is (they are data locations). The GitHub repo rename is done by the user.
   (so WAL content is kept). `store.db_path()` does the same for a store in a
   `CCBURN_DATA_DIR`. The old files are never moved or deleted, so a downgrade
   still works. Tests: `tests/test_rename.py`.
-- Kept on purpose: `docs/AUDIT-2026-09-22.md` is a dated record; its `ccburn/...`
+- Kept on purpose at the time: the 2026-09-22 audit report (removed in Phase 11) was a dated record; its `ccburn/...`
   paths are evidence of the code as audited, so it was not rewritten.
 - PyPI: `vibewatt` 0.0.1 (placeholder) published by the user on 2026-09-22 to
   reserve the name; ship a real release before PEP 541 treats it as abandoned.
@@ -1091,7 +1091,7 @@ legacy command or user data was removed. The old dashboard refresh script
 remains removed; browser refresh is implemented in React.
 
 The remaining 17 items and the release-scope choices were decided on
-2026-09-26. See "Phase 8" below and `docs/COMPLETION-QUESTIONS.md`.
+2026-09-26. See "Phase 8" below and the Phase 8 build plan (removed in Phase 11).
 
 **Checks:** Python regression suite, Ruff check/format, frontend unit tests,
 production build, generated OpenAPI/client types and browser checks including
@@ -1246,7 +1246,7 @@ Claude's independent Phase 9 audit remains the next phase.
   A reduced 10-record cap rejected the archive before writing.
 
 
-**Do:** build packages 1-5 in `docs/COMPLETION-QUESTIONS.md`, which holds the
+**Do:** build packages 1-5 in the Phase 8 build plan (removed in Phase 11), which holds the
 scope, bounds and acceptance checks for each: pricing completeness, local context
 nudges and `history.jsonl` activity, multi-account and multi-machine
 export/import, PNG export and browser notifications, then macOS CI and
@@ -1261,7 +1261,7 @@ PyPI publish; platforms = Windows, Linux and macOS; build multi-account and
 multi-machine support; browser-only opt-in notifications for warnings and above;
 close cloud listing, localization and commit links; ChatGPT/Codex and
 Gemini/Antigravity providers after verification. The remaining calls below were
-made from the local log evidence recorded in `COMPLETION-QUESTIONS.md`.
+made from the local log evidence recorded in the Phase 8 build plan (removed in Phase 11).
 
 Closure record. These items were removed from the active backlog in
 `docs/DEFERRED.md` in this change. Each reason is recorded with a reopen trigger.
@@ -1328,7 +1328,7 @@ No service, command or usage data was removed.
 
 ### Phase 9: Verification (completed 2026-10-05)
 
-**Do:** an independent audit of Phase 8 against `COMPLETION-QUESTIONS.md` and
+**Do:** an independent audit of Phase 8 against the Phase 8 build plan (removed in Phase 11) and
 `AGENTS.md`: rerun every gate, check each acceptance item against real behavior,
 confirm new functions have real callers and fix findings test-first.
 **Gate:** every Phase 8 acceptance box is verified, not only ticked.
@@ -1535,12 +1535,36 @@ Phase 11 outcome (2026-10-06).
   artifacts and created the GitHub release. SHA-256 of the published files:
   `8ddb95c7088164eeeee757aa13c8dfc669ef51679071a1e29ecfb057dca831c7` (wheel),
   `22a077088ee17047d4bf12fd8a9fe7dfee2b8da007d42a90bb785e41994f8f98` (sdist).
-- **PyPI upload is pending one step by the owner.** The `pypi` job failed with
-  `invalid-publisher` because PyPI has no trusted publisher for this workflow
-  yet. Adding one needs the owner's PyPI login, which an agent may not use.
-  Once it is added (owner `MMALI3287`, repository `vibewatt`, workflow
-  `release.yml`, environment `pypi`), re-running the failed job publishes the
-  same checked artifacts.
+- **PyPI upload.** The first `pypi` job failed with `invalid-publisher`
+  because PyPI had no trusted publisher for this workflow. The owner added it
+  (owner `MMALI3287`, repository `vibewatt`, workflow `release.yml`, environment
+  `pypi`) and the job was re-run. PyPI serves 0.4.0 with the SHA-256 sums above,
+  and `uvx --from vibewatt==0.4.0 vibewatt --help` runs from a clean cache.
+
+Open-source readiness (2026-10-06, Claude Code).
+
+A sweep of phases 1 to 11 found every phase gate recorded and passing (464
+pytest, 35 vitest, production build) and no stubs or TODO markers in the code.
+The changes below prepare the repository for outside contributors.
+
+- **Removed `docs/AUDIT-2026-09-22.md`.** Why: a 1,600-line working record of
+  the phase 1-6 audit. Every finding was fixed in Phase 6.5 and is guarded by a
+  maintained test. Section 11 keeps one line per finding. References now say
+  the report was removed in Phase 11.
+- **Removed `docs/COMPLETION-QUESTIONS.md`.** Why: the agent build plan for
+  Phase 8, which is complete. It also held counts taken from the developer's own
+  logs. Open items live in `DEFERRED.md`, which now frames them as contributions
+  waiting on data.
+- **Replaced the real API message and request ids** in the section 2.2 JSONL
+  example with placeholders.
+- The source archive now has an explicit `only-include` list. Why: Hatch honours
+  only the root `.gitignore`, so a local `uv build` packed two stale 0.3.0
+  artifacts from an ignored folder. The published 0.4.0 archive was built in CI
+  and is not affected.
+- Added `SECURITY.md` (private vulnerability reporting), `CODE_OF_CONDUCT.md`
+  (Contributor Covenant 2.1), issue forms, a pull request template and a
+  Dependabot configuration capped at three grouped PRs per ecosystem.
+- README: PyPI, CI and license badges and a fuller contributing section.
 
 ## 9. Non-goals
 
@@ -1584,7 +1608,7 @@ Every one of these produced a wrong number or a broken page during earlier work.
 12. Longest-prefix model lookup → a new model id silently priced as an older
     sibling (`claude-opus-4-9` as Opus 4 at $15/$75). Look up exact ids only.
 13. Trusting the desktop app's or `/usage` Stats token totals as ground truth →
-    about 2.7x overcount (raw line sums, no dedup). See `docs/AUDIT-2026-09-22.md`.
+    about 2.7x overcount (raw line sums, no dedup). See the 2026-09-22 audit report (removed in Phase 11).
 
 Trap 6 is version-dependent: `cleanupPeriodDays: 0` fails validation on Claude
 Code 2.1.89 and later (section 2.4).
@@ -1680,7 +1704,7 @@ The dated entries below are retained as history; resolved items are not active w
 
 ### Researched, not scheduled (2026-09-22)
 
-Evidence and sources are in `docs/AUDIT-2026-09-22.md` and the research notes.
+Evidence and sources are in the 2026-09-22 audit report (removed in Phase 11) and the research notes.
 The user chose to schedule only the stats reconciliation from this list.
 
 - **Pricing completeness.** These change numbers for some users:
@@ -1721,7 +1745,7 @@ The user chose to schedule only the stats reconciliation from this list.
 ### Audit 2026-09-22 findings
 
 One line per finding: ID, severity and the phase that fixes it. Evidence,
-repro and suggested fix are in `docs/AUDIT-2026-09-22.md`.
+repro and suggested fix are in the 2026-09-22 audit report (removed in Phase 11).
 
 - A-001 [critical, 6.5b] history.json rollup permanently loses usage when a day is partially pruned (session spanning midnight, resumed/forked files)
 - A-002 [high, 6.5b] Restored history days show unknown-model usage as $0 and drop the unpriced flag

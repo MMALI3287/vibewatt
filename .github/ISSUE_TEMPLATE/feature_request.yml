@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest a feature or a new provider
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What you are trying to find out or do. Say where the current tool falls short.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What you would like vibewatt to do. For a new provider, say where its usage is stored on disk and whether you can share a sanitized sample.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I read docs/DEFERRED.md and the non-goals in docs/PLAN.md section 9
+          required: true
