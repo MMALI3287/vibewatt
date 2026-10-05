@@ -1,0 +1,47 @@
+name: Pricing drift
+on:
+  schedule:
+    # Mondays 00:17 UTC. New models and rate changes surface within a week.
+    - cron: "17 0 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.27"
+          python-version: "3.11"
+      # pricing.py is standard library only, so no dependency or frontend build.
+      - id: check
+        run: |
+          set +e
+          PYTHONPATH=. uv run --no-project python scripts/pricing_drift.py > drift.txt
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+          cat drift.txt
+      - if: steps.check.outputs.status == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Pricing drift: built-in rates differ from the community table"
+          {
+            echo "The weekly check found differences between \`vibewatt/pricing.py\` BUILTIN and LiteLLM."
+            echo "Verify each line against https://platform.claude.com/docs/en/about-claude/pricing before changing a rate."
+            echo
+            echo '```'
+            cat drift.txt
+            echo '```'
+          } > body.md
+          number=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --body-file body.md
+          else
+            gh issue create --title "$title" --body-file body.md
+          fi
+      - if: steps.check.outputs.status != '0' && steps.check.outputs.status != '1'
+        run: exit 1

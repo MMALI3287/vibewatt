@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timedelta
 
-from ..pricing import normalize, provider_specific
+from ..pricing import normalize, provider_specific, remote_window
 from .models import Finding
 
 
@@ -104,11 +104,19 @@ def local(conn: sqlite3.Connection, now: datetime) -> list[dict]:
     findings = []
     for row in rows:
         model = normalize(row["model"].replace("[1m]", ""))
-        if model not in STANDARD_MODELS:
+        listed = remote_window(model)
+        if model not in STANDARD_MODELS and listed is None:
             continue
-        native = model in NATIVE_1M and not provider_specific(row["model"])
-        wide = native or "[1m]" in row["model"] or row["peak"] > 200_000
-        maximum = 1_000_000 if wide else 200_000
+        first_party = not provider_specific(row["model"])
+        if model not in STANDARD_MODELS:
+            # A model newer than our table: trust the community-listed window.
+            maximum = listed if first_party else min(listed, 200_000)
+            if row["peak"] > maximum:
+                maximum = listed
+        else:
+            native = model in NATIVE_1M and first_party
+            wide = native or "[1m]" in row["model"] or row["peak"] > 200_000
+            maximum = 1_000_000 if wide else 200_000
         ratio = row["prompt"] / maximum
         if ratio <= 0.7:
             continue

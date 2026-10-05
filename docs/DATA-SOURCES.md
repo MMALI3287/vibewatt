@@ -65,6 +65,24 @@ from a page request unless noted.
 | Service status | GET `status.claude.com/api/v2/summary.json` | nothing | 512 KiB, 3 s total | dashboard banner, cached 5 min; not when offline |
 | AI weekly summary | POST `api.anthropic.com/v1/messages` | `ANTHROPIC_API_KEY`, weekly aggregates | 64 KiB each way, 15 s | a button click with `ai_summary.enabled`; off by default |
 
+### Rates over time
+
+A response is priced at the rate in effect on its UTC date. Verified dated
+built-in rates live in `BUILTIN_PERIODS` and outrank the flat `BUILTIN` table.
+For models only the community table knows, every refresh records a rate change
+in `pricing-history.json` next to the cache, dated by when the table was fetched.
+A later discount or price rise therefore never reprices older usage. Usage older
+than the first observation takes the earliest recorded rate, since nothing older
+exists. The file keeps at most 64 changes per model, always keeping the first.
+Models newer than the built-in table take their context window from the
+community table's `max_input_tokens` for local context nudges.
+
+`vibewatt doctor` warns when the community table is more than 7 days old. A
+weekly GitHub Actions job (`.github/workflows/pricing-drift.yml`) compares the
+built-in table with the community table and opens or updates one issue when an
+Anthropic model is missing or a rate differs. The issue asks for verification
+against the official pricing page; nothing changes a rate automatically.
+
 ## Provenance and freshness
 
 The dashboard labels shared groups of figures by origin. Local token counts are

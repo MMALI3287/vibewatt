@@ -1373,6 +1373,15 @@ Audit record (2026-10-05, Claude Code):
   cleanup PR with their own removal records.
 - Branch protection still requires only the Linux and Windows checks. Adding
   `verify (macos-latest)` is pending the user's confirmation.
+- Dated pricing (2026-10-05, user request): community rates are now recorded
+  as dated changes in `pricing-history.json`, so a discount or price change
+  applies only from the day it is observed instead of repricing all history.
+  `BUILTIN_PERIODS` holds verified dated built-in rates. `doctor` warns on a
+  community table older than 7 days. A weekly drift workflow opens one issue
+  when built-in and community rates disagree. Models newer than the built-in
+  table use the community context window for nudges. Its first live run flags
+  `claude-mythos-preview`: built-in $25/$125 from Anthropic's Glasswing page
+  versus community $10/$50. That is left for the user to decide.
 - No file, table, flag or dependency was removed in this change.
 
 ### Phase 10: More providers (planned)
