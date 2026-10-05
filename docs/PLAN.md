@@ -1333,6 +1333,18 @@ No service, command or usage data was removed.
 confirm new functions have real callers and fix findings test-first.
 **Gate:** every Phase 8 acceptance box is verified, not only ticked.
 
+Dead code found by the caller sweep (2026-10-05). Each function was grepped
+across `vibewatt/`, `web/src`, `tests/` and `scripts/` before removal:
+
+- **Removed `terminal.hour_histogram()`.** Why: no caller anywhere. No CLI
+  command or report rendered it, so it was untested output nobody could see.
+- **Removed `analysis.alerts._time()`.** Why: no caller anywhere. Alert code
+  converts instants inline, so the helper was a leftover.
+- **Removed `store.upsert_quota_samples()`.** Why: a one-line wrapper over
+  `quota.record()` whose only callers were two tests in `tests/test_store.py`.
+  Production writes quota samples through `quota.record()` directly. Those tests
+  now call `quota.record()`, so they cover the path production uses.
+
 ### Phase 10: More providers (planned)
 
 **Do:** Gemini CLI/Antigravity usage and ChatGPT/Codex CLI usage, including
