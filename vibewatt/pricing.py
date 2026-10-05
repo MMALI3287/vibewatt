@@ -24,7 +24,7 @@ import re
 import time
 import urllib.error
 import urllib.request
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
 
 MILLION = 1_000_000
@@ -103,10 +103,22 @@ FAST_CURRENT_START = {
     "claude-opus-5-5": "2026-09-24",
 }
 
+# Verified dated built-in rates (discounts, price changes): model ->
+# ((start, end, Rate), ...), UTC days, end exclusive. Checked before BUILTIN so
+# a response is priced at the rate in effect when it happened.
+BUILTIN_PERIODS: dict[str, tuple[tuple[str, str, Rate], ...]] = {}
+
 GEO_US_MULTIPLIER = 1.1
 WEB_SEARCH_PER_CALL = 10.0 / 1000
 
 _remote: dict[str, Rate] | None = None
+# Every remote rate change observed, so a later discount never reprices older
+# usage: model -> [(first UTC day seen, Rate), ...], oldest first.
+_history: dict[str, list[tuple[str, Rate]]] = {}
+_windows: dict[str, int] = {}
+# Rates change a few times a year; the cap only stops a corrupt or hostile
+# table from growing the file without limit. The oldest entry is never dropped.
+HISTORY_PER_MODEL = 64
 
 
 def fingerprint(overrides: dict | None = None) -> str:
@@ -119,6 +131,8 @@ def fingerprint(overrides: dict | None = None) -> str:
         "fast_current_start": FAST_CURRENT_START,
         "long_context": LONG_CONTEXT,
         "remote": _remote or {},
+        "history": _history,
+        "builtin_periods": BUILTIN_PERIODS,
         "overrides": overrides or {},
         "geo_us": GEO_US_MULTIPLIER,
         "web_search": WEB_SEARCH_PER_CALL,
@@ -154,6 +168,79 @@ def provider_specific(model: str) -> bool:
     """True for Bedrock and Vertex spellings, whose limits can differ from the API."""
     m = model.strip().lower()
     return bool(_PROVIDER.match(m) or "@" in m or _SUFFIXES[2].search(m))
+
+
+def _history_path():
+    from .config import data_dir
+
+    return data_dir() / "pricing-history.json"
+
+
+def _load_history() -> dict[str, list[tuple[str, Rate]]]:
+    try:
+        raw = json.loads(_history_path().read_text(encoding="utf-8"))
+        return {
+            str(model): [(str(day), Rate(*map(float, rate))) for day, rate in entries]
+            for model, entries in raw.items()
+        }
+    except (OSError, ValueError, TypeError, AttributeError):
+        return {}
+
+
+def _record_history(rates: dict[str, Rate], day: str) -> None:
+    global _history
+    if not _history:
+        _history = _load_history()
+    changed = False
+    for model, rate in rates.items():
+        entries = _history.setdefault(model, [])
+        if entries and entries[-1][1] == rate:
+            continue
+        if entries and day < entries[-1][0]:
+            continue  # an older cache cannot rewrite what came after it
+        if entries and day == entries[-1][0]:
+            entries[-1] = (day, rate)
+        else:
+            entries.append((day, rate))
+        if len(entries) > HISTORY_PER_MODEL:
+            del entries[1]
+        changed = True
+    if changed:
+        path = _history_path()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(_history), encoding="utf-8")
+        except OSError:
+            pass
+
+
+def _remote_at(model: str, ts: datetime | None) -> Rate | None:
+    entries = _history.get(model)
+    if not entries:
+        return _remote.get(model) if _remote else None
+    if ts is None:
+        return entries[-1][1]
+    day = ts.astimezone(UTC).date().isoformat()
+    # Usage older than the first observation gets the earliest known rate.
+    rate = entries[0][1]
+    for start, candidate in entries:
+        if start <= day:
+            rate = candidate
+    return rate
+
+
+def remote_window(model: str | None) -> int | None:
+    """The context window the community table lists, for models we do not list."""
+    m = normalize(model)
+    return _windows.get(m) if m else None
+
+
+def cache_age_days(now: datetime | None = None) -> float | None:
+    try:
+        mtime = _cache_path().stat().st_mtime
+    except OSError:
+        return None
+    return ((now or datetime.now(UTC)).timestamp() - mtime) / 86400
 
 
 def _cache_path():
@@ -237,9 +324,21 @@ def _parse_remote(payload: dict) -> dict[str, Rate]:
     return out
 
 
+def _parse_windows(payload: dict) -> dict[str, int]:
+    out: dict[str, int] = {}
+    for name, entry in payload.items():
+        if not isinstance(entry, dict) or entry.get("litellm_provider") != "anthropic":
+            continue
+        window = entry.get("max_input_tokens")
+        key = normalize(name)
+        if key and type(window) is int and 0 < window <= 100_000_000:
+            out[key] = window
+    return out
+
+
 def refresh(offline: bool = False) -> int:
     """Populate the remote gap-filling table. Returns how many models it holds."""
-    global _remote
+    global _remote, _windows
     payload = _load_remote_cache()
     if payload is None and not offline:
         payload = _fetch_remote()
@@ -248,6 +347,13 @@ def refresh(offline: bool = False) -> int:
         # remote-only model to unpriced while offline. Stale rates beat none.
         payload = _load_remote_cache(allow_stale=True)
     _remote = _parse_remote(payload) if payload else {}
+    _windows = _parse_windows(payload) if payload else {}
+    if _remote:
+        age = cache_age_days()
+        seen = datetime.now(UTC) - timedelta(days=age or 0)
+        _record_history(_remote, seen.date().isoformat())
+    elif not _history:
+        _history.update(_load_history())
     return len(_remote)
 
 
@@ -298,10 +404,15 @@ def rate_for(
             rate = FAST_MODE.get(m)
         if rate is None:
             return None
+    if rate is None and m in BUILTIN_PERIODS and ts is not None:
+        day = ts.astimezone(UTC).date().isoformat()
+        rate = next(
+            (r for start, end, r in BUILTIN_PERIODS[m] if start <= day < end), None
+        )
     if rate is None:
         rate = BUILTIN.get(m)
-    if rate is None and _remote:
-        rate = _remote.get(m)
+    if rate is None:
+        rate = _remote_at(m, ts)
     if rate is None:
         return None
     if not fast and prompt_tokens > 200_000 and ts is not None:

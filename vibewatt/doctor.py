@@ -36,6 +36,27 @@ def _claude_settings() -> tuple[Path | None, dict]:
         return (path if path.exists() else None), {}
 
 
+STALE_PRICING_DAYS = 7
+
+
+def pricing_cache_lines(say) -> None:
+    """A stale community table hides new models and discounts; say so."""
+    from . import pricing
+
+    age = pricing.cache_age_days()
+    say()
+    say("  pricing")
+    if age is None:
+        say("    community table not downloaded yet; built-in rates only")
+    elif age > STALE_PRICING_DAYS:
+        say(
+            f"    WARNING pricing cache is {age:.0f} days old; run 'vibewatt sync' online"
+            " so new models and rate changes are priced"
+        )
+    else:
+        say(f"    community table refreshed {age:.1f} days ago")
+
+
 def run(cfg: dict, tz) -> int:
     today = datetime.now(tz).date()
     out = sys.stdout
@@ -202,6 +223,8 @@ def run(cfg: dict, tz) -> int:
                 f"    history.json import: {imported['n']} day/model row(s), "
                 f"{imported['lo']} .. {imported['hi']} (fills only what the store lacks)"
             )
+
+    pricing_cache_lines(say)
 
     # --- account level -------------------------------------------------------
     say()
