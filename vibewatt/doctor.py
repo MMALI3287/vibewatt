@@ -18,8 +18,16 @@ from pathlib import Path
 
 from . import quota
 from .config import data_dir, user_config_dir
-from .ingest import claude_code, codex, copilot, discover
-from .sources import CLAUDE_CODE, CLAUDE_SOURCES, CODEX, COPILOT, COWORK, load
+from .ingest import antigravity, claude_code, codex, copilot, discover
+from .sources import (
+    ANTIGRAVITY,
+    CLAUDE_CODE,
+    CLAUDE_SOURCES,
+    CODEX,
+    COPILOT,
+    COWORK,
+    load,
+)
 
 
 def _claude_settings() -> tuple[Path | None, dict]:
@@ -120,7 +128,11 @@ def run(cfg: dict, tz) -> int:
         f"    {'copilot':<12} looked in: {', '.join(str(r) for r in copilot.user_dirs())}"
         " (override VIBEWATT_VSCODE_USER_DIRS)"
     )
-    for source in (CLAUDE_CODE, COWORK, CODEX, COPILOT):
+    say(
+        f"    {'antigravity':<12} looked in: {', '.join(str(r) for r in antigravity.data_dirs())}"
+        " (override ANTIGRAVITY_DATA_DIR)"
+    )
+    for source in (CLAUDE_CODE, COWORK, CODEX, COPILOT, ANTIGRAVITY):
         found = by_source.get(source, [])
         say(f"    {source:<12} {len(found)} file(s)")
 

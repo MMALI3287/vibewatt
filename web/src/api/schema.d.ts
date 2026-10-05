@@ -1402,7 +1402,7 @@ export interface operations {
                 year?: number | null;
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "antigravity" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1532,7 +1532,7 @@ export interface operations {
                 include_dismissed?: boolean;
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "antigravity" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1571,7 +1571,7 @@ export interface operations {
                 include_dismissed?: boolean;
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "antigravity" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1680,7 +1680,7 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "antigravity" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1716,7 +1716,7 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "antigravity" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1754,7 +1754,7 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "antigravity" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1792,7 +1792,7 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "antigravity" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1835,7 +1835,7 @@ export interface operations {
                 q?: string | null;
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "antigravity" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1923,7 +1923,7 @@ export interface operations {
                 limit?: number;
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "antigravity" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1999,7 +1999,7 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "antigravity" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -2035,7 +2035,7 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "antigravity" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -2169,7 +2169,7 @@ export interface operations {
                 format?: "json" | "csv";
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "antigravity" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";

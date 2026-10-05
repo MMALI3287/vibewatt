@@ -2,8 +2,8 @@ import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 
 export type Metric = "cost" | "tokens";
-export type Source = "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "web";
-const SOURCES: readonly Source[] = ["all", "claude", "claude-code", "cowork", "codex", "copilot", "web"];
+export type Source = "all" | "claude" | "claude-code" | "cowork" | "codex" | "copilot" | "antigravity" | "web";
+const SOURCES: readonly Source[] = ["all", "claude", "claude-code", "cowork", "codex", "copilot", "antigravity", "web"];
 const isSource = (v: string | null): v is Source => v !== null && (SOURCES as readonly string[]).includes(v);
 
 /** A select or URL value as a Source; anything the API would reject means all. */

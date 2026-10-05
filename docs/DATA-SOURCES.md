@@ -397,3 +397,65 @@ stored 29 Copilot responses: Haiku 4.5 (16, $1.05 estimated), `gpt-5.4-mini`
 (7, unpriced: May 2026, before per-token billing, with no input counts),
 `mai-code-1.1-flash` (5, $0.23 billed) and `gpt-5.3-codex` (1, $0.26 billed).
 Drops: 2 `no_usage`, 1 `no_model`. Plan readings: two GitHub logins.
+
+## Antigravity (Phase 10, observed 2026-10-05)
+
+Source: `~/.gemini/{antigravity,antigravity-cli,antigravity-ide,antigravity-backup}/conversations/*.db`
+and `~/.config/antigravity/conversations/*.db`. `ANTIGRAVITY_DATA_DIR`
+(path-separated folders that contain `conversations/`) overrides them. Each
+conversation is a SQLite database, opened read-only so a running Antigravity is
+undisturbed. A sync also notices changes that so far exist only in the `-wal`
+file. Checked against the local conversation while it grew to 127 generations
+on 2026-10-05.
+
+**No published schema.** Google documents plans and the `/usage` quota command
+([plans](https://antigravity.google/docs/plans/),
+[/usage](https://antigravity.google/docs/cli/commands/usage/)) but not the
+storage. The field map below agrees across four open parsers (ccusage, tokscale
+junhoyeo/tokscale#713, codeburn, agentsview kenn-io/agentsview#619) and was
+checked locally:
+
+| Field | Meaning | Local check |
+|---|---|---|
+| `gen_metadata.data` #1.#4 | usage block of one generation | |
+| #4.#1 | model enum, not a token count | equals #1.#3 and the `MODEL_PLACEHOLDER_M318` enum on every row |
+| #4.#2 | fresh input | often far below #5, so it excludes the cache |
+| #4.#5 | cache read | appears once a cached prefix exists |
+| #4.#3 | output, thinking included | |
+| #4.#9, #4.#10 | visible output, thinking | #9 + #10 = #3 on every local row |
+| #4.#11 | response id | one per generation, no repeats |
+| #1.#19 | model name (`gemini-3.8-flash-n`) | |
+
+`#4.#6` (always 24 locally) is unknown and not used.
+
+**Decoding.** Protobuf is read one level at a time by known field numbers. A
+recursive decoder can read a response id that happens to be valid protobuf as a
+nested message, which is how a peer parser once lost ids and another read a
+nanosecond counter as an output count. Counts above 2,000,000 are dropped as
+`implausible_count`. A row over 64 MiB is skipped (`too_large`) without being
+loaded; the largest local row is 290 KB.
+
+**Identity and time.** A response is its #11 id. A backup copy of a
+conversation therefore counts once. The time is the completion time of the
+planner step whose `metadata` #9 carries the same id (`#8`, then `#7`, then `#6`,
+epoch seconds). Every local generation had one. Without it the conversation's
+start time (`trajectory_metadata_blob` #2.#1) is used and the row is counted as
+`approximate_time`. The project is the workspace folder in
+`trajectory_metadata_blob` #1.#1; the session is #6.
+
+**Rates.** `gemini-3.8-flash`, GA 2026-09-02
+([release notes](https://ai.google.dev/gemini-api/docs/changelog)):
+$0.75 input, $0.075 cached, $3.75 output (thinking included) through
+2026-12-31, then $1.50, $0.15 and $7.50
+([pricing](https://ai.google.dev/gemini-api/docs/pricing), retrieved
+2026-10-05). Context-cache storage is billed per hour and is not in local data.
+Antigravity reports `gemini-3.8-flash-n`; the API lists no such id. **It is
+priced as `gemini-3.8-flash`, an assumption** (`pricing.ALIASES`). Antigravity
+bills by plan quota and AI credits, so every cost is an API-equivalent estimate.
+
+**Plan readings.** Quotas come from Google's backend through `/usage`; nothing
+local holds them in a documented form, so none are imported.
+
+**Gate evidence (2026-10-05).** A sync of a copy of the real store read the
+local conversation: 127 responses, 0 drops, 0 unpriced, $1.69, every time taken
+from its step.

@@ -139,6 +139,14 @@ BUILTIN_PERIODS: dict[str, tuple[tuple[str, str, Rate], ...]] = {
     "gpt-5.3-codex": (
         ("2026-06-01", "9999-12-31", Rate(1.75, 1.75, 1.75, 0.175, 14.0)),
     ),
+    # Gemini API pricing (ai.google.dev/gemini-api/docs/pricing, retrieved
+    # 2026-10-05): promotional through 2026-12-31, standard from 2027-01-01.
+    # GA on 2026-09-02 (Gemini API release notes). Context-cache storage is
+    # billed per hour and is not in local logs, so cache writes use input.
+    "gemini-3.8-flash": (
+        ("2026-09-02", "2027-01-01", Rate(0.75, 0.75, 0.75, 0.075, 3.75)),
+        ("2027-01-01", "9999-12-31", Rate(1.50, 1.50, 1.50, 0.15, 7.50)),
+    ),
     "codex-auto-review": (
         ("2026-04-30", "9999-12-31", Rate(2.5, 2.5, 2.5, 0.25, 15.0)),
     ),
@@ -149,6 +157,16 @@ BUILTIN_PERIODS: dict[str, tuple[tuple[str, str, Rate], ...]] = {
     # cache rates for that period are not listed, so that period is not priced.
     "gpt-5.6-sol": (("2026-08-21", "2026-11-22", Rate(4.0, 5.0, 5.0, 0.40, 20.0)),),
 }
+
+# Antigravity names its model variants with a suffix the API does not list.
+# Priced as the API model they run; an assumption recorded in DATA-SOURCES.md.
+ALIASES = {
+    "gemini-3.8-flash-n": "gemini-3.8-flash",
+    "gemini-3.8-flash-high": "gemini-3.8-flash",
+}
+BUILTIN_PERIODS.update(
+    {alias: BUILTIN_PERIODS[target] for alias, target in ALIASES.items()}
+)
 
 # Prompts past this size reprice the whole request: 2x input and cache rates,
 # 1.5x output (the model pages above). Only models whose page states the
