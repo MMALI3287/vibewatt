@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime, timedelta
 
-from ..pricing import normalize
+from ..pricing import normalize, provider_specific
 from .models import Finding
 
 
@@ -64,11 +64,29 @@ STANDARD_MODELS = {
     "claude-opus-4-7",
     "claude-opus-4-8",
     "claude-opus-5",
+    "claude-opus-5-5",
+    "claude-sonnet-5-5",
     "claude-fable-5",
     "claude-fable-5-1",
     "claude-mythos-preview",
     "claude-mythos-5",
     "claude-mythos-5-1",
+}
+
+
+# Retrieved 2026-10-05: https://code.claude.com/docs/en/model-config#extended-context
+# On the Anthropic API these run with the 1M window on every plan, with no
+# [1m] variant. Provider ids (Bedrock, Vertex) may run at 200K, so they keep
+# the conservative window until the session shows larger prompts.
+NATIVE_1M = {
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-opus-5-5",
+    "claude-sonnet-5",
+    "claude-sonnet-5-5",
+    "claude-fable-5",
+    "claude-fable-5-1",
 }
 
 
@@ -88,9 +106,9 @@ def local(conn: sqlite3.Connection, now: datetime) -> list[dict]:
         model = normalize(row["model"].replace("[1m]", ""))
         if model not in STANDARD_MODELS:
             continue
-        maximum = (
-            1_000_000 if "[1m]" in row["model"] or row["peak"] > 200_000 else 200_000
-        )
+        native = model in NATIVE_1M and not provider_specific(row["model"])
+        wide = native or "[1m]" in row["model"] or row["peak"] > 200_000
+        maximum = 1_000_000 if wide else 200_000
         ratio = row["prompt"] / maximum
         if ratio <= 0.7:
             continue

@@ -51,6 +51,10 @@ BUILTIN: dict[str, Rate] = {
     "claude-3-7-sonnet": Rate(3, 3.75, 6, 0.30, 15),
     # Retrieved 2026-09-26: https://www.anthropic.com/project/glasswing
     "claude-mythos-preview": Rate(25, 31.25, 50, 2.50, 125),
+    # Retrieved 2026-10-05: https://platform.claude.com/docs/en/about-claude/pricing
+    # Opus 5.5 cache reads are 0.05x base input, not 0.1x.
+    "claude-opus-5-5": Rate(4.0, 5.0, 8.0, 0.20, 20.0),
+    "claude-sonnet-5-5": Rate(2.0, 2.50, 4.0, 0.20, 10.0),
     "claude-fable-5-1": Rate(10.0, 12.50, 20.0, 0.25, 50.0),
     "claude-mythos-5-1": Rate(10.0, 12.50, 20.0, 0.25, 50.0),
     "claude-fable-5": Rate(10.0, 12.50, 20.0, 1.00, 50.0),
@@ -75,6 +79,8 @@ BUILTIN: dict[str, Rate] = {
 
 # Fast mode replaces base input/output pricing; cache multipliers ride on top.
 FAST_MODE: dict[str, Rate] = {
+    # Retrieved 2026-10-05, pricing page above: $8/$40, cache read 0.05x input.
+    "claude-opus-5-5": Rate(8.0, 10.0, 16.0, 0.40, 40.0),
     "claude-opus-5": Rate(10.0, 12.50, 20.0, 1.00, 50.0),
     "claude-opus-4-8": Rate(10.0, 12.50, 20.0, 1.00, 50.0),
 }
@@ -88,8 +94,14 @@ FAST_PERIODS = {
     "claude-opus-4-7": (("2026-05-12", "2026-07-24", Rate(30, 37.5, 60, 3, 150)),),
 }
 
-# Launch dates: same release-notes source, retrieved 2026-09-26.
-FAST_CURRENT_START = {"claude-opus-4-8": "2026-05-28", "claude-opus-5": "2026-07-24"}
+# Launch dates: same release-notes source, retrieved 2026-09-26. Opus 5.5 is
+# listed under 2026-09-24 (retrieved 2026-10-05). Local logs show it a day
+# earlier; fast turns before the listed date stay unpriced rather than guessed.
+FAST_CURRENT_START = {
+    "claude-opus-4-8": "2026-05-28",
+    "claude-opus-5": "2026-07-24",
+    "claude-opus-5-5": "2026-09-24",
+}
 
 GEO_US_MULTIPLIER = 1.1
 WEB_SEARCH_PER_CALL = 10.0 / 1000
@@ -136,6 +148,12 @@ def normalize(model: str | None) -> str | None:
     for suffix in _SUFFIXES:
         m = suffix.sub("", m)
     return m or None
+
+
+def provider_specific(model: str) -> bool:
+    """True for Bedrock and Vertex spellings, whose limits can differ from the API."""
+    m = model.strip().lower()
+    return bool(_PROVIDER.match(m) or "@" in m or _SUFFIXES[2].search(m))
 
 
 def _cache_path():
@@ -327,8 +345,10 @@ def context_premium_unknown(turn) -> bool:
         "claude-opus-4-7",
         "claude-opus-4-8",
         "claude-opus-5",
+        "claude-opus-5-5",
         "claude-sonnet-4-6",
         "claude-sonnet-5",
+        "claude-sonnet-5-5",
         "claude-fable-5",
         "claude-fable-5-1",
         "claude-mythos-5",

@@ -151,11 +151,21 @@ is retained when source history disappears; duplicate timestamp/project pairs
 are ignored. Activity does not imply measured billable usage.
 
 Local context uses stored per-response input/cache counters, never rate-limit
-blocks. The conservative capacity evidence rule is specified in
-`COMPLETION-QUESTIONS.md`; it is not a claim that every model API is limited to
-200K. Official context and Claude Code model configuration sources retrieved
-2026-09-29: https://platform.claude.com/docs/en/build-with-claude/context-windows
-and https://code.claude.com/docs/en/model-config#extended-context.
+blocks. On the Anthropic API, Opus 4.7 and later, Sonnet 5 and later and the
+Fable models run with a native 1M window on every plan, so first-party ids of
+those models use 1M. Provider ids (Bedrock, Vertex) can run at 200K and keep the
+200K window until the session shows a larger prompt, as do models that reach 1M
+only through a `[1m]` variant. A session started with
+`CLAUDE_CODE_DISABLE_1M_CONTEXT=1` compacts at 200K, which local logs do not
+record; its nudge stays quiet rather than firing early. Sources retrieved
+2026-10-05: https://code.claude.com/docs/en/model-config#extended-context and
+https://platform.claude.com/docs/en/build-with-claude/context-windows.
+
+Opus 5.5 and Sonnet 5.5 rates were added in Phase 9 (retrieved 2026-10-05 from
+https://platform.claude.com/docs/en/about-claude/pricing). Opus 5.5 cache reads
+cost 0.05x base input. Its fast mode ($8/$40) is priced from 2026-09-24, the
+release-notes date. Local logs show Opus 5.5 a day earlier; fast turns from that
+day stay unpriced. Both models use standard pricing across the full 1M window.
 
 ## Account and machine transfer
 
