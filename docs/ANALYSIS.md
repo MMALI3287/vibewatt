@@ -109,8 +109,9 @@ after dedup.
 Overview shows local context nudges from the latest main-thread response of each
 session active within 30 minutes. Input plus all cache reads/writes forms the
 prompt size. It reuses the cloud thresholds: above 70% warning and above 85%
-urgent. Capacity is conservatively 200K unless the model id includes `[1m]` or a
-prior main-thread response in that session exceeded 200K. Unknown models receive
+urgent. Capacity is 1M for first-party ids of models with a native 1M window
+(Opus 4.7+, Sonnet 5+, Fable). Otherwise it is 200K unless the model id includes
+`[1m]` or a prior main-thread response in that session exceeded 200K. Unknown models receive
 no guessed denominator. Quota and sidechain activity never affect the nudge.
 The API reads stored responses at request time so idle sessions expire.
 
