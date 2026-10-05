@@ -1349,7 +1349,10 @@ Audit record (2026-10-05, Claude Code):
   2026-09-23) and `claude-sonnet-5-5` (from 2026-10-01) were in retained data
   but not in `BUILTIN`. A copy of the real store had 2,439 of 11,395 responses
   unpriced and cost reported as $2,467.38. Opus 5.5 was seen before Phase 8
-  closed, so the "every model seen in retained data" check missed it. Added both
+  closed, so the "every model seen in retained data" check missed it. The copy
+  was synced with `--offline` and a pricing cache last written 2026-09-15. An
+  online sync would have filled both rates from the LiteLLM table, which lists
+  them correctly; the built-in table is still the required anchor. Added both
   rates and Opus 5.5 fast mode from its 2026-09-24 release-note date. Both ids
   joined the long-context exemption. After repricing: 11,411 responses, 0 unpriced,
   $2,788.28 (the 16 extra responses were written during the audit).
