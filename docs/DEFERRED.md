@@ -1,14 +1,16 @@
 # Deferred work
 
 Reconciled against the code and `PLAN.md` on 2026-09-26. Every item is now
-scheduled into a phase or closed with a reason. The build plan with acceptance
-checks is [COMPLETION-QUESTIONS.md](COMPLETION-QUESTIONS.md). Historical audit
-findings remain in `PLAN.md` as evidence, not as an active backlog.
+scheduled into a phase or closed with a reason. Historical audit findings remain
+in `PLAN.md` as evidence, not as an active backlog.
 
 Phase 8 has no active backlog rows. Its completed items and removal reasons are
 recorded under "Phase 8" in `PLAN.md`.
 
-## Scheduled for Phase 10 (more providers)
+## Open, waiting on a prerequisite
+
+Phase 10 closed without these because the data they need could not be observed.
+Each is a good contribution for someone who has that data.
 
 | Item | Prerequisite |
 |---|---|
@@ -18,8 +20,7 @@ recorded under "Phase 8" in `PLAN.md`.
 
 ## Closed on 2026-09-26
 
-Reasons and reopen triggers are in `PLAN.md` under "Phase 8" and in
-`COMPLETION-QUESTIONS.md`.
+Reasons and reopen triggers are in `PLAN.md` under "Phase 8".
 
 - Advisor-model pricing (the detection guard stays in Phase 8)
 - Opt-in cloud session listing

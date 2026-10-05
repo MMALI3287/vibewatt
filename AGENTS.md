@@ -9,8 +9,8 @@ it. `docs/PLAN.md` is the spec and the phase plan. `docs/DATA-SOURCES.md` says
 where every number comes from. `docs/ANALYSIS.md` explains how findings, alerts
 and Wrapped are computed.
 
-Phases 1 to 10 are complete; Phase 10 added Codex, Copilot Chat and Antigravity.
-Phase 11, the public launch, is recorded in `docs/PLAN.md`. Releases are cut by
+Phases 1 to 11 are complete. Phase 10 added Codex, Copilot Chat and Antigravity.
+Phase 11 published 0.4.0 to PyPI. Open work is in `docs/DEFERRED.md`. Releases are cut by
 pushing a version tag; the procedure is in `CONTRIBUTING.md`.
 
 ## Commands

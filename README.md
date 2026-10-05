@@ -1,5 +1,9 @@
 # vibewatt
 
+[![PyPI](https://img.shields.io/pypi/v/vibewatt)](https://pypi.org/project/vibewatt/)
+[![CI](https://github.com/MMALI3287/vibewatt/actions/workflows/ci.yml/badge.svg)](https://github.com/MMALI3287/vibewatt/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 Token usage, cost and plan utilization for **Claude Code** and **Claude Cowork**,
 plus **Codex**, **GitHub Copilot Chat** and **Google Antigravity**, read from data
 already on your machine. No account, no API key, no telemetry.
@@ -147,8 +151,7 @@ vibewatt import        merge a .vwx archive from another machine
 
 `status --json` and `quota --json` never sync logs or fetch network data.
 See [the versioned agent contract and exit codes](docs/AGENT-JSON.md).
-See [the Phase 8 build plan](docs/COMPLETION-QUESTIONS.md) for the finite
-backlog after the completed phases.
+Open work and its prerequisites are in [docs/DEFERRED.md](docs/DEFERRED.md).
 
 Shared flags: `--source {all,claude,claude-code,cowork,codex,copilot,antigravity}`, `--since YYYY-MM-DD`, `--days N`,
 `--tz Asia/Tokyo`, `--day-start-hour H`, `--weeks N`, `--session-hours N`,
@@ -251,7 +254,12 @@ every view and export.
 
 ## Contributing
 
-Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md)
+and the rules in [AGENTS.md](AGENTS.md). Open work that needs someone with the
+right data, such as Gemini CLI sessions, is listed in
+[docs/DEFERRED.md](docs/DEFERRED.md). Report security problems privately as
+described in [SECURITY.md](SECURITY.md). Everyone taking part follows the
+[code of conduct](CODE_OF_CONDUCT.md).
 
 ## License
 

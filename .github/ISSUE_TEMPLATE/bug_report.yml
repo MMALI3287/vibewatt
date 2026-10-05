@@ -1,0 +1,39 @@
+name: Bug report
+description: A number looks wrong, a command fails or the dashboard breaks
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you saw and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `vibewatt doctor`
+      description: Add `--mask-projects` to hide project names. Never paste tokens, credentials or log contents.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: vibewatt version
+      placeholder: "0.4.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [Windows, macOS, Linux]
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Affected source
+      multiple: true
+      options: [Claude Code, Cowork, Claude Code on the web, Codex, Copilot Chat, Antigravity, Not source specific]
