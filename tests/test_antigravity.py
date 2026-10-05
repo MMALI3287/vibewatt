@@ -17,7 +17,7 @@ from vibewatt.aggregate import cost_of, from_store
 from vibewatt.ingest import antigravity
 from vibewatt.sources import ANTIGRAVITY, dedupe
 
-CONVERSATION = "a763bb6a-43f2-4e01-998e-0a479d3b1b2d"
+CONVERSATION = "5c0e8a1f-2b7d-4e9a-9c3b-7a1d6f2e4b80"
 START = 1791208729  # 2026-10-05T13:58:49Z
 
 
@@ -86,7 +86,7 @@ def make_db(path: Path, gens: list[bytes], steps: list[bytes], *, workspace=True
         conn.execute("INSERT INTO steps VALUES (?,?,?,?)", (i, 15, 3, data))
     meta = [(2, pb((1, START))), (6, CONVERSATION)]
     if workspace:
-        meta.insert(0, (1, pb((1, "file:///c:/Users/dev/Projects/kenko-hub"))))
+        meta.insert(0, (1, pb((1, "file:///c:/Users/dev/Projects/demo-app"))))
     conn.execute(
         "INSERT INTO trajectory_metadata_blob VALUES ('main', ?)", (pb(*meta),)
     )
@@ -132,7 +132,7 @@ def test_each_generation_is_one_turn_with_gemini_semantics(agy):
     assert len(turns) == 2
     a, b = turns
     assert a.key == ("agy:LK3Davm0CcCc0-kPs5iQiAs", "")
-    assert a.session == CONVERSATION and a.project == "kenko-hub"
+    assert a.session == CONVERSATION and a.project == "demo-app"
     assert a.model == "gemini-3.8-flash-n"
     # #2 is fresh input, #5 cache read, #3 output including #10 thinking.
     assert (a.input, a.cache_read, a.output, a.thinking) == (13557, 0, 618, 82)

@@ -42,5 +42,9 @@ jobs:
       - run: npm run e2e
         working-directory: web
       - run: uv build
-      - run: uv run python scripts/check_build.py dist/vibewatt-0.3.0.tar.gz
-      - run: uv run python scripts/check_wheel.py dist/vibewatt-0.3.0-py3-none-any.whl --browser
+      - run: uv run python scripts/check_build.py dist/vibewatt-*.tar.gz
+        # pwsh, the Windows default, does not expand the glob.
+        shell: bash
+      - run: uv run python scripts/check_wheel.py dist/vibewatt-*-py3-none-any.whl --browser
+        # pwsh, the Windows default, does not expand the glob.
+        shell: bash

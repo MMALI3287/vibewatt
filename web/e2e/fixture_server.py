@@ -14,12 +14,13 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / "tests" / "fixtures"
 
 
-def main() -> None:
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8778
-    tmp = Path(tempfile.mkdtemp(prefix="vibewatt-e2e-"))
+def isolate(tmp: Path, setenv=os.environ.__setitem__) -> None:
+    """Point every config, data and provider path into tmp."""
     for key, sub in (
         ("CLAUDE_CONFIG_DIR", "claude"),
         ("APPDATA", "appdata"),
+        # Copilot's plan cache lives under LOCALAPPDATA on Windows.
+        ("LOCALAPPDATA", "localappdata"),
         ("XDG_CONFIG_HOME", "appdata"),
         # A separate root avoids duplicate native/override discovery on Windows and Linux.
         ("VIBEWATT_COWORK_DIR", "cowork"),
@@ -27,7 +28,13 @@ def main() -> None:
         ("HOME", "home"),
         ("USERPROFILE", "home"),
     ):
-        os.environ[key] = str(tmp / sub)
+        setenv(key, str(tmp / sub))
+
+
+def main() -> None:
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8778
+    tmp = Path(tempfile.mkdtemp(prefix="vibewatt-e2e-"))
+    isolate(tmp)
 
     layout = {
         FIXTURES / "activity.jsonl": tmp / "claude/history.jsonl",

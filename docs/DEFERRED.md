@@ -14,6 +14,7 @@ recorded under "Phase 8" in `PLAN.md`.
 |---|---|
 | Antigravity plan quotas | Served by Google's backend through `/usage`; no documented local copy. Reopen if one appears |
 | Copilot CLI usage | `~/.copilot/session-state` holds no token fields locally. Reopen if a later CLI version logs usage |
+| Gemini CLI usage | No install and no `~/.gemini/tmp/*/chats` sessions on the development machine, so the contract cannot be observed. Reopen when a real session file is available |
 
 ## Closed on 2026-09-26
 
@@ -49,5 +50,5 @@ Reasons and reopen triggers are in `PLAN.md` under "Phase 8" and in
   because the React app and typed endpoints replace their unsafe embedded renderer.
 - Tray/desktop hosting, multi-user authentication and recovery of already deleted
   transcripts remain non-goals, not promises for a later phase.
-- PyPI `vibewatt` is reserved at 0.0.1 and the GitHub repository is renamed.
-  Publishing a release is Phase 11 and needs the user's confirmation at each step.
+- PyPI `vibewatt` was reserved at 0.0.1. Phase 11 publishes 0.4.0 under the
+  user's standing instruction recorded in `PLAN.md`.
