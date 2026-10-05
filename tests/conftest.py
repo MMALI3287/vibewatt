@@ -27,6 +27,11 @@ def loopback_test_client(monkeypatch):
 @pytest.fixture(autouse=True)
 def isolated_home(tmp_path, monkeypatch):
     """No test may read the developer's real ~/.claude or write their real store."""
+    from vibewatt import pricing
+
+    # Remote rate history is process state; one test's refresh must not price another's.
+    monkeypatch.setattr(pricing, "_history", {})
+    monkeypatch.setattr(pricing, "_windows", {})
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "appdata"))

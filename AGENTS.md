@@ -9,9 +9,9 @@ it. `docs/PLAN.md` is the spec and the phase plan. `docs/DATA-SOURCES.md` says
 where every number comes from. `docs/ANALYSIS.md` explains how findings, alerts
 and Wrapped are computed.
 
-Phase 8 (backlog completion) is implemented. Its scope, acceptance checks and
-evidence are in `docs/COMPLETION-QUESTIONS.md`. Start there. The next work is the
-independent Phase 9 audit in `docs/PLAN.md`, before providers or publishing.
+Phase 8 (backlog completion) is implemented and Phase 9 (its independent audit)
+is complete. Both are recorded in `docs/PLAN.md`. The next work is Phase 10, more
+providers, in `docs/PLAN.md`. Publishing is Phase 11.
 
 ## Commands
 

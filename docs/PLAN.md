@@ -1326,7 +1326,7 @@ and add no usage or cost. An observed real cycle read 145 records / 40,638 bytes
 a repeat inserted zero and a 10-record cap stopped at 10 with truncation reported.
 No service, command or usage data was removed.
 
-### Phase 9: Verification (in progress 2026-10-05)
+### Phase 9: Verification (completed 2026-10-05)
 
 **Do:** an independent audit of Phase 8 against `COMPLETION-QUESTIONS.md` and
 `AGENTS.md`: rerun every gate, check each acceptance item against real behavior,
@@ -1371,8 +1371,23 @@ Audit record (2026-10-05, Claude Code):
   functions with none (`terminal.hour_histogram`, `alerts._time` and the
   test-only `store.upsert_quota_samples` wrapper) were removed in a separate
   cleanup PR. Their removal records follow this audit record.
-- Branch protection still requires only the Linux and Windows checks. Adding
-  `verify (macos-latest)` is pending the user's confirmation.
+- Branch protection now requires `verify (macos-latest)` alongside the Linux
+  and Windows checks (user approved 2026-10-05). The job already ran on every
+  push, so this adds no CI time.
+- Closed: every Phase 8 acceptance item was rerun against real behavior. The
+  three findings are fixed in #19, dated pricing is in #20 and the dead code
+  is removed in #21.
+- Dated pricing (2026-10-05, user request): community rates are now recorded
+  as dated changes in `pricing-history.json`, so a discount or price change
+  applies only from the day it is observed instead of repricing all history.
+  `BUILTIN_PERIODS` holds verified dated built-in rates. `doctor` warns on a
+  community table older than 7 days. A weekly drift workflow opens one issue
+  when built-in and community rates disagree. Models newer than the built-in
+  table use the community context window for nudges. Its first live run flags
+  `claude-mythos-preview`: built-in $25/$125 from Anthropic's Glasswing page
+  versus community $10/$50. Anthropic's page, rechecked 2026-10-05, still
+  states $25/$125, so the built-in rate stays and the drift check ignores that
+  exact community value as a known community error.
 - No file, table, flag or dependency was removed in this change.
 
 Dead code found by the caller sweep (2026-10-05). Each function was grepped
