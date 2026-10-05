@@ -141,9 +141,9 @@ def test_same_quota_reading_is_stored_once(tmp_path):
     reading = _quota(datetime(2026, 9, 15, 11, tzinfo=UTC))
     later = _quota(datetime(2026, 9, 15, 11, 5, tzinfo=UTC))
     with store.connect(tmp_path / "db.sqlite") as conn:
-        assert store.upsert_quota_samples(conn, reading) == 2
-        assert store.upsert_quota_samples(conn, reading) == 0
-        assert store.upsert_quota_samples(conn, later) == 2
+        assert quota.record(conn, reading) == 2
+        assert quota.record(conn, reading) == 0
+        assert quota.record(conn, later) == 2
         assert conn.execute("SELECT COUNT(*) FROM quota_samples").fetchone()[0] == 4
 
 
@@ -200,8 +200,8 @@ def test_store_from_first_phase1_attempt_gets_quota_key_and_resync(tmp_path):
         assert store.schema_version(conn) == store.SCHEMA_VERSION
         assert conn.execute("SELECT COUNT(*) FROM quota_samples").fetchone()[0] == 1
         assert conn.execute("SELECT COUNT(*) FROM files").fetchone()[0] == 0
-        store.upsert_quota_samples(conn, reading)
-        assert store.upsert_quota_samples(conn, reading) == 0
+        quota.record(conn, reading)
+        assert quota.record(conn, reading) == 0
 
 
 def test_changing_timezone_rebuckets_unchanged_files(tmp_path, logs):

@@ -1369,11 +1369,23 @@ Audit record (2026-10-05, Claude Code):
   A test now requires every priced model to have a context window entry.
 - Orphan sweep: no Phase 8 function lacks a production caller. Three older
   functions with none (`terminal.hour_histogram`, `alerts._time` and the
-  test-only `store.upsert_quota_samples` wrapper) are left for a separate
-  cleanup PR with their own removal records.
+  test-only `store.upsert_quota_samples` wrapper) were removed in a separate
+  cleanup PR. Their removal records follow this audit record.
 - Branch protection still requires only the Linux and Windows checks. Adding
   `verify (macos-latest)` is pending the user's confirmation.
 - No file, table, flag or dependency was removed in this change.
+
+Dead code found by the caller sweep (2026-10-05). Each function was grepped
+across `vibewatt/`, `web/src`, `tests/` and `scripts/` before removal:
+
+- **Removed `terminal.hour_histogram()`.** Why: no caller anywhere. No CLI
+  command or report rendered it, so it was untested output nobody could see.
+- **Removed `analysis.alerts._time()`.** Why: no caller anywhere. Alert code
+  converts instants inline, so the helper was a leftover.
+- **Removed `store.upsert_quota_samples()`.** Why: a one-line wrapper over
+  `quota.record()` whose only callers were two tests in `tests/test_store.py`.
+  Production writes quota samples through `quota.record()` directly. Those tests
+  now call `quota.record()`, so they cover the path production uses.
 
 ### Phase 10: More providers (planned)
 

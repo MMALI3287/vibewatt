@@ -799,13 +799,6 @@ def import_history(conn) -> int:
     return len(rows)
 
 
-def upsert_quota_samples(conn, quota) -> int:
-    """Record one sample per window. Returns rows newly written."""
-    from .quota import record
-
-    return record(conn, quota)
-
-
 @dataclass
 class SyncResult:
     parsed: int = 0

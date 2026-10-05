@@ -232,25 +232,3 @@ def block_block(report, color: bool = True) -> str:
             for r in rows
         ]
     return "\n".join(rows)
-
-
-def hour_histogram(report, color: bool = True) -> str:
-    """When in the day the work actually happens."""
-    if not report.by_hour:
-        return ""
-    peak = max(b.total_tokens for b in report.by_hour.values()) or 1
-    ramp = DARK_RAMP
-    rows = []
-    line = "  "
-    for hour in range(24):
-        bucket = report.by_hour.get(hour)
-        lvl = level(bucket.total_tokens if bucket else 0, peak)
-        cell = "\u2588"
-        line += (
-            f"{_fg(ramp[lvl])}{cell}{cell}{RESET}"
-            if color
-            else (cell * 2 if lvl else "..")
-        )
-    rows.append(line)
-    rows.append("  " + "".join(f"{h:<2}" if h % 3 == 0 else "  " for h in range(24)))
-    return "\n".join(rows)
