@@ -67,6 +67,8 @@ class Bucket:
 
 
 def cost_of(turn: Turn, overrides: dict | None = None) -> float | None:
+    if turn.billed_usd is not None:
+        return turn.billed_usd
     rate = rate_for(
         turn.model,
         fast=turn.fast,

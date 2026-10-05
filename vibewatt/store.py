@@ -26,7 +26,7 @@ from pathlib import Path
 from .config import clock_zone, copy_sqlite, data_dir, zone_id
 from .sources import source_clause
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -409,6 +409,15 @@ def _v12_identity(conn) -> None:
         conn.execute("DELETE FROM quota_samples")
 
 
+def _v13_billed_cost(conn) -> None:
+    # Phase 10: Copilot logs what it billed per request. It is kept apart from
+    # the estimated cost so a repricing never replaces it. NULL for every
+    # existing row, so no usage changes.
+    columns = {column[1] for column in conn.execute("PRAGMA table_info(turns)")}
+    if "billed_usd" not in columns:
+        conn.execute("ALTER TABLE turns ADD COLUMN billed_usd REAL")
+
+
 # Forward-only. Append a step and bump SCHEMA_VERSION; never drop a user's table.
 MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     2: _v2_files_and_quota_samples,
@@ -422,6 +431,7 @@ MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
     10: _v10_tool_usage,
     11: _v11_activity,
     12: _v12_identity,
+    13: _v13_billed_cost,
 }
 assert max(MIGRATIONS) == SCHEMA_VERSION
 
@@ -490,7 +500,7 @@ def connect(path: Path | None = None):
 TURN_COLUMNS = (
     "msg_id, request_id, ts, day, source, project, session, model, input, cache_5m,"
     " cache_1h, cache_read, output, thinking, web_search, sidechain, fast, geo, cost,"
-    " version, hour, web_fetch, code_execution, nonstandard_iterations, context_premium_unknown, account_id, machine_id"
+    " version, hour, web_fetch, code_execution, nonstandard_iterations, context_premium_unknown, account_id, machine_id, billed_usd"
 )
 
 
@@ -520,6 +530,7 @@ def _row_turn(row):
         nonstandard_iterations=row["nonstandard_iterations"],
         account_id=row["account_id"],
         machine_id=row["machine_id"],
+        billed_usd=row["billed_usd"],
     )
 
 
@@ -632,6 +643,7 @@ def _upsert_machine(conn, turns, tz, cost_of) -> set[str]:
                 int(context_premium_unknown(merged)),
                 merged.account_id,
                 merged.machine_id,
+                merged.billed_usd,
             )
         )
     conn.executemany(
@@ -640,7 +652,7 @@ def _upsert_machine(conn, turns, tz, cost_of) -> set[str]:
     )
     conn.executemany(
         f"INSERT OR REPLACE INTO turns ({TURN_COLUMNS}) VALUES "
-        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         writes,
     )
     return hours
@@ -973,6 +985,14 @@ def sync_files(
         if progress:
             progress(result.parsed, len(changed))
 
+    # Copilot's plan readings live in its entitlement cache, not in a session
+    # file, so they are read on every sync. Rows are keyed by time.
+    from .ingest.copilot import plan_readings as copilot_plan_readings
+
+    conn.executemany(
+        "INSERT OR IGNORE INTO quota_samples VALUES (?,?,?,?,?,?,?)",
+        copilot_plan_readings(),
+    )
     if full_rebuild:
         rebuild_rollup(conn)
     elif hours:

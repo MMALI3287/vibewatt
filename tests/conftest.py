@@ -34,6 +34,8 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setattr(pricing, "_windows", {})
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
+    monkeypatch.setenv("VIBEWATT_VSCODE_USER_DIRS", str(tmp_path / "vscode-user"))
+    monkeypatch.setenv("VIBEWATT_COPILOT_CACHE", str(tmp_path / "copilot-cache.json"))
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "appdata"))
     # Pre-rename names left in a developer shell must not leak into a test.

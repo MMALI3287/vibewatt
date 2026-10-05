@@ -469,16 +469,26 @@ def blocks(
     ]
 
 
-@router.get("/codex-quota", response_model=schemas.QuotaOut | None)
-def codex_quota_endpoint():
-    """Codex plan limits read from local rollouts: a ChatGPT plan, never Anthropic's."""
+def _provider_quota(provider: str, scope: str) -> schemas.QuotaOut | None:
     from .. import quota
 
     with store.connect() as conn:
-        out = _quota_out(quota.latest(conn, provider="codex"))
+        out = _quota_out(quota.latest(conn, provider=provider))
     if out is not None and out.provenance is not None:
-        out.provenance.scope = "chatgpt_account"
+        out.provenance.scope = scope
     return out
+
+
+@router.get("/codex-quota", response_model=schemas.QuotaOut | None)
+def codex_quota_endpoint():
+    """Codex plan limits read from local rollouts: a ChatGPT plan, never Anthropic's."""
+    return _provider_quota("codex", "chatgpt_account")
+
+
+@router.get("/copilot-quota", response_model=schemas.QuotaOut | None)
+def copilot_quota_endpoint():
+    """Copilot premium-request use from its local cache: a GitHub plan, never Anthropic's."""
+    return _provider_quota("copilot", "github_account")
 
 
 @router.get("/quota", response_model=schemas.QuotaOut | None)

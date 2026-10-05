@@ -324,3 +324,76 @@ rates no Codex response is unpriced: $426.37 in total, of which
 Claude-only default and Codex added back to the old blended `all` exactly
 (13,050 and $3,417.38 plus 4,828 and $393.85 equal 17,878 and $3,811.24).
 
+
+## Copilot (Phase 10, observed 2026-10-05)
+
+Source: VS Code's chat-session store under each `User` folder of Code and Code
+Insiders (`%APPDATA%`, `~/Library/Application Support` or `~/.config`):
+`workspaceStorage/<hash>/chatSessions/*.jsonl` and
+`globalStorage/emptyWindowChatSessions/*.jsonl`. `VIBEWATT_VSCODE_USER_DIRS`
+overrides the folders. Checked against 49 local sessions from VS Code Insiders,
+2026-05-02 to 2026-09-15. Format notes from other trackers that read the same
+store agree: codeburn (getagentseal/codeburn#563) and tokscale
+(junhoyeo/tokscale#875).
+
+**Journal.** A `.jsonl` session is a change journal. `kind 0` is a snapshot,
+`kind 1` sets the value at key path `k`, `kind 2` appends to the array at `k`.
+The importer replays it. An entry that does not fit the replayed state is
+counted as `bad_journal_entry` and skipped; `__proto__`, `prototype` and
+`constructor` path segments are refused. A plain `.json` snapshot is read as the
+final state. When both forms of one session exist the journal wins.
+
+**Response identity.** One request is one response: `requestId` plus
+`responseId`. Dedup keeps the per-field maximum, so a re-emitted request counts
+once in any order.
+
+**Counts.** Output is `completionTokens`, the request total across every
+tool-call round (`result.metadata.outputTokens` is the last round only and is a
+fallback). Input is `promptTokens` (request, then `result.metadata`), which is
+the last round's prompt only. Copilot does not log the input of earlier rounds,
+so input is a floor for agent requests. The journal has no cache fields: cache
+reads and writes show as 0.
+
+**Model.** `result.metadata.resolvedModel`, the model that answered. The
+request's `modelId` is usually the router `copilot/auto`; a request with only
+the router id is a `no_model` drop. OpenAI dated snapshots such as
+`gpt-5.4-mini-2026-03-17` normalize to their family id.
+
+**Cost.** Newer requests carry `copilotCredits`, the amount billed for the whole
+request (1 AI credit = $0.01). That amount is stored as `billed_usd` (schema 13)
+and is the cost; a repricing never replaces it. On real data one 31-round
+request billed 12.39 credits where its recorded tokens price to about 6.5, which
+is why the billed figure wins. Requests without credits get an estimate from the
+model rate. That estimate undercounts for the reason above.
+
+**Rates.** Models seen only through Copilot use GitHub's per-token price list
+([models and pricing](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing),
+retrieved 2026-10-05): `mai-code-1.1-flash` $0.20 / $0.02 cached / $1.20,
+`gpt-5.4-mini` $0.75 / $0.075 / $4.50, `gpt-5.3-codex` $1.75 / $0.175 / $14.
+GitHub moved monthly plans to per-token billing on 2026-06-01 (annual Pro and
+Pro+ plans stay on premium requests until they renew), so these rates start
+then. Claude models answered through Copilot use the Anthropic rates, which
+match GitHub's table for the models seen.
+
+**Plan readings.** Copilot caches each signed-in account's entitlement in
+`%LOCALAPPDATA%/copilot/copilot-user-cache.json` (`// ` comment lines, then
+JSON; `VIBEWATT_COPILOT_CACHE` overrides the path). Only `login`,
+`copilot_plan`, `quota_snapshots.premium_interactions` and
+`quota_reset_date_utc` are read. Each reading becomes `copilot_premium` under
+the scope `github:<login>`, utilization `100 - percent_remaining`. Unlimited
+snapshots are skipped. Anthropic and Codex plan readers exclude the `github:`
+scope. The cache path is observed on Windows only; elsewhere it is a guess and
+an absent file gives no readings.
+
+**Identity.** The GitHub login scopes plan readings. Usage rows carry the
+install's Claude account and machine identity; a session file does not name its
+GitHub account.
+
+**Not imported.** Copilot CLI (`~/.copilot/session-state`) holds no token fields
+locally. Inline completions are not billed and not logged with counts.
+
+**Gate evidence (2026-10-05).** A sync of the real store copy read 470 files and
+stored 29 Copilot responses: Haiku 4.5 (16, $1.05 estimated), `gpt-5.4-mini`
+(7, unpriced: May 2026, before per-token billing, with no input counts),
+`mai-code-1.1-flash` (5, $0.23 billed) and `gpt-5.3-codex` (1, $0.26 billed).
+Drops: 2 `no_usage`, 1 `no_model`. Plan readings: two GitHub logins.

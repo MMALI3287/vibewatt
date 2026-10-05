@@ -14,7 +14,7 @@ from . import config as configmod
 from . import pricing, quota, terminal
 from .aggregate import cost_of, from_store
 from .ingest import discover
-from .sources import CLAUDE_CODE, CODEX, COWORK
+from .sources import CLAUDE_CODE, CODEX, COPILOT, COWORK
 
 
 def resolve_tz(name: str | None) -> tzinfo:
@@ -42,12 +42,19 @@ def resolve_tz(name: str | None) -> tzinfo:
         raise SystemExit(f"unknown timezone {name!r}: {exc}")
 
 
-def codex_quota():
-    """The newest Codex plan readings in the store. Never a network call."""
+# Other providers' plans, each shown apart from the Anthropic plan.
+PROVIDER_PLANS = {
+    CODEX: "Codex plan, ChatGPT account, from local logs",
+    COPILOT: "Copilot plan, GitHub account, from Copilot's local cache",
+}
+
+
+def provider_quota(provider: str):
+    """The newest plan readings for one provider in the store. Never a network call."""
     from . import quota, store
 
     with store.connect() as conn:
-        return quota.latest(conn, provider="codex")
+        return quota.latest(conn, provider=provider)
 
 
 def report_zone(cfg: dict):
@@ -461,7 +468,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--source",
-        choices=["all", "claude", CLAUDE_CODE, COWORK, CODEX],
+        choices=["all", "claude", CLAUDE_CODE, COWORK, CODEX, COPILOT],
         default="all",
         help="all: every provider; claude: every Claude surface",
     )
@@ -691,17 +698,19 @@ def _main(args, cfg) -> int:
             CLAUDE_CODE: "  Claude Code: ~/.claude/projects (override with CLAUDE_CONFIG_DIR)",
             COWORK: "  Cowork:      the Claude desktop data dir (override with VIBEWATT_COWORK_DIR)",
             CODEX: "  Codex:       ~/.codex/sessions (override with CODEX_HOME)",
+            COPILOT: "  Copilot:     VS Code chatSessions (override with VIBEWATT_VSCODE_USER_DIRS)",
         }
         wanted = {
-            "all": [CLAUDE_CODE, COWORK, CODEX],
+            "all": [CLAUDE_CODE, COWORK, CODEX, COPILOT],
             "claude": [CLAUDE_CODE, COWORK],
         }.get(args.source, [args.source])
         label = {
             CLAUDE_CODE: "Claude Code",
             COWORK: "Cowork",
             CODEX: "Codex",
+            COPILOT: "Copilot",
             "claude": "Claude Code or Cowork",
-        }.get(args.source, "Claude Code, Cowork or Codex")
+        }.get(args.source, "Claude Code, Cowork, Codex or Copilot")
         print(
             f"No {label} session logs found. Looked in:\n"
             + "\n".join(hints[s] for s in wanted),
@@ -715,27 +724,24 @@ def _main(args, cfg) -> int:
     dim = terminal.DIM if color else ""
     if args.source == CODEX:
         title = "Codex usage (local logs, API-equivalent estimate)"
+    elif args.source == COPILOT:
+        title = "Copilot usage (local logs, billed credits where recorded)"
     elif args.source == "all":
         title = f"All usage ({', '.join(sorted(report.by_source)) or 'no data'})"
     else:
         title = "Claude usage"
     print(f"\n  {bold}{title}{reset}\n", file=out)
     print(terminal.summary(report, color), file=out)
-    if q is not None and args.source != CODEX:
+    if q is not None and args.source not in PROVIDER_PLANS:
         print(file=out)
         print(terminal.quota_block(q, color), file=out)
-    if args.source in ("all", CODEX) and cfg.get("quota", True):
-        codex_plan = codex_quota()
-        if codex_plan is not None:
+    for provider, note in PROVIDER_PLANS.items():
+        if args.source not in ("all", provider) or not cfg.get("quota", True):
+            continue
+        plan = provider_quota(provider)
+        if plan is not None:
             print(file=out)
-            print(
-                terminal.quota_block(
-                    codex_plan,
-                    color,
-                    note="Codex plan, ChatGPT account, from local logs",
-                ),
-                file=out,
-            )
+            print(terminal.quota_block(plan, color, note=note), file=out)
     block_text = terminal.block_block(report, color)
     if block_text:
         print(file=out)

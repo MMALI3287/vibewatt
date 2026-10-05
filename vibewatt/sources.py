@@ -21,6 +21,7 @@ from pathlib import Path
 CLAUDE_CODE = "claude-code"
 COWORK = "cowork"
 CODEX = "codex"
+COPILOT = "copilot"
 # Sources that bill through Anthropic. Reports default to these; another
 # provider is selected by name so its numbers never blend into Claude totals.
 CLAUDE_SOURCES = (CLAUDE_CODE, COWORK)
@@ -77,6 +78,9 @@ class Turn:
     nonstandard_iterations: int = 0
     account_id: str = ""
     machine_id: str = ""
+    # What the provider billed for this response, when its log says so
+    # (Copilot's copilotCredits). It is the cost, never recomputed from rates.
+    billed_usd: float | None = None
 
 
 def _parse_ts(raw: str | None) -> datetime | None:
@@ -335,6 +339,9 @@ def merge(a: Turn, b: Turn) -> Turn:
         # Keep the observed US surcharge even when a later replay says global.
         geo=max((a.geo, b.geo), key=lambda geo: (geo == "us", geo or "")),
         version=max(a.version or "", b.version or "") or None,
+        billed_usd=max(
+            (v for v in (a.billed_usd, b.billed_usd) if v is not None), default=None
+        ),
     )
 
 
