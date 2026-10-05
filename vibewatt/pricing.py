@@ -125,6 +125,20 @@ BUILTIN_PERIODS: dict[str, tuple[tuple[str, str, Rate], ...]] = {
     # page. OpenAI's auto-review report (alignment.openai.com/auto-review,
     # published 2026-04-30) names the reviewer GPT-5.4 Thinking at low reasoning,
     # so gpt-5.4 rates apply from that date.
+    # Models seen only through GitHub Copilot, at GitHub's per-token price list
+    # (docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing,
+    # retrieved 2026-10-05). Copilot moved to per-token billing on 2026-06-01;
+    # earlier Copilot usage was billed in premium requests, so these rates
+    # start there and earlier usage stays unpriced.
+    "mai-code-1.1-flash": (
+        ("2026-06-01", "9999-12-31", Rate(0.20, 0.20, 0.20, 0.02, 1.20)),
+    ),
+    "gpt-5.4-mini": (
+        ("2026-06-01", "9999-12-31", Rate(0.75, 0.75, 0.75, 0.075, 4.50)),
+    ),
+    "gpt-5.3-codex": (
+        ("2026-06-01", "9999-12-31", Rate(1.75, 1.75, 1.75, 0.175, 14.0)),
+    ),
     "codex-auto-review": (
         ("2026-04-30", "9999-12-31", Rate(2.5, 2.5, 2.5, 0.25, 15.0)),
     ),
@@ -197,6 +211,7 @@ _SUFFIXES = (
     re.compile(r"@.*$"),  # Vertex snapshot: claude-opus-4-5@20251101
     re.compile(r"-v\d+(?::\d+)?$"),  # Bedrock version: -v1:0
     re.compile(r"-\d{8}$"),  # dated snapshot: -20250929
+    re.compile(r"-\d{4}-\d{2}-\d{2}$"),  # OpenAI snapshot: gpt-5.4-mini-2026-03-17
     re.compile(r"-latest$"),
 )
 

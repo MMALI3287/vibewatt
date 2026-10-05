@@ -57,6 +57,12 @@ export async function getCodexQuota(): Promise<Quota | null> {
   return res.data ?? null;
 }
 
+export async function getCopilotQuota(): Promise<Quota | null> {
+  const res = await api.GET("/api/copilot-quota");
+  if (!res.response.ok) throw new ApiError(`${res.response.status} ${res.response.statusText}`);
+  return res.data ?? null;
+}
+
 export async function getQuota(f: Filters): Promise<Quota | null> {
   const res = await api.GET("/api/quota", { params: { query: toQuery(f) } });
   // A null body is a valid "no quota source" answer, so unwrap's missing-data check does not apply.

@@ -1402,7 +1402,7 @@ across `vibewatt/`, `web/src`, `tests/` and `scripts/` before removal:
   Production writes quota samples through `quota.record()` directly. Those tests
   now call `quota.record()`, so they cover the path production uses.
 
-### Phase 10: More providers (Codex implemented 2026-10-05; Copilot and Antigravity next)
+### Phase 10: More providers (Codex and Copilot implemented 2026-10-05; Antigravity next)
 
 **Do:** Gemini CLI/Antigravity usage and ChatGPT/Codex CLI usage, including
 the plan rate-limit readings that Codex logs carry. Each provider is one `ingest/` module
@@ -1448,6 +1448,22 @@ identity and gate evidence are in `DATA-SOURCES.md` under "Codex".
 - Gemini Antigravity and GitHub Copilot were wrongly recorded as having no local
   data. `~/.gemini/antigravity` and VS Code Copilot Chat sessions exist. They are
   the next Phase 10 slices; see `DEFERRED.md`.
+
+Copilot record (2026-10-05, Claude Code). Contract and evidence are in
+`DATA-SOURCES.md` under "Copilot".
+
+- Added `ingest/copilot.py`: journal replay, one response per request, billed
+  credits as cost, plan readings from Copilot's entitlement cache.
+- **Schema 13 adds `turns.billed_usd`.** Why: a provider-billed amount must not
+  be recomputed from rates on repricing. Existing rows get NULL; no usage changes.
+  Transfer archives without the field still import.
+- Quota readers now exclude every other provider's scope (`chatgpt:`,
+  `github:`) through `quota.PROVIDER_SAMPLES`.
+- Pricing: GitHub-listed rates for three Copilot-only models from 2026-06-01, and
+  OpenAI `-YYYY-MM-DD` snapshot suffixes normalize to the family id.
+- **Replaced `cli.codex_quota()` with `cli.provider_quota(provider)`.** Why: the
+  same plan block now serves Codex and Copilot.
+- No file, table, command or dependency was removed.
 
 ### Phase 11: Public launch (planned)
 

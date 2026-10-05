@@ -53,10 +53,15 @@ _LABELS = {
 }
 
 
-# Codex plan readings carry a "chatgpt:<account>" scope. Anthropic plan readers
-# exclude them so a ChatGPT limit never shows as Claude utilization.
-CLAUDE_SAMPLES = "scope NOT LIKE 'chatgpt:%'"
-CODEX_SAMPLES = "scope LIKE 'chatgpt:%'"
+# Other providers' plan readings carry their own scope prefix: "chatgpt:<account>"
+# for Codex, "github:<login>" for Copilot. Anthropic plan readers exclude them so
+# another provider's limit never shows as Claude utilization.
+PROVIDER_SAMPLES = {
+    "codex": "scope LIKE 'chatgpt:%'",
+    "copilot": "scope LIKE 'github:%'",
+}
+CODEX_SAMPLES = PROVIDER_SAMPLES["codex"]
+CLAUDE_SAMPLES = " AND ".join(f"NOT ({clause})" for clause in PROVIDER_SAMPLES.values())
 
 
 def label_for(key: str) -> str:
@@ -438,7 +443,7 @@ def latest(
     """The newest sample of every window of one provider's plan, from any source."""
     now = now or datetime.now(UTC)
     canon = canonical_scope(conn)
-    which = CODEX_SAMPLES if provider == "codex" else CLAUDE_SAMPLES
+    which = PROVIDER_SAMPLES.get(provider, CLAUDE_SAMPLES)
     newest_rows: dict[tuple[str, str], object] = {}
     for r in conn.execute(
         "SELECT q.* FROM quota_samples q JOIN ("

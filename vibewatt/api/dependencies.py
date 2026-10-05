@@ -40,9 +40,9 @@ def _parse_date(value: str | None, param: str) -> date | None:
 def get_filters(
     from_: str | None = Query(None, alias="from"),
     to: str | None = Query(None),
-    source: Literal["all", "claude", "claude-code", "cowork", "codex", "web"] = Query(
-        "all"
-    ),
+    source: Literal[
+        "all", "claude", "claude-code", "cowork", "codex", "copilot", "web"
+    ] = Query("all"),
     project: str | None = Query(None, max_length=500),
     model: str | None = Query(None, max_length=200),
     metric: Literal["cost", "tokens"] = Query("cost"),

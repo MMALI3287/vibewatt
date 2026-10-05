@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { getCodexQuota, getQuota, type Quota } from "../api/client";
+import { getCodexQuota, getCopilotQuota, getQuota, type Quota } from "../api/client";
 import { DEFAULT_FILTERS } from "../lib/filters";
 import { fmtPct } from "../lib/format";
 
@@ -50,12 +50,13 @@ function Windows({ quota }: { quota: Quota }) {
 /**
  * Account-wide plan utilization. It does not depend on local usage or on
  * filters, so it renders even when the local summary is empty, loading or
- * failed (A-036). A Codex plan is a separate ChatGPT limit, shown in its own
- * group only when local rollouts carried a reading.
+ * failed (A-036). Codex (ChatGPT) and Copilot (GitHub) plans are separate
+ * limits, each shown in its own group only when a local reading exists.
  */
 export function PlanMeters() {
   const quota = useQuery({ queryKey: ["quota"], queryFn: () => getQuota(DEFAULT_FILTERS) });
   const codex = useQuery({ queryKey: ["codex-quota"], queryFn: getCodexQuota });
+  const copilot = useQuery({ queryKey: ["copilot-quota"], queryFn: getCopilotQuota });
 
   return (
     <>
@@ -71,6 +72,12 @@ export function PlanMeters() {
         <div className="meters" aria-label="Codex plan utilization (ChatGPT account)">
           <p className="meter-note muted">Codex plan, ChatGPT account · read from local Codex logs at <time dateTime={codex.data.fetched_at}>{codex.data.fetched_at}</time>.</p>
           <Windows quota={codex.data} />
+        </div>
+      )}
+      {copilot.data && copilot.data.windows.length > 0 && (
+        <div className="meters" aria-label="Copilot plan utilization (GitHub accounts)">
+          <p className="meter-note muted">Copilot premium requests, per GitHub account · read from Copilot's local cache at <time dateTime={copilot.data.fetched_at}>{copilot.data.fetched_at}</time>.</p>
+          <Windows quota={copilot.data} />
         </div>
       )}
     </>

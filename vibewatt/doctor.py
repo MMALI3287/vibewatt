@@ -18,8 +18,8 @@ from pathlib import Path
 
 from . import quota
 from .config import data_dir, user_config_dir
-from .ingest import claude_code, codex, discover
-from .sources import CLAUDE_CODE, CLAUDE_SOURCES, CODEX, COWORK, load
+from .ingest import claude_code, codex, copilot, discover
+from .sources import CLAUDE_CODE, CLAUDE_SOURCES, CODEX, COPILOT, COWORK, load
 
 
 def _claude_settings() -> tuple[Path | None, dict]:
@@ -116,7 +116,11 @@ def run(cfg: dict, tz) -> int:
         f"    {'codex':<12} looked in: {', '.join(str(r) for r in codex.roots())}"
         " (override CODEX_HOME)"
     )
-    for source in (CLAUDE_CODE, COWORK, CODEX):
+    say(
+        f"    {'copilot':<12} looked in: {', '.join(str(r) for r in copilot.user_dirs())}"
+        " (override VIBEWATT_VSCODE_USER_DIRS)"
+    )
+    for source in (CLAUDE_CODE, COWORK, CODEX, COPILOT):
         found = by_source.get(source, [])
         say(f"    {source:<12} {len(found)} file(s)")
 
@@ -273,5 +277,17 @@ def run(cfg: dict, tz) -> int:
         else:
             for w in codex_plan.windows:
                 say(f"    {w.label:<26} {w.utilization:5.1f}%")
+
+    say()
+    say("  copilot plan (GitHub accounts, from Copilot's local cache)")
+    say(f"    cache        {copilot.cache_path()}")
+    if store.db_path().exists():
+        with store.connect() as conn:
+            copilot_plan = quota.latest(conn, provider="copilot")
+        if copilot_plan is None:
+            say("    no current reading")
+        else:
+            for w in copilot_plan.windows:
+                say(f"    {w.label:<38} {w.utilization:5.1f}%  {w.scope}")
     say()
     return 0

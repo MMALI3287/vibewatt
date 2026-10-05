@@ -1,0 +1,11 @@
+{"kind":0,"v":{"version":3,"sessionId":"copilot-sess-1","creationDate":1789441200000,"requests":[]}}
+{"kind":2,"k":["requests"],"v":[{"requestId":"request_a","responseId":"response_request_a","timestamp":1789441200000,"modelId":"copilot/auto","message":{"text":"redacted"},"response":[],"agent":{"id":"github.copilot.editsAgent"}}]}
+{"kind":1,"k":["requests",0,"completionTokens"],"v":4501}
+{"kind":1,"k":["requests",0,"promptTokens"],"v":41592}
+{"kind":1,"k":["requests",0,"result"],"v":{"metadata":{"resolvedModel":"mai-code-1.1-flash","promptTokens":41592,"outputTokens":1879,"sessionId":"copilot-sess-1","toolCallRounds":[{"id":"r1"},{"id":"r2"},{"id":"r3"}]}}}
+{"kind":1,"k":["requests",0,"copilotCredits"],"v":1.4563008}
+{"kind":2,"k":["requests"],"v":[{"requestId":"request_b","responseId":"response_request_b","timestamp":1789441260000,"modelId":"copilot/auto","message":{"text":"redacted"},"response":[],"agent":{"id":"github.copilot.editsAgent"}}]}
+{"kind":1,"k":["requests",1,"completionTokens"],"v":721}
+{"kind":1,"k":["requests",1,"result"],"v":{"metadata":{"resolvedModel":"claude-haiku-4-5-20251001","promptTokens":32819,"outputTokens":721,"toolCallRounds":[{"id":"r1"}]}}}
+{"kind":2,"k":["requests"],"v":[{"requestId":"request_c","responseId":"response_request_c","timestamp":1789441320000,"modelId":"copilot/auto","message":{"text":"redacted"},"response":[],"agent":{"id":"github.copilot.editsAgent"}}]}
+{"kind":1,"k":["requests",0,"completionTokens"],"v":4501}
