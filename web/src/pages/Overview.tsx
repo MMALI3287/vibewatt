@@ -192,7 +192,7 @@ function PlanComparison({ summary }: { summary: Summary }) {
         <h2>Month-to-date API-equivalent / monthly plan</h2>
         <p className="kpi-value">{summary.plan_comparison.multiple === null ? "Unavailable" : `${summary.plan_comparison.multiple.toFixed(2)}×`}</p>
         <p>{fmtUsd(summary.plan_comparison.local_cost_usd)} estimated local API-equivalent cost / {fmtUsd(summary.plan_comparison.monthly_plan_usd)} monthly plan price.</p>
-        <p className="muted">{summary.plan_comparison.period_start} to {summary.plan_comparison.period_end}. Source, project and model filters apply. Date filters do not apply. Local logs only. This is not account-wide utilization or a subscription bill.</p>
+        <p className="muted">{summary.plan_comparison.period_start} to {summary.plan_comparison.period_end}. Claude usage only, compared with your Claude plan price. Project and model filters apply. Date filters do not apply. Local logs only. This is not account-wide utilization or a subscription bill.</p>
         {summary.plan_comparison.unpriced > 0 && <p className="notice">{summary.plan_comparison.unpriced} unpriced responses excluded. Comparison is incomplete.</p>}
       </section>}
       {!summary.plan_comparison && <p className="muted">API-equivalent / plan comparison unavailable: no monthly plan price configured.</p>}

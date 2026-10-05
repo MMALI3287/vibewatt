@@ -106,7 +106,50 @@ FAST_CURRENT_START = {
 # Verified dated built-in rates (discounts, price changes): model ->
 # ((start, end, Rate), ...), UTC days, end exclusive. Checked before BUILTIN so
 # a response is priced at the rate in effect when it happened.
-BUILTIN_PERIODS: dict[str, tuple[tuple[str, str, Rate], ...]] = {}
+BUILTIN_PERIODS: dict[str, tuple[tuple[str, str, Rate], ...]] = {
+    # OpenAI models seen in Codex logs. Rates: developers.openai.com/api/docs/
+    # models/<id>, retrieved 2026-10-05. Start days are the API release dates in
+    # https://developers.openai.com/api/docs/changelog (same retrieval); no price
+    # change after release was listed. OpenAI bills no separate cache-write rate
+    # for gpt-5.5, so its cache writes use the input rate. These ids are
+    # dated, not in BUILTIN: usage before the release stays unpriced.
+    # Rate fields: input, cache write, cache write (1h, unused), cache read, output.
+    "gpt-5.5": (("2026-04-24", "9999-12-31", Rate(5.0, 5.0, 5.0, 0.50, 30.0)),),
+    "gpt-6-astra": (("2026-09-03", "9999-12-31", Rate(10.0, 12.5, 12.5, 1.0, 50.0)),),
+    "gpt-6.1-sol": (("2026-09-29", "9999-12-31", Rate(2.0, 2.5, 2.5, 0.10, 10.0)),),
+    "gpt-5.4": (("2026-03-05", "9999-12-31", Rate(2.5, 2.5, 2.5, 0.25, 15.0)),),
+    # The changelog's 2026-07-30 entry cut Terra by 20%; the model page lists only
+    # the new price, with cache writes at 1.25x input. Earlier usage stays unpriced.
+    "gpt-5.6-terra": (("2026-07-30", "9999-12-31", Rate(2.0, 2.5, 2.5, 0.20, 12.0)),),
+    # Codex stamps approval-review turns "codex-auto-review", a slug with no API
+    # page. OpenAI's auto-review report (alignment.openai.com/auto-review,
+    # published 2026-04-30) names the reviewer GPT-5.4 Thinking at low reasoning,
+    # so gpt-5.4 rates apply from that date.
+    "codex-auto-review": (
+        ("2026-04-30", "9999-12-31", Rate(2.5, 2.5, 2.5, 0.25, 15.0)),
+    ),
+    # Promotional price from the 2026-08-21 changelog entry, "available at least
+    # through November 21, 2026". The window closes at 2026-11-22 so later usage
+    # stays unpriced until the next rate is read. Before 2026-08-21 it was
+    # $5 / $30 per the same entry's "20% lower input, 33% lower output", but the
+    # cache rates for that period are not listed, so that period is not priced.
+    "gpt-5.6-sol": (("2026-08-21", "2026-11-22", Rate(4.0, 5.0, 5.0, 0.40, 20.0)),),
+}
+
+# Prompts past this size reprice the whole request: 2x input and cache rates,
+# 1.5x output (the model pages above). Only models whose page states the
+# threshold are listed; any other OpenAI model over it is flagged, not guessed.
+OPENAI_LONG_CONTEXT_TOKENS = 272_000
+OPENAI_LONG_CONTEXT = frozenset(
+    {
+        "gpt-5.4",
+        "gpt-5.5",
+        "gpt-5.6-terra",
+        "gpt-6-astra",
+        "gpt-6.1-sol",
+        "codex-auto-review",
+    }
+)
 
 GEO_US_MULTIPLIER = 1.1
 WEB_SEARCH_PER_CALL = 10.0 / 1000
@@ -130,6 +173,10 @@ def fingerprint(overrides: dict | None = None) -> str:
         "fast_periods": FAST_PERIODS,
         "fast_current_start": FAST_CURRENT_START,
         "long_context": LONG_CONTEXT,
+        "openai_long_context": [
+            OPENAI_LONG_CONTEXT_TOKENS,
+            sorted(OPENAI_LONG_CONTEXT),
+        ],
         "remote": _remote or {},
         "history": _history,
         "builtin_periods": BUILTIN_PERIODS,
@@ -415,6 +462,18 @@ def rate_for(
         rate = _remote_at(m, ts)
     if rate is None:
         return None
+    if (
+        m in OPENAI_LONG_CONTEXT
+        and not fast
+        and prompt_tokens > OPENAI_LONG_CONTEXT_TOKENS
+    ):
+        rate = Rate(
+            rate.input * 2,
+            rate.cache_5m * 2,
+            rate.cache_1h * 2,
+            rate.cache_read * 2,
+            rate.output * 1.5,
+        )
     if not fast and prompt_tokens > 200_000 and ts is not None:
         day = ts.astimezone(UTC).date().isoformat()
         period = LONG_CONTEXT.get(m)
@@ -444,9 +503,13 @@ LONG_CONTEXT = {
 
 def context_premium_unknown(turn) -> bool:
     """Flag large prompts whose date/model premium is not verified."""
-    if turn.input + turn.cache_read + turn.cache_5m + turn.cache_1h <= 200_000:
-        return False
+    prompt = turn.input + turn.cache_read + turn.cache_5m + turn.cache_1h
     model = normalize(turn.model)
+    if model and model.startswith(("gpt-", "codex-")):
+        # A known threshold is applied by rate_for; an unlisted one is unverified.
+        return model not in OPENAI_LONG_CONTEXT and prompt > OPENAI_LONG_CONTEXT_TOKENS
+    if prompt <= 200_000:
+        return False
     day = turn.ts.astimezone(UTC).date().isoformat()
     if model in LONG_CONTEXT and LONG_CONTEXT[model][0] <= day < LONG_CONTEXT[model][1]:
         return False

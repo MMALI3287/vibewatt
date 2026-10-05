@@ -184,7 +184,7 @@ def bar(fraction: float, width: int = 24, color: bool = True) -> str:
     return f"{_fg(hue)}{body}{RESET}" if color else body
 
 
-def quota_block(quota, color: bool = True) -> str:
+def quota_block(quota, color: bool = True, note: str | None = None) -> str:
     """Plan utilization across the whole account, every surface included."""
     if quota is None:
         return ""
@@ -200,7 +200,7 @@ def quota_block(quota, color: bool = True) -> str:
             f"  {label} {bar(w.utilization / 100, color=color)} {pct}   "
             f"{DIM if color else ''}{left}{RESET if color else ''}"
         )
-    note = f"account-wide, via {quota.source}"
+    note = note or f"account-wide, via {quota.source}"
     header = f"  {DIM}{note}{RESET}" if color else f"  {note}"
     return "\n".join([header] + lines)
 

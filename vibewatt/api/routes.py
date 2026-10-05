@@ -13,6 +13,7 @@ from fastapi.responses import PlainTextResponse, StreamingResponse
 from .. import cli as climod
 from .. import store
 from ..analysis.models import Kind, Severity
+from ..sources import matches
 from . import schemas
 from .dependencies import Filters, get_filters
 
@@ -306,8 +307,17 @@ def summary(request: Request, filters: Filters = Depends(get_filters)):
     with store.connect() as conn:
         payload["provenance"] = _local_provenance(conn)
     price = request.app.state.cfg.get("plan_usd_per_month")
+    # The configured plan is an Anthropic plan: compare Claude usage only, and
+    # nothing at all when the reader picked another provider.
+    if filters.source in ("all", "claude"):
+        plan_source = "claude"
+    elif matches("claude", filters.source):
+        plan_source = filters.source
+    else:
+        plan_source = None
     if (
-        isinstance(price, (int, float))
+        plan_source
+        and isinstance(price, (int, float))
         and not isinstance(price, bool)
         and math.isfinite(price)
         and price > 0
@@ -316,7 +326,7 @@ def summary(request: Request, filters: Filters = Depends(get_filters)):
         start = today.replace(day=1)
         # Date filters must not silently compare an arbitrary range with one month.
         mtd, *_ = request.app.state.report(
-            source=filters.source,
+            source=plan_source,
             project=filters.project,
             model=filters.model,
             date_from=start,
@@ -459,6 +469,18 @@ def blocks(
     ]
 
 
+@router.get("/codex-quota", response_model=schemas.QuotaOut | None)
+def codex_quota_endpoint():
+    """Codex plan limits read from local rollouts: a ChatGPT plan, never Anthropic's."""
+    from .. import quota
+
+    with store.connect() as conn:
+        out = _quota_out(quota.latest(conn, provider="codex"))
+    if out is not None and out.provenance is not None:
+        out.provenance.scope = "chatgpt_account"
+    return out
+
+
 @router.get("/quota", response_model=schemas.QuotaOut | None)
 def quota_endpoint(request: Request, filters: Filters = Depends(get_filters)):
     from datetime import timedelta
@@ -478,7 +500,8 @@ def quota_endpoint(request: Request, filters: Filters = Depends(get_filters)):
             dict(r)
             for r in conn.execute(
                 "SELECT ts, key, scope, utilization, resets_at, source FROM quota_samples"
-                " WHERE ts >= ? ORDER BY ts DESC LIMIT 500",
+                f" WHERE ts >= ? AND {quota.CLAUDE_SAMPLES}"
+                " ORDER BY ts DESC LIMIT 500",
                 (since,),
             )
         ]

@@ -97,7 +97,7 @@ def local(conn: sqlite3.Connection, now: datetime) -> list[dict]:
            SELECT *, input + cache_5m + cache_1h + cache_read AS prompt,
              ROW_NUMBER() OVER (PARTITION BY source, session ORDER BY ts DESC, msg_id DESC, request_id DESC) AS rank,
              MAX(input + cache_5m + cache_1h + cache_read) OVER (PARTITION BY source, session) AS peak
-           FROM turns WHERE sidechain = 0 AND ts <= ?)
+           FROM turns WHERE sidechain = 0 AND source IN ('claude-code', 'cowork') AND ts <= ?)
            SELECT * FROM ranked WHERE rank = 1 AND ts >= ? ORDER BY source, session""",
         (now.isoformat(), (now - timedelta(minutes=30)).isoformat()),
     )

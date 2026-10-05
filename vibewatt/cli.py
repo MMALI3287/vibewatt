@@ -14,7 +14,7 @@ from . import config as configmod
 from . import pricing, quota, terminal
 from .aggregate import cost_of, from_store
 from .ingest import discover
-from .sources import CLAUDE_CODE, COWORK
+from .sources import CLAUDE_CODE, CODEX, COWORK
 
 
 def resolve_tz(name: str | None) -> tzinfo:
@@ -40,6 +40,14 @@ def resolve_tz(name: str | None) -> tzinfo:
         return ZoneInfo(name)
     except Exception as exc:  # noqa: BLE001
         raise SystemExit(f"unknown timezone {name!r}: {exc}")
+
+
+def codex_quota():
+    """The newest Codex plan readings in the store. Never a network call."""
+    from . import quota, store
+
+    with store.connect() as conn:
+        return quota.latest(conn, provider="codex")
 
 
 def report_zone(cfg: dict):
@@ -365,8 +373,6 @@ def sync(args, cfg, tz) -> int:
             print(f"  read {done}/{total} changed file(s)", file=sys.stderr)
 
     result = sync_store(cfg, tz, files, progress)
-    with store.connect() as conn:
-        info = store.summary(conn)
     print(
         f"  parsed {result.parsed} changed file(s), skipped {result.skipped} unchanged, "
         f"{len(files)} total"
@@ -376,11 +382,18 @@ def sync(args, cfg, tz) -> int:
         f"{result.duplicates} content-block repeats collapsed"
     )
     print(f"  recovered {result.prompts} prompt title(s)")
-    t = info["turns"]
-    print(
-        f"  store now holds {t['n']:,} response(s)  {t['lo']} .. {t['hi']}  "
-        f"${t['cost'] or 0:,.2f}"
-    )
+    # One line per provider: a single total would blend Anthropic and OpenAI spend.
+    with store.connect() as conn:
+        held = conn.execute(
+            "SELECT source, COUNT(*) n, MIN(day) lo, MAX(day) hi, SUM(cost) cost,"
+            " SUM(cost IS NULL) unpriced FROM turns GROUP BY source ORDER BY source"
+        ).fetchall()
+    for row in held:
+        unpriced = f", {row['unpriced']:,} unpriced" if row["unpriced"] else ""
+        print(
+            f"  store holds {row['n']:,} {row['source']} response(s)  "
+            f"{row['lo']} .. {row['hi']}  ${row['cost'] or 0:,.2f}{unpriced}"
+        )
     print(f"  database: {store.db_path()}")
     return 0
 
@@ -446,7 +459,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--json", action="store_true", help="status/quota: versioned JSON output"
     )
-    p.add_argument("--source", choices=[CLAUDE_CODE, COWORK, "all"], default="all")
+    p.add_argument(
+        "--source",
+        choices=["all", "claude", CLAUDE_CODE, COWORK, CODEX],
+        default="all",
+        help="all: every provider; claude: every Claude surface",
+    )
     p.add_argument("--since", metavar="YYYY-MM-DD")
     p.add_argument("--days", type=int, metavar="N")
     p.add_argument("--tz", help="timezone for day buckets (default: local)")
@@ -672,15 +690,18 @@ def _main(args, cfg) -> int:
         hints = {
             CLAUDE_CODE: "  Claude Code: ~/.claude/projects (override with CLAUDE_CONFIG_DIR)",
             COWORK: "  Cowork:      the Claude desktop data dir (override with VIBEWATT_COWORK_DIR)",
+            CODEX: "  Codex:       ~/.codex/sessions (override with CODEX_HOME)",
         }
-        wanted = [args.source] if args.source != "all" else list(hints)
-        label = (
-            "Cowork"
-            if args.source == COWORK
-            else (
-                "Claude Code" if args.source == CLAUDE_CODE else "Claude Code or Cowork"
-            )
-        )
+        wanted = {
+            "all": [CLAUDE_CODE, COWORK, CODEX],
+            "claude": [CLAUDE_CODE, COWORK],
+        }.get(args.source, [args.source])
+        label = {
+            CLAUDE_CODE: "Claude Code",
+            COWORK: "Cowork",
+            CODEX: "Codex",
+            "claude": "Claude Code or Cowork",
+        }.get(args.source, "Claude Code, Cowork or Codex")
         print(
             f"No {label} session logs found. Looked in:\n"
             + "\n".join(hints[s] for s in wanted),
@@ -692,11 +713,29 @@ def _main(args, cfg) -> int:
     bold = terminal.BOLD if color else ""
     reset = terminal.RESET if color else ""
     dim = terminal.DIM if color else ""
-    print(f"\n  {bold}Claude usage{reset}\n", file=out)
+    if args.source == CODEX:
+        title = "Codex usage (local logs, API-equivalent estimate)"
+    elif args.source == "all":
+        title = f"All usage ({', '.join(sorted(report.by_source)) or 'no data'})"
+    else:
+        title = "Claude usage"
+    print(f"\n  {bold}{title}{reset}\n", file=out)
     print(terminal.summary(report, color), file=out)
-    if q is not None:
+    if q is not None and args.source != CODEX:
         print(file=out)
         print(terminal.quota_block(q, color), file=out)
+    if args.source in ("all", CODEX) and cfg.get("quota", True):
+        codex_plan = codex_quota()
+        if codex_plan is not None:
+            print(file=out)
+            print(
+                terminal.quota_block(
+                    codex_plan,
+                    color,
+                    note="Codex plan, ChatGPT account, from local logs",
+                ),
+                file=out,
+            )
     block_text = terminal.block_block(report, color)
     if block_text:
         print(file=out)

@@ -143,8 +143,10 @@
             "schema": {
               "enum": [
                 "all",
+                "claude",
                 "claude-code",
                 "cowork",
+                "codex",
                 "web"
               ],
               "type": "string",
@@ -428,8 +430,10 @@
             "schema": {
               "enum": [
                 "all",
+                "claude",
                 "claude-code",
                 "cowork",
+                "codex",
                 "web"
               ],
               "type": "string",
@@ -610,8 +614,10 @@
             "schema": {
               "enum": [
                 "all",
+                "claude",
                 "claude-code",
                 "cowork",
+                "codex",
                 "web"
               ],
               "type": "string",
@@ -828,8 +834,10 @@
             "schema": {
               "enum": [
                 "all",
+                "claude",
                 "claude-code",
                 "cowork",
+                "codex",
                 "web"
               ],
               "type": "string",
@@ -954,8 +962,10 @@
             "schema": {
               "enum": [
                 "all",
+                "claude",
                 "claude-code",
                 "cowork",
+                "codex",
                 "web"
               ],
               "type": "string",
@@ -1084,8 +1094,10 @@
             "schema": {
               "enum": [
                 "all",
+                "claude",
                 "claude-code",
                 "cowork",
+                "codex",
                 "web"
               ],
               "type": "string",
@@ -1223,8 +1235,10 @@
             "schema": {
               "enum": [
                 "all",
+                "claude",
                 "claude-code",
                 "cowork",
+                "codex",
                 "web"
               ],
               "type": "string",
@@ -1398,8 +1412,10 @@
             "schema": {
               "enum": [
                 "all",
+                "claude",
                 "claude-code",
                 "cowork",
+                "codex",
                 "web"
               ],
               "type": "string",
@@ -1597,8 +1613,10 @@
             "schema": {
               "enum": [
                 "all",
+                "claude",
                 "claude-code",
                 "cowork",
+                "codex",
                 "web"
               ],
               "type": "string",
@@ -1683,6 +1701,33 @@
         }
       }
     },
+    "/api/codex-quota": {
+      "get": {
+        "summary": "Codex Quota Endpoint",
+        "description": "Codex plan limits read from local rollouts: a ChatGPT plan, never Anthropic's.",
+        "operationId": "codex_quota_endpoint_api_codex_quota_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaOut"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Codex Quota Endpoint Api Codex Quota Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/quota": {
       "get": {
         "summary": "Quota Endpoint",
@@ -1727,8 +1772,10 @@
             "schema": {
               "enum": [
                 "all",
+                "claude",
                 "claude-code",
                 "cowork",
+                "codex",
                 "web"
               ],
               "type": "string",
@@ -1862,8 +1909,10 @@
             "schema": {
               "enum": [
                 "all",
+                "claude",
                 "claude-code",
                 "cowork",
+                "codex",
                 "web"
               ],
               "type": "string",
@@ -2098,8 +2147,10 @@
             "schema": {
               "enum": [
                 "all",
+                "claude",
                 "claude-code",
                 "cowork",
+                "codex",
                 "web"
               ],
               "type": "string",
