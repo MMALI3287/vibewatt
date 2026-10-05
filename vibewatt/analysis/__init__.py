@@ -8,7 +8,8 @@ import sqlite3
 from collections import defaultdict
 from datetime import date, datetime, tzinfo
 
-from .. import store
+from .. import quota, store
+from ..sources import CLAUDE_ONLY, matches
 from . import anomaly, cache_scan, context, peaks, tips, waste
 from .models import local_day
 
@@ -32,7 +33,7 @@ def analyze(
 
     def facets(row: dict, source_key: str = "source") -> bool:
         return (
-            (source == "all" or row[source_key] == source)
+            matches(source, row[source_key])
             and (
                 project is None
                 or row["project"]
@@ -49,7 +50,9 @@ def analyze(
         )
 
     turns = []
-    for row in conn.execute("SELECT * FROM turns ORDER BY ts, msg_id, request_id"):
+    for row in conn.execute(
+        f"SELECT * FROM turns WHERE {CLAUDE_ONLY} ORDER BY ts, msg_id, request_id"
+    ):
         item = dict(row)
         item["day"] = local_day(item["ts"], tz)
         if item["day"] and facets(item):
@@ -107,7 +110,12 @@ def analyze(
             "quota samples are account-wide and cannot be attributed to those filters."
         )
     else:
-        samples = [dict(r) for r in conn.execute("SELECT * FROM quota_samples")]
+        samples = [
+            dict(r)
+            for r in conn.execute(
+                f"SELECT * FROM quota_samples WHERE {quota.CLAUDE_SAMPLES}"
+            )
+        ]
         peak_findings = peaks.detect(samples, tz, date_from, end)
         findings.extend(peak_findings)
         if not peak_findings:

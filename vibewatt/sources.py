@@ -20,6 +20,35 @@ from pathlib import Path
 
 CLAUDE_CODE = "claude-code"
 COWORK = "cowork"
+CODEX = "codex"
+# Sources that bill through Anthropic. Reports default to these; another
+# provider is selected by name so its numbers never blend into Claude totals.
+CLAUDE_SOURCES = (CLAUDE_CODE, COWORK)
+# Every Claude surface, local or harvested. The "claude" scope selects these.
+CLAUDE_SURFACES = (*CLAUDE_SOURCES, "web")
+# For features that only make sense for Anthropic usage (findings, context
+# nudges, the plan comparison), whatever scope the reader picked.
+CLAUDE_ONLY = "source IN (" + ", ".join(f"'{s}'" for s in CLAUDE_SOURCES) + ")"
+
+
+def source_clause(source: str | None, column: str = "source") -> tuple[str, list]:
+    """SQL for a report scope: "all" is every provider, "claude" every Claude surface."""
+    if not source or source == "all":
+        return "1=1", []
+    if source == "claude":
+        return f"{column} IN ({', '.join('?' * len(CLAUDE_SURFACES))})", list(
+            CLAUDE_SURFACES
+        )
+    return f"{column} = ?", [source]
+
+
+def matches(source: str | None, value: str) -> bool:
+    """source_clause() for rows already in memory."""
+    if not source or source == "all":
+        return True
+    if source == "claude":
+        return value in CLAUDE_SURFACES
+    return value == source
 
 
 @dataclass(frozen=True)

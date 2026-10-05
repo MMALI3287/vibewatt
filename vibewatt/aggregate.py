@@ -9,7 +9,7 @@ from itertools import pairwise
 
 from .config import clock_zone
 from .pricing import MILLION, WEB_SEARCH_PER_CALL, rate_for
-from .sources import Turn
+from .sources import CLAUDE_ONLY, Turn, source_clause
 
 
 @dataclass
@@ -367,10 +367,8 @@ def from_store(
     want = REPORT_PARTS if parts is None else parts
     report = Report()
     report.today = datetime.now(tz).date()
-    where, args = ["1=1"], []
-    if source and source != "all":
-        where.append("source = ?")
-        args.append(source)
+    scope_sql, args = source_clause(source)
+    where = [scope_sql]
     if project is not None:
         from .projects import clause
 
@@ -451,12 +449,16 @@ def from_store(
             conn.execute(
                 f"SELECT hr, MIN(first_ts) first_ts, MAX(last_ts) last_ts,"
                 f" GROUP_CONCAT(DISTINCT model) models, {_SUMS}"
-                f" FROM rollup WHERE {kept} GROUP BY hr ORDER BY hr",
+                # The 5-hour block models Anthropic's plan window, so it only
+                # ever counts Claude usage, whatever else the scope includes.
+                f" FROM rollup WHERE {kept} AND {CLAUDE_ONLY} GROUP BY hr ORDER BY hr",
                 args,
             ),
             session_hours,
         )
-    if (not source or source == "all") and project is None:
+    # Retired history.json rows are Claude usage, so they join any scope that
+    # includes Claude Code.
+    if (not source or source in ("all", "claude")) and project is None:
         _add_history(conn, report, date_from, date_to, model, overrides)
     return report
 
@@ -527,7 +529,7 @@ def _add_history(conn, report: Report, date_from, date_to, model, overrides) -> 
     live = {
         (r["machine_id"], r["day"], r["model"]): r
         for r in conn.execute(
-            f"SELECT machine_id, day, model, {_SUMS} FROM rollup WHERE {cond} GROUP BY machine_id, day, model",
+            f"SELECT machine_id, day, model, {_SUMS} FROM rollup WHERE {CLAUDE_ONLY} AND {cond} GROUP BY machine_id, day, model",
             args,
         )
     }

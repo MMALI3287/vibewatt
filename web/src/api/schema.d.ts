@@ -370,6 +370,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/codex-quota": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Codex Quota Endpoint
+         * @description Codex plan limits read from local rollouts: a ChatGPT plan, never Anthropic's.
+         */
+        get: operations["codex_quota_endpoint_api_codex_quota_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/quota": {
         parameters: {
             query?: never;
@@ -1362,7 +1382,7 @@ export interface operations {
                 year?: number | null;
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude-code" | "cowork" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1492,7 +1512,7 @@ export interface operations {
                 include_dismissed?: boolean;
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude-code" | "cowork" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1531,7 +1551,7 @@ export interface operations {
                 include_dismissed?: boolean;
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude-code" | "cowork" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1640,7 +1660,7 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude-code" | "cowork" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1676,7 +1696,7 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude-code" | "cowork" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1714,7 +1734,7 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude-code" | "cowork" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1752,7 +1772,7 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude-code" | "cowork" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1795,7 +1815,7 @@ export interface operations {
                 q?: string | null;
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude-code" | "cowork" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1883,7 +1903,7 @@ export interface operations {
                 limit?: number;
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude-code" | "cowork" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1914,12 +1934,32 @@ export interface operations {
             };
         };
     };
+    codex_quota_endpoint_api_codex_quota_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuotaOut"] | null;
+                };
+            };
+        };
+    };
     quota_endpoint_api_quota_get: {
         parameters: {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude-code" | "cowork" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -1955,7 +1995,7 @@ export interface operations {
             query?: {
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude-code" | "cowork" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";
@@ -2089,7 +2129,7 @@ export interface operations {
                 format?: "json" | "csv";
                 from?: string | null;
                 to?: string | null;
-                source?: "all" | "claude-code" | "cowork" | "web";
+                source?: "all" | "claude" | "claude-code" | "cowork" | "codex" | "web";
                 project?: string | null;
                 model?: string | null;
                 metric?: "cost" | "tokens";

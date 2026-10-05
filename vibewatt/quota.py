@@ -53,12 +53,19 @@ _LABELS = {
 }
 
 
+# Codex plan readings carry a "chatgpt:<account>" scope. Anthropic plan readers
+# exclude them so a ChatGPT limit never shows as Claude utilization.
+CLAUDE_SAMPLES = "scope NOT LIKE 'chatgpt:%'"
+CODEX_SAMPLES = "scope LIKE 'chatgpt:%'"
+
+
 def label_for(key: str) -> str:
     return _LABELS.get(key) or key.replace("_", " ").strip().capitalize()
 
 
 def window_length(key: str) -> timedelta | None:
     """How long a window runs. Unknown for anything but the rolling limits."""
+    key = key.removeprefix("codex_")
     if key.startswith("five_hour"):
         return timedelta(hours=5)
     if key.startswith("seven_day"):
@@ -422,15 +429,21 @@ def canonical_scope(conn):
 
 
 def latest(
-    conn, *, now: datetime | None = None, max_age: timedelta | None = None
+    conn,
+    *,
+    now: datetime | None = None,
+    max_age: timedelta | None = None,
+    provider: str = "claude",
 ) -> Quota | None:
-    """The newest sample of every window, from any source."""
+    """The newest sample of every window of one provider's plan, from any source."""
     now = now or datetime.now(UTC)
     canon = canonical_scope(conn)
+    which = CODEX_SAMPLES if provider == "codex" else CLAUDE_SAMPLES
     newest_rows: dict[tuple[str, str], object] = {}
     for r in conn.execute(
         "SELECT q.* FROM quota_samples q JOIN ("
-        "  SELECT key, scope, MAX(ts) ts FROM quota_samples GROUP BY key, scope"
+        f"  SELECT key, scope, MAX(ts) ts FROM quota_samples WHERE {which}"
+        "  GROUP BY key, scope"
         ") n ON q.key = n.key AND q.scope = n.scope AND q.ts = n.ts"
     ):
         series = (r["key"], canon(r["scope"]))

@@ -24,6 +24,7 @@ from itertools import pairwise
 from pathlib import Path
 
 from .config import clock_zone, copy_sqlite, data_dir, zone_id
+from .sources import source_clause
 
 SCHEMA_VERSION = 12
 
@@ -906,6 +907,11 @@ def sync_files(
     # own, so a request that writes (alerts, dismissals) never waits long.
     conn.commit()
     hours: set[str] = set()
+    from . import identity
+    from .ingest.codex import plan_readings as codex_plan_readings
+    from .sources import CODEX
+
+    codex_scope = f"chatgpt:{identity.chatgpt_account_id()}"
     for i in range(0, len(changed), batch_files):
         batch = changed[i : i + batch_files]
         lines = []
@@ -928,6 +934,17 @@ def sync_files(
                     for (hr, session), (n, tokens) in raw.items()
                 ],
             )
+            if source == CODEX:
+                # Plan readings ride in the same rollout. INSERT OR IGNORE keeps a
+                # reparse from adding rows.
+                try:
+                    plan_rows = codex_plan_readings(path, codex_scope)
+                except OSError:
+                    plan_rows = []
+                conn.executemany(
+                    "INSERT OR IGNORE INTO quota_samples VALUES (?,?,?,?,?,?,?)",
+                    plan_rows,
+                )
             lines.extend(file_lines)
             read.append((source, path))
             # turn_count is responses, not lines: one response spans several lines.
@@ -1148,11 +1165,8 @@ def sessions(
     Local totals include matching turns. Cloud totals cannot be split by day
     and are selected by their start date in the report timezone.
     """
-    local_clauses = ["1=1"]
-    local_args: list = []
-    if source:
-        local_clauses.append("source = ?")
-        local_args.append(source)
+    scope_sql, local_args = source_clause(source)
+    local_clauses = [scope_sql]
     if project is not None:
         from .projects import clause
 
@@ -1177,11 +1191,8 @@ def sessions(
         local_args,
     ).fetchall()
 
-    cloud_clauses = ["harvested = 1"]
-    cloud_args: list = []
-    if source:
-        cloud_clauses.append("surface = ?")
-        cloud_args.append(source)
+    cloud_sql, cloud_args = source_clause(source, "surface")
+    cloud_clauses = ["harvested = 1", cloud_sql]
     if project is not None:
         from .projects import clause
 

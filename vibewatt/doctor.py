@@ -18,8 +18,8 @@ from pathlib import Path
 
 from . import quota
 from .config import data_dir, user_config_dir
-from .ingest import claude_code, discover
-from .sources import CLAUDE_CODE, COWORK, load
+from .ingest import claude_code, codex, discover
+from .sources import CLAUDE_CODE, CLAUDE_SOURCES, CODEX, COWORK, load
 
 
 def _claude_settings() -> tuple[Path | None, dict]:
@@ -112,7 +112,11 @@ def run(cfg: dict, tz) -> int:
     say(
         f"    {'cowork':<12} looked in: desktop data dir (override VIBEWATT_COWORK_DIR)"
     )
-    for source in (CLAUDE_CODE, COWORK):
+    say(
+        f"    {'codex':<12} looked in: {', '.join(str(r) for r in codex.roots())}"
+        " (override CODEX_HOME)"
+    )
+    for source in (CLAUDE_CODE, COWORK, CODEX):
         found = by_source.get(source, [])
         say(f"    {source:<12} {len(found)} file(s)")
 
@@ -139,37 +143,51 @@ def run(cfg: dict, tz) -> int:
             f"{ordered[0]} .. {ordered[-1]}"
         )
 
-    all_days = sorted({d for s in per_source.values() for d in s})
-    last = all_days[-1]
-    gap = (today - last).days
-    say()
-    say("  streak check")
-    say(f"    most recent local activity   {last}  ({gap} day(s) ago)")
-    say(f"    today in {cfg.get('timezone')!s:<12}        {today}")
-    if gap == 0:
-        say("    -> streak counts from today")
-    elif gap == 1:
-        say("    -> streak counts from yesterday")
-    else:
-        say("    -> streak reads 0 because nothing local landed in the last 2 days.")
-        say("       Claude Code on the web, Cowork remote and claude.ai chat write NO")
-        say("       local logs, so daily use through those surfaces cannot raise this.")
-        say(
-            "       Plan utilization below is the account-wide figure that does count them."
-        )
-
-    recent = [str(d) for d in all_days[-10:]]
-    say(f"    last 10 local active days    {', '.join(recent)}")
-
-    # gaps inside the covered range hint at pruning
-    span = (all_days[-1] - all_days[0]).days + 1
-    say(
-        f"    covered span                 {span} calendar day(s), {len(all_days)} active"
+    # Codex days are listed above but never count toward the Claude streak.
+    all_days = sorted(
+        {d for src, days in per_source.items() if src in CLAUDE_SOURCES for d in days}
     )
-    if span > 30 and len(all_days) < span * 0.4:
+    if not all_days:
+        say()
+        say("  streak check")
+        say("    no Claude activity found, so there is no streak to check")
+    else:
+        last = all_days[-1]
+        gap = (today - last).days
+        say()
+        say("  streak check")
+        say(f"    most recent local activity   {last}  ({gap} day(s) ago)")
+        say(f"    today in {cfg.get('timezone')!s:<12}        {today}")
+        if gap == 0:
+            say("    -> streak counts from today")
+        elif gap == 1:
+            say("    -> streak counts from yesterday")
+        else:
+            say(
+                "    -> streak reads 0 because nothing local landed in the last 2 days."
+            )
+            say(
+                "       Claude Code on the web, Cowork remote and claude.ai chat write NO"
+            )
+            say(
+                "       local logs, so daily use through those surfaces cannot raise this."
+            )
+            say(
+                "       Plan utilization below is the account-wide figure that does count them."
+            )
+
+        recent = [str(d) for d in all_days[-10:]]
+        say(f"    last 10 local active days    {', '.join(recent)}")
+
+        # gaps inside the covered range hint at pruning
+        span = (all_days[-1] - all_days[0]).days + 1
         say(
-            "    note: sparse coverage over a long span is what pruned history looks like"
+            f"    covered span                 {span} calendar day(s), {len(all_days)} active"
         )
+        if span > 30 and len(all_days) < span * 0.4:
+            say(
+                "    note: sparse coverage over a long span is what pruned history looks like"
+            )
 
     # --- the store, which keeps every turn after its log is pruned --------------
     say()
@@ -239,5 +257,21 @@ def run(cfg: dict, tz) -> int:
             if w.remaining_seconds is not None:
                 left = f"resets in {int(w.remaining_seconds // 3600)}h"
             say(f"    {w.label:<18} {w.utilization:5.1f}%  {left}")
+
+    say()
+    say("  codex plan (ChatGPT account, from local Codex logs)")
+    from . import identity
+
+    say(
+        f"    account      {identity.chatgpt_account_id()}  (auth.json account_id only)"
+    )
+    if store.db_path().exists():
+        with store.connect() as conn:
+            codex_plan = quota.latest(conn, provider="codex")
+        if codex_plan is None:
+            say("    no current reading")
+        else:
+            for w in codex_plan.windows:
+                say(f"    {w.label:<26} {w.utilization:5.1f}%")
     say()
     return 0
