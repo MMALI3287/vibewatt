@@ -16,7 +16,7 @@ export function LocalActivity() {
   return <>
     {!!context.data?.length && <section className="card" aria-label="Local context nudges">
       <h2>Local context · active sessions</h2>
-      <p className="muted">Latest main-thread response within 30 minutes. Capacity uses a conservative 200K window unless the session shows 1M evidence. This is a local snapshot, not plan utilization.</p>
+      <p className="muted">Latest main-thread response within 30 minutes. Capacity is 1M for models that run a native 1M window on the Anthropic API. Other models and provider model ids use 200K until the session shows larger prompts. This is a local snapshot, not plan utilization.</p>
       <ul>{context.data.map(nudge => <li key={`${nudge.source}:${nudge.session}`}>
         <Link to={`/sessions/${encodeURIComponent(nudge.session)}`}>
           {nudge.severity === "urgent" ? "Near capacity" : "Consider a handoff"}: {fmtInt(nudge.used_tokens)} / {fmtInt(nudge.max_tokens)} tokens
