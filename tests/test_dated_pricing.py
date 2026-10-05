@@ -199,3 +199,17 @@ def test_context_nudge_uses_remote_window_for_unlisted_models(clean, tmp_path):
         )
         found = {f["session"]: f["max_tokens"] for f in context.local(conn, now)}
     assert found == {"b": 1_000_000}
+
+
+def test_drift_ignores_verified_community_errors():
+    sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
+    from pricing_drift import drift
+
+    payload = {
+        "claude-mythos-preview": {
+            "litellm_provider": "anthropic",
+            "input_cost_per_token": 1e-05,
+            "output_cost_per_token": 5e-05,
+        }
+    }
+    assert drift(payload, pricing.BUILTIN) == []

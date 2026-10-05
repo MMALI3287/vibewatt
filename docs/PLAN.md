@@ -1381,7 +1381,9 @@ Audit record (2026-10-05, Claude Code):
   when built-in and community rates disagree. Models newer than the built-in
   table use the community context window for nudges. Its first live run flags
   `claude-mythos-preview`: built-in $25/$125 from Anthropic's Glasswing page
-  versus community $10/$50. That is left for the user to decide.
+  versus community $10/$50. Anthropic's page, rechecked 2026-10-05, still
+  states $25/$125, so the built-in rate stays and the drift check ignores that
+  exact community value as a known community error.
 - No file, table, flag or dependency was removed in this change.
 
 ### Phase 10: More providers (planned)

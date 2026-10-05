@@ -13,11 +13,22 @@ from vibewatt import pricing
 
 FIELDS = ("input", "cache_5m", "cache_1h", "cache_read", "output")
 
+# Community rates checked against Anthropic and found wrong. Only these exact
+# values are ignored, so a later community change is reported again.
+KNOWN_COMMUNITY_ERRORS = {
+    # Anthropic lists $25/$125: https://www.anthropic.com/glasswing (2026-10-05).
+    # The community table repeats the Mythos 5 rate.
+    "claude-mythos-preview": pricing.Rate(10, 12.5, 20, 1, 50),
+}
+
 
 def drift(payload: dict, builtin: dict[str, pricing.Rate]) -> list[str]:
     report = []
     for model, remote in sorted(pricing._parse_remote(payload).items()):
         if not model.startswith("claude-"):
+            continue
+        known = KNOWN_COMMUNITY_ERRORS.get(model)
+        if known and all(abs(a - b) < 1e-9 for a, b in zip(known, remote, strict=True)):
             continue
         local = builtin.get(model)
         if local is None:
