@@ -1526,6 +1526,22 @@ Phase 11 record (2026-10-06, Claude Code).
   list and `export`/`import`. **Removed the "Source release" note** that said
   PyPI held only the reservation. It is false once 0.4.0 is published.
 
+Phase 11 outcome (2026-10-06).
+
+- PR #26 merged as `c6315fb` after CI passed on Linux, Windows and macOS.
+- The repository is public, with description, topics, secret scanning, push
+  protection and vulnerability alerts on. GitHub's secret scan found 0 alerts.
+- Tag `v0.4.0` on `c6315fb`. The release workflow built and checked the
+  artifacts and created the GitHub release. SHA-256 of the published files:
+  `8ddb95c7088164eeeee757aa13c8dfc669ef51679071a1e29ecfb057dca831c7` (wheel),
+  `22a077088ee17047d4bf12fd8a9fe7dfee2b8da007d42a90bb785e41994f8f98` (sdist).
+- **PyPI upload is pending one step by the owner.** The `pypi` job failed with
+  `invalid-publisher` because PyPI has no trusted publisher for this workflow
+  yet. Adding one needs the owner's PyPI login, which an agent may not use.
+  Once it is added (owner `MMALI3287`, repository `vibewatt`, workflow
+  `release.yml`, environment `pypi`), re-running the failed job publishes the
+  same checked artifacts.
+
 ## 9. Non-goals
 
 Stated so they do not creep in:
