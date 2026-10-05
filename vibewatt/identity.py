@@ -37,6 +37,23 @@ def account_id() -> str:
     return "unknown"
 
 
+def chatgpt_account_id() -> str:
+    """The ChatGPT account Codex is signed in with, or "unknown".
+
+    Codex writes it to `$CODEX_HOME/auth.json` as `tokens.account_id` (the same
+    value as the id token's `chatgpt_account_id` claim). Only that field is read:
+    tokens are never decoded, copied or stored. With keyring credential storage
+    the file is absent and the account is unknown.
+    """
+    from .ingest.codex import home
+
+    try:
+        raw = json.loads((home() / "auth.json").read_text(encoding="utf-8"))
+        return valid_account(raw["tokens"]["account_id"])
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return "unknown"
+
+
 def selected_account() -> str:
     return _selected.get() or account_id()
 

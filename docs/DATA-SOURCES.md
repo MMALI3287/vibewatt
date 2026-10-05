@@ -202,3 +202,125 @@ credentials and quota are never exported. Import validates the full archive
 before opening a writable store, with a 200 MiB compressed/expanded cap and a
 500,000-record cap across every input table. Imported responses dedup by account,
 machine and response identity, preserving the maximum of each usage counter.
+
+## Codex (Phase 10, observed 2026-10-05)
+
+Source: `$CODEX_HOME` (default `~/.codex`), `sessions/**/rollout-*.jsonl` and
+`archived_sessions/rollout-*.jsonl`. Checked against 195 real rollouts from Codex
+CLI 0.128 to 0.159, 2026-05-01 to 2026-10-03. Everything below was measured on
+those files; a count says how many records it rests on.
+
+**Where usage lives.** `event_msg` records with `payload.type = "token_count"`.
+5,174 carry `info`; the rest only refresh `rate_limits`.
+
+**Cumulative or per call.** Both are present. `info.total_token_usage` is the
+running session total and never decreases (0 decreases in 5,174). `info.last_token_usage`
+is the call that just finished. Summing the unique `last_token_usage` values
+reproduces the final total exactly in 193 of 194 sessions. The one exception
+differs only in `total_tokens`, never in a component. So the importer bills
+`last_token_usage` and never sums `total_token_usage`.
+
+**Response identity.** There is no message or request id. A response is
+`(session id, running total)`. 222 events repeat the previous total (a refresh
+re-emits the record), so the importer keys on the full total and collapses the
+repeat. The result does not depend on file order because the key is a value.
+
+**Token semantics.** `input_tokens` includes `cached_input_tokens` (cached never
+exceeds input in 5,174 events). vibewatt stores `input - cached` as input and the
+cached part as cache read. `output_tokens` includes `reasoning_output_tokens`
+(reasoning never exceeds output), so reasoning is shown as thinking and not added
+again. `cache_write_input_tokens` is 0 in every local event. `total_tokens` is
+ignored: 119 events carry only a `total_tokens` baseline with every component 0.
+These come from forked or subagent threads that inherit a parent total. They are
+not responses.
+
+**Model.** `turn_context.payload.model`, taken from the latest `turn_context`
+before the event. 4 events precede any `turn_context`. They are counted as
+`no_model` drops instead of being priced at a guess.
+
+**Forks.** 25 rollouts have `forked_from_id` and 38 have `parent_thread_id`. None
+of their running totals appear in the parent rollout, so a fork never double
+counts its parent. The first `session_meta` in a file is the session's own.
+
+**Resumed sessions.** A session resumed on another model can re-emit an old
+running total right after its new `turn_context`. One local event did this: a
+`gpt-5.4` context repeated a `gpt-5.5` total from three days earlier. The total
+already identifies that response, so the repeat collapses into it and the
+response keeps its original model.
+
+**Identity.** Rollouts carry no account id. Codex keeps the signed-in ChatGPT
+account in `$CODEX_HOME/auth.json` as `tokens.account_id`, the same value as the
+id token's `chatgpt_account_id` claim. vibewatt reads only that field. Tokens are
+never decoded, copied or stored. With keyring credential storage the file is
+absent and the account is `unknown`. The account scopes Codex plan readings
+(`chatgpt:<uuid>`). Usage rows still carry the install's Claude account and
+machine identity, because a rollout does not record which ChatGPT account wrote
+it.
+
+**Plan readings.** Every `token_count` event repeats `rate_limits`: `primary`
+(300 minutes on paid plans, 10,080 minutes on `free` and `go`) and `secondary`
+(10,080 minutes) with `used_percent`, `resets_at` (epoch seconds) and
+`plan_type`. Sync stores a reading only when a window's value, reset time or
+plan changed, keyed by window length (`codex_five_hour`, `codex_seven_day`) and
+labelled with the plan, for example "Codex weekly (plus)". The real rollouts gave
+2,750 rows. Anthropic plan readers (meters, forecasts, peak findings, quota
+history) exclude the `chatgpt:` scope, so a ChatGPT limit never shows as Claude
+utilization. They describe the Codex plan of one ChatGPT account, not the Claude
+account.
+
+**Not observed.** Fast or priority tier, long prompts over 272K and non-zero cache
+writes appear nowhere in the local data. The importer never sets `fast`. The 272K
+rule below is implemented from the model pages and is covered by unit tests only.
+
+### Codex rates (retrieved 2026-10-05)
+
+Rates are USD per million tokens. Sources: `developers.openai.com/api/docs/models/<id>`
+and the API changelog `developers.openai.com/api/docs/changelog`.
+
+| Model | Input | Cache write | Cache read | Output | From |
+|---|---|---|---|---|---|
+| `gpt-5.4` | 2.50 | 2.50 (not billed separately) | 0.25 | 15 | 2026-03-05 |
+| `gpt-5.5` | 5 | 5 (not billed separately) | 0.50 | 30 | 2026-04-24 |
+| `gpt-5.6-terra` | 2 | 2.50 | 0.20 | 12 | 2026-07-30 |
+| `gpt-5.6-sol` | 4 | 5 | 0.40 | 20 | 2026-08-21 to 2026-11-21 |
+| `gpt-6-astra` | 10 | 12.50 | 1.00 | 50 | 2026-09-03 |
+| `gpt-6.1-sol` | 2 | 2.50 | 0.10 | 10 | 2026-09-29 |
+| `codex-auto-review` | as `gpt-5.4` | | | | 2026-04-30 |
+
+`codex-auto-review` is the slug Codex stamps on approval-review ("guardian")
+turns. It has no API page. OpenAI's auto-review report
+([alignment.openai.com/auto-review](https://alignment.openai.com/auto-review/),
+published 2026-04-30) names the reviewer GPT-5.4 Thinking at low reasoning, so
+it is priced at `gpt-5.4` rates from that date. OpenAI has not published a
+change of reviewer model since.
+
+A prompt over 272,000 input tokens reprices the whole request at 2x input and
+cache rates and 1.5x output. The model pages state this for every model above
+except `gpt-5.6-sol`, which lists long-context rates without a threshold. A large
+Sol prompt is flagged as an unverified premium.
+
+Still unpriced on purpose: `gpt-5.6-terra` before 2026-07-30 and `gpt-5.6-sol`
+before 2026-08-21. The changelog gives those older input and output prices but
+no cache rates. ChatGPT plans bill by subscription, so every Codex cost is an
+API-equivalent estimate, never a bill.
+
+**Retention.** Codex keeps rollouts until the user removes them. Archived
+sessions stay on disk. The importer keeps usage after a rollout disappears, the
+same as for Claude.
+
+**Scopes.** `all` is every provider, with a per-source split. `claude` is every
+Claude surface (Claude Code, Cowork, web). Features that model Anthropic's plan
+or Claude behaviour stay Claude-only under any scope and say so: findings,
+context nudges, alert baselines, the 5-hour block and the plan-price comparison.
+With `codex` selected the plan comparison is omitted.
+
+**Gate evidence (2026-10-05).** A sync of the real rollouts into a copy of the
+real store read 195 files and stored 4,828 Codex responses. An independent
+recount of unique non-zero responses gave 4,829. The one difference is an event
+with only `total_tokens` set. Input plus cached (540,632,017), cached
+(513,104,000) and output (1,695,449) match the recount exactly. With the added
+rates no Codex response is unpriced: $426.37 in total, of which
+`codex-auto-review` is $32.49. Before the scope change, on the same store, the
+Claude-only default and Codex added back to the old blended `all` exactly
+(13,050 and $3,417.38 plus 4,828 and $393.85 equal 17,878 and $3,811.24).
+

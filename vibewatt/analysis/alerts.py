@@ -10,6 +10,7 @@ from datetime import UTC, datetime, timedelta, tzinfo
 from statistics import median
 
 from .. import store
+from ..sources import CLAUDE_ONLY
 
 _SCOPE = "phase6-alerts"
 
@@ -81,14 +82,14 @@ def evaluate(
     prior = [
         r[0]
         for r in conn.execute(
-            "SELECT cost FROM turns WHERE ts < ? AND cost IS NOT NULL AND cost >= 0"
+            f"SELECT cost FROM turns WHERE {CLAUDE_ONLY} AND ts < ? AND cost IS NOT NULL AND cost >= 0"
             " ORDER BY ts DESC LIMIT 50",
             (since,),
         )
     ][::-1]
     baseline: deque[float] = deque(prior, maxlen=50)
     for row in conn.execute(
-        "SELECT msg_id, request_id, ts, cost FROM turns WHERE ts >= ? AND ts <= ?"
+        f"SELECT msg_id, request_id, ts, cost FROM turns WHERE {CLAUDE_ONLY} AND ts >= ? AND ts <= ?"
         " ORDER BY ts, msg_id, request_id",
         (since, instant.isoformat()),
     ):
@@ -111,6 +112,7 @@ def evaluate(
     report = from_store(
         conn,
         tz,
+        source="claude",
         session_hours=session_hours,
         overrides=overrides,
         parts=frozenset({"blocks"}),

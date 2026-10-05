@@ -11,6 +11,7 @@ from .. import cli, store
 from ..aggregate import from_store
 from ..config import clock_zone
 from ..pricing import MILLION, rate_for
+from ..sources import matches
 from .models import local_day, timestamp, total_tokens
 
 
@@ -58,7 +59,7 @@ def build(
         if (
             not day
             or not start.isoformat() <= day <= end.isoformat()
-            or (source != "all" and row["source"] != source)
+            or not matches(source, row["source"])
             or (wanted is not None and row["project"] not in wanted)
             or (model and row["model"] != model)
             or (row["sidechain"] and not cfg.get("include_sidechains", True))
@@ -69,7 +70,7 @@ def build(
     sessions = store.sessions(
         conn,
         limit=2**31 - 1,
-        source=None if source == "all" else source,
+        source=source,
         project=project,
         model=model,
         date_from=start,

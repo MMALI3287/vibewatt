@@ -33,6 +33,7 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setattr(pricing, "_history", {})
     monkeypatch.setattr(pricing, "_windows", {})
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude"))
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / "codex-home"))
     monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "appdata"))
     # Pre-rename names left in a developer shell must not leak into a test.

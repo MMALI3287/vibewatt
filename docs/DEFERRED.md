@@ -12,8 +12,9 @@ recorded under "Phase 8" in `PLAN.md`.
 
 | Item | Prerequisite |
 |---|---|
-| ChatGPT/Codex CLI usage | 95 real sessions exist locally. Write the response identity, cumulative-versus-per-turn and retention contract into `DATA-SOURCES.md` before parsing |
-| Gemini CLI and Antigravity usage | No local data exists yet. Sanitized sessions are needed before a parser is written |
+| GitHub Copilot Chat usage | VS Code `chatSessions` JSON carries `modelId`, `promptTokens`, `completionTokens` and a premium-request `multiplier` (49 local session files). Write the identity and retention contract into `DATA-SOURCES.md` first. Copilot bills premium requests, so that is the primary unit |
+| Gemini Antigravity usage | `~/.gemini/antigravity/conversations/*.db` holds per-response protobuf `gen_metadata` with a model id and token counts but no field names (1 local conversation). Confirm field meanings from a published schema or more conversations before parsing |
+| Copilot CLI usage | `~/.copilot/session-state` holds no token fields locally. Reopen if a later CLI version logs usage |
 
 ## Closed on 2026-09-26
 

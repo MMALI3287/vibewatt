@@ -1402,7 +1402,7 @@ across `vibewatt/`, `web/src`, `tests/` and `scripts/` before removal:
   Production writes quota samples through `quota.record()` directly. Those tests
   now call `quota.record()`, so they cover the path production uses.
 
-### Phase 10: More providers (planned)
+### Phase 10: More providers (Codex implemented 2026-10-05; Copilot and Antigravity next)
 
 **Do:** Gemini CLI/Antigravity usage and ChatGPT/Codex CLI usage, including
 the plan rate-limit readings that Codex logs carry. Each provider is one `ingest/` module
@@ -1412,6 +1412,42 @@ cited sources and retention. Provider stats are labelled local-only and kept
 separate by `turns.source`.
 **Gate:** order-independent dedup on sanitized fixtures, no double counting of
 cumulative counts, one observed real sync per provider with local data.
+
+Codex record (2026-10-05, Claude Code). The log contract, rates, plan readings,
+identity and gate evidence are in `DATA-SOURCES.md` under "Codex".
+
+- Added `ingest/codex.py` (`discover`, `parse`, `plan_readings`), source `codex`,
+  OpenAI rates in `BUILTIN_PERIODS` with release-dated windows, the 272K
+  long-context rule and a flag for unverified Sol prompts.
+- **`codex-auto-review`, `gpt-5.4` and `gpt-5.6-terra` are priced.** The first
+  draft of this phase left them unpriced. Terra and 5.4 have model pages; the
+  auto-review slug maps to GPT-5.4 per OpenAI's auto-review report. No Codex
+  response in the real data is unpriced now.
+- **Scopes.** `all` is every provider with a per-source split. New `claude` scope
+  (`--source claude`, "All Claude surfaces" in the filter) covers Claude Code,
+  Cowork and web. An intermediate draft made `all` Claude-only; the user rejected
+  that because it hid Codex from the default view. Claude-specific features
+  (findings, context nudges, alert baselines, the 5-hour block, the plan-price
+  comparison) read Claude rows under any scope (`sources.CLAUDE_ONLY`).
+- **Codex plan readings are imported** into `quota_samples` under a
+  `chatgpt:<account>` scope, stored only when a window changes. Every Anthropic
+  plan reader excludes that scope (`quota.CLAUDE_SAMPLES`). They show in the CLI,
+  `doctor` and a separate dashboard meter group (`/api/codex-quota`).
+- **ChatGPT account id** comes from `auth.json` `tokens.account_id`
+  (`identity.chatgpt_account_id()`). It scopes plan readings. Usage rows keep the
+  Claude identity because rollouts do not name their account.
+- **Removed the single "store now holds N responses $X" line from `sync`.** Why: it
+  blended two providers into one dollar figure. It now prints one line per source.
+  `store.summary()` is no longer called from `sync`; the API and status still use it.
+- **Changed the doctor streak check** to count Claude days only. Why: a Codex day
+  is not Claude activity. The streak message explains Claude surfaces.
+- **The 5-hour block now counts Claude rows only.** Why: it models Anthropic's
+  plan window; Codex usage inside it would overstate that window.
+- Known limits: fast tier and cache writes are unobserved in local data; a
+  ChatGPT account switch is not attributed to past usage rows.
+- Gemini Antigravity and GitHub Copilot were wrongly recorded as having no local
+  data. `~/.gemini/antigravity` and VS Code Copilot Chat sessions exist. They are
+  the next Phase 10 slices; see `DEFERRED.md`.
 
 ### Phase 11: Public launch (planned)
 

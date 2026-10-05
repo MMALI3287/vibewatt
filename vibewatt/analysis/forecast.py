@@ -153,12 +153,13 @@ def forecast_series(
 
 def forecast(conn, now: datetime | None = None) -> list[dict]:
     now = (now or datetime.now(UTC)).astimezone(UTC)
-    from ..quota import canonical_scope
+    from ..quota import CLAUDE_SAMPLES, canonical_scope
 
     canon = canonical_scope(conn)
     series: dict[tuple[str, str], list[Point]] = {}
     for r in conn.execute(
-        "SELECT ts, key, scope, utilization, resets_at FROM quota_samples ORDER BY ts"
+        "SELECT ts, key, scope, utilization, resets_at FROM quota_samples"
+        f" WHERE {CLAUDE_SAMPLES} ORDER BY ts"
     ):
         stamp = _parse_time(r["ts"])
         if stamp is None:

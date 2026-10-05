@@ -52,8 +52,9 @@ export function FilterBar() {
       <label>
         Surface
         <select name="source" value={filters.source} onChange={(e) => update({ source: toSource(e.target.value) })}>
-          <option value="all">All</option>
-          {withCurrent(sources, filters.source === "all" ? null : filters.source).map((s) => (
+          <option value="all">All providers</option>
+          <option value="claude">All Claude surfaces</option>
+          {withCurrent(sources, filters.source === "all" || filters.source === "claude" ? null : filters.source).map((s) => (
             <option key={s} value={s}>
               {s}
             </option>

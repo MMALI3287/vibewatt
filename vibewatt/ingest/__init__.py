@@ -19,11 +19,15 @@ from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 
-from vibewatt.sources import CLAUDE_CODE, COWORK, Turn
+from vibewatt.sources import CLAUDE_CODE, CODEX, COWORK, Turn
 
-from . import claude_code, cowork
+from . import claude_code, codex, cowork
 
-SOURCES: dict[str, ModuleType] = {CLAUDE_CODE: claude_code, COWORK: cowork}
+SOURCES: dict[str, ModuleType] = {
+    CLAUDE_CODE: claude_code,
+    COWORK: cowork,
+    CODEX: codex,
+}
 
 
 def discover(cfg: dict | None = None) -> list[tuple[str, Path]]:
