@@ -19,14 +19,15 @@ from collections.abc import Iterator
 from pathlib import Path
 from types import ModuleType
 
-from vibewatt.sources import CLAUDE_CODE, CODEX, COWORK, Turn
+from vibewatt.sources import CLAUDE_CODE, CODEX, COPILOT, COWORK, Turn
 
-from . import claude_code, codex, cowork
+from . import claude_code, codex, copilot, cowork
 
 SOURCES: dict[str, ModuleType] = {
     CLAUDE_CODE: claude_code,
     COWORK: cowork,
     CODEX: codex,
+    COPILOT: copilot,
 }
 
 

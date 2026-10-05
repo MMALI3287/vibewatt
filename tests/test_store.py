@@ -24,7 +24,7 @@ def test_fresh_store_is_at_current_schema(tmp_path):
             r[0]
             for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
-        assert store.schema_version(conn) == store.SCHEMA_VERSION == 12
+        assert store.schema_version(conn) == store.SCHEMA_VERSION == 13
     assert {
         "meta",
         "turns",

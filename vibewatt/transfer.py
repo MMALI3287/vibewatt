@@ -15,7 +15,7 @@ from uuid import UUID
 
 from . import identity, store
 from .aggregate import cost_of
-from .sources import CLAUDE_SOURCES, CODEX, TOKEN_FIELDS, Turn, merge
+from .sources import CLAUDE_SOURCES, CODEX, COPILOT, TOKEN_FIELDS, Turn, merge
 
 VERSION = 1
 MAX_BYTES = 200 * 1024 * 1024
@@ -156,17 +156,29 @@ def _validate(payload: object) -> tuple[str, list[Turn], list[dict]]:
     ):
         raise ValueError("Archive exceeds record limits or has invalid records")
     expected = {field.name for field in fields(Turn)}
+    # Archives written before Phase 10 have no billed_usd; it defaults to None.
+    optional = {"billed_usd"}
     turns = []
     for row in rows:
-        if not isinstance(row, dict) or set(row) != expected:
+        if (
+            not isinstance(row, dict)
+            or not (expected - optional) <= set(row) <= expected
+        ):
             raise ValueError("Invalid response fields")
+        billed = row.get("billed_usd")
+        if billed is not None and (
+            isinstance(billed, bool)
+            or not isinstance(billed, (int, float))
+            or not 0 <= billed <= 1_000_000
+        ):
+            raise ValueError("Invalid billed amount")
         for name in TOKEN_FIELDS:
             if type(row[name]) is not int or not 0 <= row[name] <= 1_000_000_000_000:
                 raise ValueError("Invalid response counter")
         if row["account_id"] != account:
             raise ValueError("Mixed accounts in archive")
         machine = str(UUID(row["machine_id"]))
-        if row["source"] not in (*CLAUDE_SOURCES, CODEX):
+        if row["source"] not in (*CLAUDE_SOURCES, CODEX, COPILOT):
             raise ValueError("Unknown response source")
         for name in ("model", "project", "session"):
             if not isinstance(row[name], str) or len(row[name]) > 32768:

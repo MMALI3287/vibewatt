@@ -147,6 +147,7 @@
                 "claude-code",
                 "cowork",
                 "codex",
+                "copilot",
                 "web"
               ],
               "type": "string",
@@ -434,6 +435,7 @@
                 "claude-code",
                 "cowork",
                 "codex",
+                "copilot",
                 "web"
               ],
               "type": "string",
@@ -618,6 +620,7 @@
                 "claude-code",
                 "cowork",
                 "codex",
+                "copilot",
                 "web"
               ],
               "type": "string",
@@ -838,6 +841,7 @@
                 "claude-code",
                 "cowork",
                 "codex",
+                "copilot",
                 "web"
               ],
               "type": "string",
@@ -966,6 +970,7 @@
                 "claude-code",
                 "cowork",
                 "codex",
+                "copilot",
                 "web"
               ],
               "type": "string",
@@ -1098,6 +1103,7 @@
                 "claude-code",
                 "cowork",
                 "codex",
+                "copilot",
                 "web"
               ],
               "type": "string",
@@ -1239,6 +1245,7 @@
                 "claude-code",
                 "cowork",
                 "codex",
+                "copilot",
                 "web"
               ],
               "type": "string",
@@ -1416,6 +1423,7 @@
                 "claude-code",
                 "cowork",
                 "codex",
+                "copilot",
                 "web"
               ],
               "type": "string",
@@ -1617,6 +1625,7 @@
                 "claude-code",
                 "cowork",
                 "codex",
+                "copilot",
                 "web"
               ],
               "type": "string",
@@ -1728,6 +1737,33 @@
         }
       }
     },
+    "/api/copilot-quota": {
+      "get": {
+        "summary": "Copilot Quota Endpoint",
+        "description": "Copilot premium-request use from its local cache: a GitHub plan, never Anthropic's.",
+        "operationId": "copilot_quota_endpoint_api_copilot_quota_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/QuotaOut"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Copilot Quota Endpoint Api Copilot Quota Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/quota": {
       "get": {
         "summary": "Quota Endpoint",
@@ -1776,6 +1812,7 @@
                 "claude-code",
                 "cowork",
                 "codex",
+                "copilot",
                 "web"
               ],
               "type": "string",
@@ -1913,6 +1950,7 @@
                 "claude-code",
                 "cowork",
                 "codex",
+                "copilot",
                 "web"
               ],
               "type": "string",
@@ -2151,6 +2189,7 @@
                 "claude-code",
                 "cowork",
                 "codex",
+                "copilot",
                 "web"
               ],
               "type": "string",
