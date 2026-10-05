@@ -1565,6 +1565,17 @@ The changes below prepare the repository for outside contributors.
   (Contributor Covenant 2.1), issue forms, a pull request template and a
   Dependabot configuration capped at three grouped PRs per ecosystem.
 - README: PyPI, CI and license badges and a fuller contributing section.
+- **History rewrite (second, after the 2026-09-22 one).** `git filter-repo`
+  removed the two documents above from every commit and replaced the real
+  project names (`demo-app`, `DemoLedger`), one real Antigravity conversation id
+  and the real message and request ids with placeholders. `master`, this branch
+  and tag `v0.4.0` were force-pushed, so every commit id changed. The GitHub
+  release and the PyPI files are unchanged; they were built from the commit that
+  `v0.4.0` pointed to before the rewrite, whose code is identical. GitHub keeps
+  the old commits reachable through pull request refs until GitHub Support
+  purges them. A bundle of every ref and a mirror of the old remote were kept
+  outside the repository. None of the replaced strings granted access to
+  anything.
 
 ## 9. Non-goals
 
