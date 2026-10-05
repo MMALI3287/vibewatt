@@ -1326,12 +1326,54 @@ and add no usage or cost. An observed real cycle read 145 records / 40,638 bytes
 a repeat inserted zero and a 10-record cap stopped at 10 with truncation reported.
 No service, command or usage data was removed.
 
-### Phase 9: Verification (planned)
+### Phase 9: Verification (in progress 2026-10-05)
 
 **Do:** an independent audit of Phase 8 against `COMPLETION-QUESTIONS.md` and
 `AGENTS.md`: rerun every gate, check each acceptance item against real behavior,
 confirm new functions have real callers and fix findings test-first.
 **Gate:** every Phase 8 acceptance box is verified, not only ticked.
+
+Audit record (2026-10-05, Claude Code):
+
+- Gates rerun on `master` at d2fe0be before any change: Ruff, 359 Python tests,
+  35 frontend tests, build, generated API (no content diff), production audit
+  and 63 browser tests all pass. The last master CI run passed on Linux, Windows
+  and macOS.
+- Packages 2-4 were read against their acceptance checks: history parsing keeps
+  only timestamp and project under the 50 MB / 500,000 record cap, transfer
+  validates the whole bounded archive before opening a writable store, and
+  browser notifications filter to warning and serious alerts with per-kind
+  cooldown. Code execution and unverified context premiums are shown on the
+  Overview, not only in JSON.
+- **Finding 1 (package 1.1): current models unpriced.** `claude-opus-5-5` (from
+  2026-09-23) and `claude-sonnet-5-5` (from 2026-10-01) were in retained data
+  but not in `BUILTIN`. A copy of the real store had 2,439 of 11,395 responses
+  unpriced and cost reported as $2,467.38. Opus 5.5 was seen before Phase 8
+  closed, so the "every model seen in retained data" check missed it. The copy
+  was synced with `--offline` and a pricing cache last written 2026-09-15. An
+  online sync would have filled both rates from the LiteLLM table, which lists
+  them correctly; the built-in table is still the required anchor. Added both
+  rates and Opus 5.5 fast mode from its 2026-09-24 release-note date. Both ids
+  joined the long-context exemption. After repricing: 11,411 responses, 0 unpriced,
+  $2,788.28 (the 16 extra responses were written during the audit).
+- **Finding 2 (package 1.3): false `context_premium_unknown`.** The same 1,834
+  rows were flagged as having an unverified premium although the official page
+  states standard pricing across 1M for these models. Now 0.
+- **Finding 3 (package 2.1): context nudges used 200K for native-1M models.**
+  Claude Code documents that Opus 4.7+, Sonnet 5+ and Fable run a 1M window on
+  every plan on the Anthropic API. The nudge assumed 200K until a session crossed
+  200K, so it warned at 140K, 14% of the real window, on almost all real usage.
+  First-party ids of those models now use 1M. Provider ids (Bedrock, Vertex) and
+  `[1m]`-only models keep the old evidence rule. The Opus 5.5 and Sonnet 5.5 ids
+  were also missing from the nudge model list, so nudges never fired for them.
+  A test now requires every priced model to have a context window entry.
+- Orphan sweep: no Phase 8 function lacks a production caller. Three older
+  functions with none (`terminal.hour_histogram`, `alerts._time` and the
+  test-only `store.upsert_quota_samples` wrapper) are left for a separate
+  cleanup PR with their own removal records.
+- Branch protection still requires only the Linux and Windows checks. Adding
+  `verify (macos-latest)` is pending the user's confirmation.
+- No file, table, flag or dependency was removed in this change.
 
 ### Phase 10: More providers (planned)
 
