@@ -1,7 +1,8 @@
 # vibewatt
 
 Token usage, cost and plan utilization for **Claude Code** and **Claude Cowork**,
-read from data already on your machine. No account, no API key, no telemetry.
+plus **Codex**, **GitHub Copilot Chat** and **Google Antigravity**, read from data
+already on your machine. No account, no API key, no telemetry.
 
 ```bash
 uv tool install vibewatt      # or: pipx install vibewatt / pip install vibewatt
@@ -13,25 +14,21 @@ vibewatt json | jq .          # machine readable
 
 Works on Windows, macOS and Linux with Python 3.11 or newer.
 
-> **Source release:** Phase 7 packages the React dashboard in the wheel.
-> Python 3.11 or newer is required; Node is only needed to build from source.
-> PyPI currently contains the 0.0.1 name-reservation package. Until the full
-> release is published, build and install the wheel as shown below.
-
 > **Renamed from ccburn.** The first run copies an existing ccburn data directory
 > and store to the vibewatt location and leaves the old one in place. `CCBURN_*`
 > variables and `ccburn.json` files still work for one release, with a warning.
 
 ## Dashboard preview
 
-Fixture data, with quota disabled. No personal usage is shown.
+Synthetic demo data from `scripts/demo_server.py`. No personal usage is shown.
 
 ![Overview in the light theme](docs/images/overview-light.png)
 ![Overview in the dark theme](docs/images/overview-dark.png)
 
 ## Build and install from source
 
-Use Python 3.11+ and Node 22.12+ (Node 24 is used in CI).
+Only needed to work on vibewatt itself. Use Python 3.11+ and Node 22.12+
+(Node 24 is used in CI).
 
 ```bash
 uv sync
@@ -40,7 +37,7 @@ npm ci
 npm run build
 cd ..
 uv build
-pip install dist/vibewatt-0.3.0-py3-none-any.whl
+pip install dist/vibewatt-*.whl
 vibewatt serve
 ```
 
@@ -76,13 +73,17 @@ Claude Code prunes the log. `vibewatt doctor` shows your setting and your covera
 | Claude Code on the web | session totals, via `vibewatt harvest` | yes |
 | Cowork remote sessions | session totals, via `vibewatt harvest` | yes |
 | claude.ai chat | no | yes |
+| Codex CLI and IDE | yes, from `~/.codex/sessions` | Codex plan windows, kept separate |
+| GitHub Copilot Chat (VS Code) | yes, from VS Code's chat-session store | premium requests, kept separate |
+| Google Antigravity | yes, from `~/.gemini/antigravity` | no local copy exists |
 
 Web and remote sessions run in cloud containers, so their logs never reach your
 disk. The Claude Code session API still reports each session's tokens, cost, title
 and model; `vibewatt harvest` stores them.
 
 **Plan utilization** is the one account-wide number: your 5-hour and 7-day
-allowance, whichever surface spent it. Everything else is labelled with what it
+allowance, whichever surface spent it. Codex and Copilot plan readings show in
+their own meters and never mix with Claude's. Everything else is labelled with what it
 covers. Anything vibewatt cannot see, it says so rather than reporting zero.
 
 ## Features
@@ -93,7 +94,8 @@ covers. Anything vibewatt cannot see, it says so rather than reporting zero.
 - **Analysis:** cost anomalies, cache opportunities, token-waste checks,
   peak windows and context warnings, each with its evidence. Dismissals persist.
 - **Wrapped:** a year in review with a shareable image card.
-- **Filters** by date, surface, project and model, kept in the URL.
+- **Filters** by date, provider, surface, project and model, kept in the URL.
+  "All providers" splits every figure by source.
 - **Report-date presets**, header session search (`/`) and visible-tab refresh
   every 60 seconds. Usage figures show their provenance and freshness.
 - **Plan comparison:** current month-to-date local API-equivalent cost against
@@ -129,7 +131,7 @@ call. [docs/ANALYSIS.md](docs/ANALYSIS.md) explains every finding and alert.
 ```
 vibewatt report        terminal report (default)
 vibewatt serve         dashboard                       --host --port --no-browser
-vibewatt doctor        what vibewatt can and cannot see, and why
+vibewatt doctor        what vibewatt can and cannot see and why
 vibewatt sync          read changed local logs into the store
 vibewatt harvest       ingest cloud session usage      --file sessions.json
 vibewatt sessions      sessions across every surface, with titles
@@ -139,6 +141,8 @@ vibewatt blocks        recent rate-limit windows
 vibewatt statusline    Claude Code status line: records plan utilization
 vibewatt status        retained local usage and quota snapshot     --json --out
 vibewatt quota         retained current quota snapshot              --json --out
+vibewatt export        archive the store for another machine          --include-titles
+vibewatt import        merge a .vwx archive from another machine
 ```
 
 `status --json` and `quota --json` never sync logs or fetch network data.
@@ -146,7 +150,7 @@ See [the versioned agent contract and exit codes](docs/AGENT-JSON.md).
 See [the Phase 8 build plan](docs/COMPLETION-QUESTIONS.md) for the finite
 backlog after the completed phases.
 
-Shared flags: `--source {claude-code,cowork,all}`, `--since YYYY-MM-DD`, `--days N`,
+Shared flags: `--source {all,claude,claude-code,cowork,codex,copilot,antigravity}`, `--since YYYY-MM-DD`, `--days N`,
 `--tz Asia/Tokyo`, `--day-start-hour H`, `--weeks N`, `--session-hours N`,
 `--plan 20`, `--no-sidechains`, `--by-project`, `--mask-projects`, `--no-quota`,
 `--offline`, `--no-color`.
@@ -201,6 +205,9 @@ Where it reads from:
 |---|---|---|
 | Claude Code | `~/.claude/projects/**/*.jsonl` | `CLAUDE_CONFIG_DIR` |
 | Cowork | `<desktop data dir>/{local-agent-mode-sessions,claude-code-sessions}/**/audit.jsonl` | `VIBEWATT_COWORK_DIR` |
+| Codex | `~/.codex/{sessions,archived_sessions}/**/rollout-*.jsonl` | `CODEX_HOME` |
+| Copilot Chat | `<VS Code User dir>/{workspaceStorage/*/chatSessions,globalStorage/emptyWindowChatSessions}/*.jsonl` | `VIBEWATT_VSCODE_USER_DIRS` |
+| Antigravity | `~/.gemini/antigravity*/conversations/*.db`, read only | `ANTIGRAVITY_DATA_DIR` |
 | Store | `%LOCALAPPDATA%\vibewatt`, `~/Library/Application Support/vibewatt`, `~/.local/share/vibewatt` | `VIBEWATT_DATA_DIR` |
 
 The desktop data directory is `%APPDATA%\Claude`, `~/Library/Application Support/Claude`
@@ -232,6 +239,9 @@ every view and export.
 
 ## Caveats
 
+- **Codex and Antigravity costs are API-equivalent estimates; Copilot uses the
+  credits GitHub logs.** Each provider's sources and rates are in
+  [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md).
 - **Cost is an estimate at list API rates.** On a Pro or Max subscription it is what
   the same tokens would have cost pay-as-you-go, not what you were billed.
 - The usage endpoint and the cloud session API are undocumented and can change.

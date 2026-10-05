@@ -22,4 +22,5 @@ docs/CODEX-SETUP.md
 
 # Local browser evidence; curated README captures live in docs/images.
 .playwright-cli/
+.playwright-mcp/
 output/

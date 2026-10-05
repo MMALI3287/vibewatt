@@ -329,7 +329,7 @@ Filters: sticky bar under the header — range, surface, project, model, metric
 Footer:  data freshness, coverage note, version, links
 ```
 
-- **Breadcrumbs** on drill-down: `Projects / DemoLedger / session "fix build"`.
+- **Breadcrumbs** on drill-down: `Projects / demo-app / session "fix build"`.
 - **Search** (`/` to focus) over session titles, project names and model names. Client-side over a fetched index below ~5k sessions; server-side beyond.
 - **Sessions** uses infinite scroll with a cursor. Tables elsewhere use pagination.
 - **Modals** for session detail and finding detail. Route-backed (`/sessions/:id`) so they deep-link and the back button closes them.
@@ -1402,7 +1402,7 @@ across `vibewatt/`, `web/src`, `tests/` and `scripts/` before removal:
   Production writes quota samples through `quota.record()` directly. Those tests
   now call `quota.record()`, so they cover the path production uses.
 
-### Phase 10: More providers (Codex, Copilot and Antigravity implemented 2026-10-05)
+### Phase 10: More providers (completed 2026-10-06)
 
 **Do:** Gemini CLI/Antigravity usage and ChatGPT/Codex CLI usage, including
 the plan rate-limit readings that Codex logs carry. Each provider is one `ingest/` module
@@ -1478,12 +1478,53 @@ Antigravity record (2026-10-05, Claude Code). Contract and evidence are in
   provider's log they find nothing and waste a full read.
 - No file, table, command or dependency was removed.
 
-### Phase 11: Public launch (planned)
+Phase 10 closure (2026-10-06, Claude Code).
+
+- **Gemini CLI is not imported.** This machine has no Gemini CLI install and no
+  `~/.gemini/tmp/*/chats` sessions, so there is nothing to observe and the gate
+  ("one observed real sync per provider with local data") cannot be met. A parser
+  written blind would guess its contract. Antigravity, the Gemini surface that
+  does have local data, is imported. Recorded in `DEFERRED.md` with its trigger.
+
+### Phase 11: Public launch
 
 **Do:** make the GitHub repository public for contributions, bump the version,
 write release notes, tag, create the GitHub release and publish to PyPI.
 **Gate:** each external step (visibility change, tag push, release, PyPI upload)
 is confirmed by the user separately, with the exact version and artifact hashes.
+
+**Gate change (2026-10-06):** the user instructed "after phase 10 is fully done
+dont wait for any of my decision finish phase 11 properly". That standing
+instruction replaces the per-step confirmation. The version and hashes are still
+reported in the release notes and in the session.
+
+Phase 11 record (2026-10-06, Claude Code).
+
+- **Version 0.4.0.** 0.3.0 was never published (PyPI holds only the 0.0.1
+  reservation). Phase 10 added three providers, so this is a minor bump. The
+  version lives in `pyproject.toml`, `vibewatt/__init__.py` and
+  `web/package.json`. The release workflow refuses a tag that disagrees with any.
+- Added `CHANGELOG.md`, `.github/workflows/release.yml` (tag-triggered build and
+  checks, PyPI trusted publishing, GitHub release with SHA-256 sums) and the
+  release procedure in `CONTRIBUTING.md`.
+- CI checks the built artifacts by glob instead of the literal `0.3.0` file
+  names, under bash because pwsh on Windows runners does not expand globs.
+- **Pre-public history scan.** All 49 commits were searched for API keys, OAuth
+  and GitHub tokens, PyPI tokens, AWS keys, JWTs and private keys. None were
+  found. Author email and name appear as intended. Real project names
+  (`demo-app`, `DemoLedger`) and one real Antigravity conversation id were
+  replaced in the current tree. They remain in history, where they grant no
+  access.
+- **Fixed a real-data leak in the e2e fixture server.** It redirected `APPDATA`
+  but not `LOCALAPPDATA`, so on Windows `/api/copilot-quota` served the
+  developer's real Copilot cache. Found when the demo server showed a real
+  reading. `isolate()` now covers it and `tests/test_server_isolation.py`
+  asserts every provider path resolves inside the sandbox.
+- Added `scripts/demo_server.py` (seeded synthetic six-week store) and retook
+  the README screenshots from it. The old captures showed a 2-response fixture.
+- README now covers Codex, Copilot Chat and Antigravity, the full `--source`
+  list and `export`/`import`. **Removed the "Source release" note** that said
+  PyPI held only the reservation. It is false once 0.4.0 is published.
 
 ## 9. Non-goals
 

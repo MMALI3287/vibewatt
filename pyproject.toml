@@ -1,6 +1,6 @@
 [project]
 name = "vibewatt"
-version = "0.3.0"
+version = "0.4.0"
 description = "Token usage, cost and plan utilization for Claude Code and Cowork, from local data"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -80,4 +80,16 @@ from the server PATH. The browser controller uses the build host's Node.
 
 The dependency floor gate is `uv run --isolated --no-project --resolution
 lowest-direct --with-editable . --with "pytest>=8" --with httpx2 python -m pytest -q`.
-Publishing a release is a separate authorized step.
+## Publishing a release
+
+1. Set the same version in `pyproject.toml`, `vibewatt/__init__.py` and
+   `web/package.json` (`npm version X.Y.Z --no-git-tag-version`), then `uv lock`.
+2. Add a `## X.Y.Z (date)` section to `CHANGELOG.md`.
+3. Merge to `master`, then push the tag `vX.Y.Z` from that commit.
+
+`.github/workflows/release.yml` refuses a tag that does not match all three
+versions or has no changelog section. It builds and checks the wheel and sdist,
+publishes them to PyPI through trusted publishing (no token is stored) and
+creates the GitHub release with the changelog section and SHA-256 sums.
+
+`scripts/demo_server.py` serves synthetic data for README screenshots.
