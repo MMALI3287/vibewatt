@@ -22,9 +22,10 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from itertools import pairwise
 from pathlib import Path
+from typing import NamedTuple
 
 from .config import clock_zone, copy_sqlite, data_dir, zone_id
-from .sources import source_clause
+from .sources import CLAUDE_SOURCES, source_clause
 
 SCHEMA_VERSION = 13
 
@@ -854,6 +855,24 @@ def rebucket(conn, tz) -> bool:
     return True
 
 
+class _Stat(NamedTuple):
+    st_mtime: float
+    st_size: int
+
+
+def _marker(source: str, path: Path) -> _Stat:
+    # A SQLite source can change only in its -wal file, which leaves the
+    # database's own mtime and size unchanged until a checkpoint.
+    from .sources import ANTIGRAVITY
+
+    if source == ANTIGRAVITY:
+        from .ingest.antigravity import change_marker
+
+        return _Stat(*change_marker(path))
+    st = path.stat()
+    return _Stat(st.st_mtime, st.st_size)
+
+
 def sync_files(
     conn,
     files: list[tuple[str, Path]],
@@ -892,10 +911,15 @@ def sync_files(
     changed: list[tuple[str, Path, os.stat_result]] = []
     for source, path in files:
         try:
-            st = path.stat()
+            st = _marker(source, path)
         except OSError:
             continue
-        if reads_known.get(str(path)) != (st.st_mtime, st.st_size):
+        # Read-tool metadata and titles exist only in Claude transcripts. Other
+        # sources are skipped here so a large binary file is never read as text.
+        if source in CLAUDE_SOURCES and reads_known.get(str(path)) != (
+            st.st_mtime,
+            st.st_size,
+        ):
             try:
                 reads = list(read_tools(source, path, key=_path_key(conn)))
             except OSError:
@@ -973,7 +997,9 @@ def sync_files(
         result.duplicates += dropped
         result.turns += len(turns)
         hours |= upsert_turns(conn, turns, tz, cost_of)
-        result.prompts += upsert_titles(conn, read_titles(read))
+        result.prompts += upsert_titles(
+            conn, read_titles([(s, p) for s, p in read if s in CLAUDE_SOURCES])
+        )
         stamp = datetime.now(UTC).isoformat()
         conn.executemany(
             "INSERT OR REPLACE INTO files (path, mtime, size, parsed_at, turn_count, dropped)"

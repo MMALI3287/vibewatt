@@ -22,6 +22,7 @@ CLAUDE_CODE = "claude-code"
 COWORK = "cowork"
 CODEX = "codex"
 COPILOT = "copilot"
+ANTIGRAVITY = "antigravity"
 # Sources that bill through Anthropic. Reports default to these; another
 # provider is selected by name so its numbers never blend into Claude totals.
 CLAUDE_SOURCES = (CLAUDE_CODE, COWORK)

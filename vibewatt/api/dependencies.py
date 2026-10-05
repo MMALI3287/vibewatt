@@ -41,7 +41,14 @@ def get_filters(
     from_: str | None = Query(None, alias="from"),
     to: str | None = Query(None),
     source: Literal[
-        "all", "claude", "claude-code", "cowork", "codex", "copilot", "web"
+        "all",
+        "claude",
+        "claude-code",
+        "cowork",
+        "codex",
+        "copilot",
+        "antigravity",
+        "web",
     ] = Query("all"),
     project: str | None = Query(None, max_length=500),
     model: str | None = Query(None, max_length=200),

@@ -15,7 +15,15 @@ from uuid import UUID
 
 from . import identity, store
 from .aggregate import cost_of
-from .sources import CLAUDE_SOURCES, CODEX, COPILOT, TOKEN_FIELDS, Turn, merge
+from .sources import (
+    ANTIGRAVITY,
+    CLAUDE_SOURCES,
+    CODEX,
+    COPILOT,
+    TOKEN_FIELDS,
+    Turn,
+    merge,
+)
 
 VERSION = 1
 MAX_BYTES = 200 * 1024 * 1024
@@ -178,7 +186,7 @@ def _validate(payload: object) -> tuple[str, list[Turn], list[dict]]:
         if row["account_id"] != account:
             raise ValueError("Mixed accounts in archive")
         machine = str(UUID(row["machine_id"]))
-        if row["source"] not in (*CLAUDE_SOURCES, CODEX, COPILOT):
+        if row["source"] not in (*CLAUDE_SOURCES, CODEX, COPILOT, ANTIGRAVITY):
             raise ValueError("Unknown response source")
         for name in ("model", "project", "session"):
             if not isinstance(row[name], str) or len(row[name]) > 32768:

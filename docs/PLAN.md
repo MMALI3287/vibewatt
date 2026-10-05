@@ -1402,7 +1402,7 @@ across `vibewatt/`, `web/src`, `tests/` and `scripts/` before removal:
   Production writes quota samples through `quota.record()` directly. Those tests
   now call `quota.record()`, so they cover the path production uses.
 
-### Phase 10: More providers (Codex and Copilot implemented 2026-10-05; Antigravity next)
+### Phase 10: More providers (Codex, Copilot and Antigravity implemented 2026-10-05)
 
 **Do:** Gemini CLI/Antigravity usage and ChatGPT/Codex CLI usage, including
 the plan rate-limit readings that Codex logs carry. Each provider is one `ingest/` module
@@ -1463,6 +1463,19 @@ Copilot record (2026-10-05, Claude Code). Contract and evidence are in
   OpenAI `-YYYY-MM-DD` snapshot suffixes normalize to the family id.
 - **Replaced `cli.codex_quota()` with `cli.provider_quota(provider)`.** Why: the
   same plan block now serves Codex and Copilot.
+- No file, table, command or dependency was removed.
+
+Antigravity record (2026-10-05, Claude Code). Contract and evidence are in
+`DATA-SOURCES.md` under "Antigravity".
+
+- Added `ingest/antigravity.py`: read-only SQLite, one-level protobuf decoding by
+  known field numbers, step times by response id, size and plausibility caps.
+- `gemini-3.8-flash` rates with the promotion window. `pricing.ALIASES` maps
+  Antigravity's `-n` and `-high` variant ids to it (assumption recorded).
+- Sync detects change from the database plus its `-wal` file for this source.
+- **Read-tool metadata and title scans now run only on Claude transcripts.** Why:
+  they read every file as text lines; on a binary database or another
+  provider's log they find nothing and waste a full read.
 - No file, table, command or dependency was removed.
 
 ### Phase 11: Public launch (planned)
