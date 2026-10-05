@@ -1369,13 +1369,14 @@ Audit record (2026-10-05, Claude Code):
   A test now requires every priced model to have a context window entry.
 - Orphan sweep: no Phase 8 function lacks a production caller. Three older
   functions with none (`terminal.hour_histogram`, `alerts._time` and the
-  test-only `store.upsert_quota_samples` wrapper) are left for a separate
-  cleanup PR with their own removal records.
+  test-only `store.upsert_quota_samples` wrapper) were removed in a separate
+  cleanup PR. Their removal records follow this audit record.
 - Branch protection now requires `verify (macos-latest)` alongside the Linux
   and Windows checks (user approved 2026-10-05). The job already ran on every
   push, so this adds no CI time.
 - Closed: every Phase 8 acceptance item was rerun against real behavior. The
-  three findings are fixed in #19 and dated pricing is in #20.
+  three findings are fixed in #19, dated pricing is in #20 and the dead code
+  is removed in #21.
 - Dated pricing (2026-10-05, user request): community rates are now recorded
   as dated changes in `pricing-history.json`, so a discount or price change
   applies only from the day it is observed instead of repricing all history.
@@ -1388,6 +1389,18 @@ Audit record (2026-10-05, Claude Code):
   states $25/$125, so the built-in rate stays and the drift check ignores that
   exact community value as a known community error.
 - No file, table, flag or dependency was removed in this change.
+
+Dead code found by the caller sweep (2026-10-05). Each function was grepped
+across `vibewatt/`, `web/src`, `tests/` and `scripts/` before removal:
+
+- **Removed `terminal.hour_histogram()`.** Why: no caller anywhere. No CLI
+  command or report rendered it, so it was untested output nobody could see.
+- **Removed `analysis.alerts._time()`.** Why: no caller anywhere. Alert code
+  converts instants inline, so the helper was a leftover.
+- **Removed `store.upsert_quota_samples()`.** Why: a one-line wrapper over
+  `quota.record()` whose only callers were two tests in `tests/test_store.py`.
+  Production writes quota samples through `quota.record()` directly. Those tests
+  now call `quota.record()`, so they cover the path production uses.
 
 ### Phase 10: More providers (planned)
 

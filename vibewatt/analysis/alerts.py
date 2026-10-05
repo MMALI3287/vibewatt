@@ -14,14 +14,6 @@ from .. import store
 _SCOPE = "phase6-alerts"
 
 
-def _time(value: str | None) -> datetime | None:
-    try:
-        parsed = datetime.fromisoformat(value or "")
-        return parsed.astimezone(UTC) if parsed.tzinfo else None
-    except (TypeError, ValueError):
-        return None
-
-
 def _number(value: object) -> bool:
     return isinstance(value, (int, float)) and math.isfinite(value) and value >= 0
 
