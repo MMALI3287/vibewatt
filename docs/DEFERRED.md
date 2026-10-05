@@ -12,7 +12,7 @@ recorded under "Phase 8" in `PLAN.md`.
 
 | Item | Prerequisite |
 |---|---|
-| Gemini Antigravity usage | `~/.gemini/antigravity/conversations/*.db` holds per-response protobuf `gen_metadata` with a model id and token counts but no field names (1 local conversation). Confirm field meanings from a published schema or more conversations before parsing |
+| Antigravity plan quotas | Served by Google's backend through `/usage`; no documented local copy. Reopen if one appears |
 | Copilot CLI usage | `~/.copilot/session-state` holds no token fields locally. Reopen if a later CLI version logs usage |
 
 ## Closed on 2026-09-26

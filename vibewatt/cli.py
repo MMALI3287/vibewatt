@@ -14,7 +14,7 @@ from . import config as configmod
 from . import pricing, quota, terminal
 from .aggregate import cost_of, from_store
 from .ingest import discover
-from .sources import CLAUDE_CODE, CODEX, COPILOT, COWORK
+from .sources import ANTIGRAVITY, CLAUDE_CODE, CODEX, COPILOT, COWORK
 
 
 def resolve_tz(name: str | None) -> tzinfo:
@@ -468,7 +468,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--source",
-        choices=["all", "claude", CLAUDE_CODE, COWORK, CODEX, COPILOT],
+        choices=["all", "claude", CLAUDE_CODE, COWORK, CODEX, COPILOT, ANTIGRAVITY],
         default="all",
         help="all: every provider; claude: every Claude surface",
     )
@@ -699,9 +699,10 @@ def _main(args, cfg) -> int:
             COWORK: "  Cowork:      the Claude desktop data dir (override with VIBEWATT_COWORK_DIR)",
             CODEX: "  Codex:       ~/.codex/sessions (override with CODEX_HOME)",
             COPILOT: "  Copilot:     VS Code chatSessions (override with VIBEWATT_VSCODE_USER_DIRS)",
+            ANTIGRAVITY: "  Antigravity: ~/.gemini/antigravity*/conversations (override with ANTIGRAVITY_DATA_DIR)",
         }
         wanted = {
-            "all": [CLAUDE_CODE, COWORK, CODEX, COPILOT],
+            "all": [CLAUDE_CODE, COWORK, CODEX, COPILOT, ANTIGRAVITY],
             "claude": [CLAUDE_CODE, COWORK],
         }.get(args.source, [args.source])
         label = {
@@ -709,8 +710,9 @@ def _main(args, cfg) -> int:
             COWORK: "Cowork",
             CODEX: "Codex",
             COPILOT: "Copilot",
+            ANTIGRAVITY: "Antigravity",
             "claude": "Claude Code or Cowork",
-        }.get(args.source, "Claude Code, Cowork, Codex or Copilot")
+        }.get(args.source, "Claude Code, Cowork, Codex, Copilot or Antigravity")
         print(
             f"No {label} session logs found. Looked in:\n"
             + "\n".join(hints[s] for s in wanted),
@@ -726,6 +728,8 @@ def _main(args, cfg) -> int:
         title = "Codex usage (local logs, API-equivalent estimate)"
     elif args.source == COPILOT:
         title = "Copilot usage (local logs, billed credits where recorded)"
+    elif args.source == ANTIGRAVITY:
+        title = "Antigravity usage (local logs, API-equivalent estimate)"
     elif args.source == "all":
         title = f"All usage ({', '.join(sorted(report.by_source)) or 'no data'})"
     else:
