@@ -220,6 +220,9 @@ Optional JSON in `%APPDATA%\vibewatt\vibewatt.json` (Windows),
 `${XDG_CONFIG_HOME:-~/.config}/vibewatt/vibewatt.json` (Linux) or
 `./.vibewatt/vibewatt.json` per project. `VIBEWATT_CONFIG` points at another file.
 
+See the [configuration reference](https://github.com/MMALI3287/vibewatt/blob/master/docs/CONFIGURATION.md) for precedence,
+worked examples, defaults and command-specific limits.
+
 ```json
 {
   "timezone": "Asia/Tokyo",
