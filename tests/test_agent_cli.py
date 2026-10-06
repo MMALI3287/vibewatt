@@ -149,3 +149,20 @@ def test_status_json_prices_history_from_the_cached_remote_table(monkeypatch, ca
     report = json.loads(capsys.readouterr().out)["usage"]["report"]
     assert "claude-3-7-sonnet" not in report.get("unknown_models", [])
     assert report["total"]["cost_usd"] == 3
+
+
+def test_version_flag_prints_version_without_syncing(monkeypatch, capsys):
+    import pytest
+
+    from vibewatt import __version__
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("must not discover logs or access network")
+
+    monkeypatch.setattr(cli, "discover", forbidden)
+    monkeypatch.setattr(cli.pricing, "_fetch_remote", forbidden)
+    monkeypatch.setattr(quota, "read", forbidden)
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["--version"])
+    assert exc.value.code == 0
+    assert capsys.readouterr().out.strip() == f"vibewatt {__version__}"
