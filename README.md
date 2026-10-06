@@ -2,7 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/vibewatt)](https://pypi.org/project/vibewatt/)
 [![CI](https://github.com/MMALI3287/vibewatt/actions/workflows/ci.yml/badge.svg)](https://github.com/MMALI3287/vibewatt/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](https://github.com/MMALI3287/vibewatt/blob/master/LICENSE)
 
 **What your AI coding agents really cost, counted once, kept for good and never
 uploaded.**
@@ -12,7 +12,7 @@ Antigravity already leave on your machine. It turns them into a terminal report,
 JSON for scripts and agents plus a local dashboard. No account, no API key, no
 telemetry, no leaderboard.
 
-![vibewatt dashboard overview, dark theme, synthetic demo data](docs/images/overview-dark.png)
+![vibewatt dashboard overview, dark theme, synthetic demo data](https://raw.githubusercontent.com/MMALI3287/vibewatt/master/docs/images/overview-dark.png)
 
 ## Quickstart (30 seconds)
 
@@ -37,7 +37,7 @@ There are bigger tools in this space. vibewatt is narrower on purpose.
   value seen per field, prices 5-minute and 1-hour cache writes separately and
   prices each response at the rate in effect that day. An unknown model shows as
   unpriced, never as $0. Every rule has a test and a written reason in
-  [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md).
+  [docs/DATA-SOURCES.md](https://github.com/MMALI3287/vibewatt/blob/master/docs/DATA-SOURCES.md).
 - **History that outlives the logs.** Claude Code deletes transcripts after 30
   days by default. vibewatt's store keeps every response it has seen, so last
   quarter stays answerable.
@@ -49,7 +49,7 @@ There are bigger tools in this space. vibewatt is narrower on purpose.
   dashboard is prebuilt, so you do not need Node. It listens on 127.0.0.1 only and
   refuses other hosts and cross-site requests.
 - **Built for agents too.** `vibewatt status --json` and `quota --json` follow a
-  [versioned contract](docs/AGENT-JSON.md) with stable exit codes and never touch
+  [versioned contract](https://github.com/MMALI3287/vibewatt/blob/master/docs/AGENT-JSON.md) with stable exit codes and never touch
   the network.
 
 ### When to use something else
@@ -158,8 +158,8 @@ covers. Anything vibewatt cannot see, it says so rather than reporting zero.
   rules. Sync also reprices retained local turns when rates or overrides change;
   harvested cloud costs stay unchanged.
 
-[docs/DATA-SOURCES.md](docs/DATA-SOURCES.md) documents every input and outbound
-call. [docs/ANALYSIS.md](docs/ANALYSIS.md) explains every finding and alert.
+[docs/DATA-SOURCES.md](https://github.com/MMALI3287/vibewatt/blob/master/docs/DATA-SOURCES.md) documents every input and outbound
+call. [docs/ANALYSIS.md](https://github.com/MMALI3287/vibewatt/blob/master/docs/ANALYSIS.md) explains every finding and alert.
 
 ## Commands
 
@@ -181,8 +181,8 @@ vibewatt import        merge a .vwx archive from another machine
 ```
 
 `status --json` and `quota --json` never sync logs or fetch network data.
-See [the versioned agent contract and exit codes](docs/AGENT-JSON.md).
-Open work and its prerequisites are in [docs/DEFERRED.md](docs/DEFERRED.md).
+See [the versioned agent contract and exit codes](https://github.com/MMALI3287/vibewatt/blob/master/docs/AGENT-JSON.md).
+Open work and its prerequisites are in [docs/DEFERRED.md](https://github.com/MMALI3287/vibewatt/blob/master/docs/DEFERRED.md).
 
 Shared flags: `--source {all,claude,claude-code,cowork,codex,copilot,antigravity}`, `--since YYYY-MM-DD`, `--days N`,
 `--tz Asia/Tokyo`, `--day-start-hour H`, `--weeks N`, `--session-hours N`,
@@ -275,7 +275,7 @@ every view and export.
 
 - **Codex and Antigravity costs are API-equivalent estimates; Copilot uses the
   credits GitHub logs.** Each provider's sources and rates are in
-  [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md).
+  [docs/DATA-SOURCES.md](https://github.com/MMALI3287/vibewatt/blob/master/docs/DATA-SOURCES.md).
 - **Cost is an estimate at list API rates.** On a Pro or Max subscription it is what
   the same tokens would have cost pay-as-you-go, not what you were billed.
 - The usage endpoint and the cloud session API are undocumented and can change.
@@ -285,7 +285,7 @@ every view and export.
 
 ## Roadmap
 
-Shipped in [0.4.0](CHANGELOG.md): Claude Code, Cowork, web and remote sessions,
+Shipped in [0.4.0](https://github.com/MMALI3287/vibewatt/blob/master/CHANGELOG.md): Claude Code, Cowork, web and remote sessions,
 Codex, Copilot Chat and Antigravity, plan meters, analysis findings, Wrapped and
 machine-to-machine export.
 
@@ -300,8 +300,8 @@ Next, in rough order:
 - **Antigravity plan quotas**, if a local copy ever appears.
 
 Not planned: hosting, accounts, uploads, a tray app or an MCP server. Section 9
-of [docs/PLAN.md](docs/PLAN.md) explains why. Open work and its prerequisites
-are in [docs/DEFERRED.md](docs/DEFERRED.md).
+of [docs/PLAN.md](https://github.com/MMALI3287/vibewatt/blob/master/docs/PLAN.md) explains why. Open work and its prerequisites
+are in [docs/DEFERRED.md](https://github.com/MMALI3287/vibewatt/blob/master/docs/DEFERRED.md).
 
 ## Build from source
 
@@ -325,7 +325,7 @@ iteration, run `npm run dev` in `web/` alongside the API.
 
 The old `html` command and `/api/usage` and `/api/dataset` endpoints have been
 retired. Use the dashboard, `vibewatt json`/`csv` or the typed `/api/summary` and
-`/api/export` endpoints. See [deferred work and prerequisites](docs/DEFERRED.md).
+`/api/export` endpoints. See [deferred work and prerequisites](https://github.com/MMALI3287/vibewatt/blob/master/docs/DEFERRED.md).
 
 ## Upgrading from ccburn
 
@@ -335,11 +335,11 @@ variables and `ccburn.json` files still work for one release, with a warning.
 
 ## Contributing
 
-Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md)
-and the rules in [AGENTS.md](AGENTS.md). Report security problems privately as
-described in [SECURITY.md](SECURITY.md). Everyone taking part follows the
-[code of conduct](CODE_OF_CONDUCT.md).
+Issues and pull requests are welcome. Start with [CONTRIBUTING.md](https://github.com/MMALI3287/vibewatt/blob/master/CONTRIBUTING.md)
+and the rules in [AGENTS.md](https://github.com/MMALI3287/vibewatt/blob/master/AGENTS.md). Report security problems privately as
+described in [SECURITY.md](https://github.com/MMALI3287/vibewatt/blob/master/SECURITY.md). Everyone taking part follows the
+[code of conduct](https://github.com/MMALI3287/vibewatt/blob/master/CODE_OF_CONDUCT.md).
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/MMALI3287/vibewatt/blob/master/LICENSE)

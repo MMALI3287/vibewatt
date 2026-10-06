@@ -1610,6 +1610,9 @@ Launch preparation (2026-10-06, Claude Code).
   stricter PR template that asks for verification and AI-use review.
 - PyPI metadata names every provider and links the changelog. It takes effect
   with the next release.
+- README links and images are absolute URLs. Why: PyPI renders the README
+  without the repository, so relative links and the screenshot were broken on
+  the 0.4.0 project page.
 
 ## 9. Non-goals
 
