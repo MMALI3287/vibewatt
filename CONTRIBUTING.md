@@ -10,6 +10,19 @@ so most of this guide is about keeping them right.
 - For anything bigger than a bug fix, open an issue first so we can agree on the
   approach. [docs/PLAN.md](docs/PLAN.md) is the spec and shows what is planned.
 
+## Your first contribution
+
+Issues labelled
+[good first issue](https://github.com/MMALI3287/vibewatt/labels/good%20first%20issue)
+are scoped for someone new to the code. Each one names the files to touch and
+the acceptance criteria. Comment on the issue before you start so two people do
+not build the same thing. Questions go to
+[Discussions](https://github.com/MMALI3287/vibewatt/discussions).
+
+**AI-assisted contributions are welcome.** You are responsible for every line:
+review it, run the checks and be ready to explain it. Pull requests that look
+generated and unreviewed, or that skip the template, are closed without review.
+
 ## Set up
 
 You need [uv](https://docs.astral.sh/uv/) and Python 3.11+ and Node.js 22.12+ (CI uses Node 24).

@@ -1,0 +1,36 @@
+name: New provider
+description: Ask for, or offer to build, support for another agent or editor
+labels: [provider, help wanted]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        vibewatt never writes a parser blind. A provider ships only after its log
+        contract is observed on real data and recorded in docs/DATA-SOURCES.md.
+  - type: input
+    id: tool
+    attributes:
+      label: Tool and version
+      placeholder: "Gemini CLI 0.9.2"
+    validations:
+      required: true
+  - type: textarea
+    id: location
+    attributes:
+      label: Where usage is stored
+      description: Paths on each OS and the file format (JSONL, SQLite, protobuf and so on).
+    validations:
+      required: true
+  - type: textarea
+    id: sample
+    attributes:
+      label: Sanitized sample
+      description: A few records with prompt text, file contents and ids replaced. Never paste tokens or real conversations.
+      render: text
+  - type: dropdown
+    id: build
+    attributes:
+      label: Will you build it?
+      options: ["Yes, I will open a PR", "I can test a PR on my machine", "No, request only"]
+    validations:
+      required: true

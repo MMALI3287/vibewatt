@@ -7,13 +7,18 @@ on:
 permissions:
   contents: read
   issues: write
+concurrency:
+  group: pricing-drift
+  cancel-in-progress: true
 jobs:
   drift:
+    # Forks have no use for the issue this opens.
+    if: github.repository == 'MMALI3287/vibewatt'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           version: "0.11.27"
           python-version: "3.11"

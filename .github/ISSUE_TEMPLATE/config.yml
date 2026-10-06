@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Question or idea
+    url: https://github.com/MMALI3287/vibewatt/discussions
+    about: Ask usage questions and float ideas in Discussions before opening an issue.
   - name: Report a security problem
     url: https://github.com/MMALI3287/vibewatt/security/advisories/new
     about: Please report vulnerabilities privately, not in a public issue.
