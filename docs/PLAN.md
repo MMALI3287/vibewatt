@@ -1565,6 +1565,11 @@ The changes below prepare the repository for outside contributors.
   (Contributor Covenant 2.1), issue forms, a pull request template and a
   Dependabot configuration capped at three grouped PRs per ecosystem.
 - README: PyPI, CI and license badges and a fuller contributing section.
+- **Dependabot now skips major versions.** Why: its first npm PR (#31) grouped
+  React 19, Router 8, TanStack Table 9 and TypeScript 7. The first three were
+  deferred on purpose and TypeScript 7 fails `openapi-typescript`'s peer range,
+  so `npm ci` failed on every platform. #31 was closed. Majors are upgraded by
+  hand in their own PR.
 - **History rewrite (second, after the 2026-09-22 one).** `git filter-repo`
   removed the two documents above from every commit and replaced the real
   project names (`demo-app`, `DemoLedger`), one real Antigravity conversation id
