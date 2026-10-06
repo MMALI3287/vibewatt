@@ -1,12 +1,12 @@
 [project]
 name = "vibewatt"
 version = "0.4.0"
-description = "Token usage, cost and plan utilization for Claude Code and Cowork, from local data"
+description = "Token usage, cost and plan utilization for Claude Code, Cowork, Codex, Copilot Chat and Antigravity, from local data"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "MD Musaddique Ali Erfan" }]
-keywords = ["claude", "claude-code", "cowork", "usage", "tokens", "cost"]
+keywords = ["claude", "claude-code", "cowork", "codex", "copilot", "antigravity", "usage", "tokens", "cost", "dashboard"]
 classifiers = [
   "Environment :: Console",
   "License :: OSI Approved :: MIT License",
@@ -30,6 +30,7 @@ dependencies = [
 Homepage = "https://github.com/MMALI3287/vibewatt"
 Issues = "https://github.com/MMALI3287/vibewatt/issues"
 Documentation = "https://github.com/MMALI3287/vibewatt/tree/master/docs"
+Changelog = "https://github.com/MMALI3287/vibewatt/blob/master/CHANGELOG.md"
 
 [project.scripts]
 vibewatt = "vibewatt.cli:main"

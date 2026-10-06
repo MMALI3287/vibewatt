@@ -1,22 +1,71 @@
-name: Quality and wheel
-on: [push, pull_request]
+name: CI
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
+# A new push to the same PR or branch makes the older run worthless.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+env:
+  UV_VERSION: "0.11.27"
 jobs:
-  verify:
-    strategy:
-      # Report every platform even when another platform fails.
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  # Path filtering happens here instead of in `on.paths`: a workflow that never
+  # starts leaves required checks pending, while skipped jobs report success.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      deps: ${{ steps.filter.outputs.deps }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
         with:
-          version: "0.11.27"
+          fetch-depth: 0
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          zero=0000000000000000000000000000000000000000
+          if [ "$EVENT" = workflow_dispatch ] || [ -z "$BASE" ] || [ "$BASE" = "$zero" ] \
+             || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; echo "deps=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files=$(git diff --name-only "$BASE" HEAD)
+          echo "$files"
+          code=false; deps=false
+          while IFS= read -r f; do
+            case "$f" in
+              "") ;;
+              # tests/test_analysis_wrapped.py reads docs/PLAN.md.
+              docs/PLAN.md) code=true ;;
+              docs/*|*.md|LICENSE|.github/ISSUE_TEMPLATE/*|.github/dependabot.yml) ;;
+              *) code=true ;;
+            esac
+            case "$f" in pyproject.toml|uv.lock) deps=true ;; esac
+          done <<< "$files"
+          [ "$EVENT" = push ] && deps=$code
+          echo "code=$code" >> "$GITHUB_OUTPUT"; echo "deps=$deps" >> "$GITHUB_OUTPUT"
+
+  # Everything that is not platform specific runs once, on Linux.
+  full:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
           python-version: "3.11"
-      - uses: actions/setup-node@v4
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - uses: actions/setup-node@v7
         with:
           node-version: "24"
           cache: npm
@@ -36,15 +85,78 @@ jobs:
         working-directory: web
       - run: git diff --exit-code -- web/openapi.json web/src/api/schema.d.ts
       - run: uv run pytest -q
-      - run: uv run --isolated --no-project --resolution lowest-direct --with-editable . --with "pytest>=8" --with httpx2 python -m pytest -q
+      # The dependency floors only move when pyproject.toml or uv.lock does.
+      - if: needs.changes.outputs.deps == 'true'
+        run: uv run --isolated --no-project --resolution lowest-direct --with-editable . --with "pytest>=8" --with httpx2 python -m pytest -q
+      - id: pw
+        run: echo "version=$(node -p "require('./node_modules/@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+        working-directory: web
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
       - run: npx playwright install --with-deps chromium
         working-directory: web
       - run: npm run e2e
         working-directory: web
       - run: uv build
       - run: uv run python scripts/check_build.py dist/vibewatt-*.tar.gz
-        # pwsh, the Windows default, does not expand the glob.
-        shell: bash
       - run: uv run python scripts/check_wheel.py dist/vibewatt-*-py3-none-any.whl --browser
-        # pwsh, the Windows default, does not expand the glob.
+
+  # Windows and macOS only run what differs by platform: path handling and data
+  # directories (pytest), plus the installed-wheel gate on Windows.
+  platform:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            wheel: true
+          - os: macos-latest
+            wheel: false
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        # pwsh, the Windows default, does not expand the dist/ globs.
         shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked
+      - run: uv run pytest -q
+      - if: matrix.wheel
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - if: matrix.wheel
+        run: cd web && npm ci && npm run build
+      - if: matrix.wheel
+        run: |
+          uv build
+          uv run python scripts/check_wheel.py dist/vibewatt-*-py3-none-any.whl --browser
+
+  # The one check branch protection requires. It passes when the code jobs pass
+  # or were skipped because only documentation changed.
+  ci-ok:
+    needs: [changes, full, platform]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "$RESULTS"
+          for r in $RESULTS; do
+            case "$r" in success|skipped) ;; *) exit 1 ;; esac
+          done

@@ -1582,6 +1582,35 @@ The changes below prepare the repository for outside contributors.
   outside the repository. None of the replaced strings granted access to
   anything.
 
+Launch preparation (2026-10-06, Claude Code).
+
+- **CI no longer runs twice per PR.** `on: [push, pull_request]` started one run
+  for the branch push and one for the PR. Push now triggers only on `master`.
+  Runs on the same PR or branch cancel older ones.
+- **Removed the full suite from Windows and macOS.** Why: lint, the frontend
+  build and tests, the API schema diff, npm audit, e2e and the sdist check give
+  the same answer on every OS. Linux runs them once. Windows keeps pytest and the
+  installed-wheel browser gate (the Phase 7 gate). macOS keeps pytest, which
+  covers its data directories.
+- **The lowest-direct dependency run now happens only** when `pyproject.toml` or
+  `uv.lock` changes. It also runs on every push to `master`. Why: the floors cannot move
+  otherwise.
+- **Documentation-only changes skip the code jobs.** A `changes` job decides;
+  `docs/PLAN.md` still counts as code because a test reads it. A `ci-ok` job
+  aggregates the result and is the single required check, because skipped
+  matrix jobs never report the per-OS names branch protection used to require.
+- uv, npm and Playwright browser downloads are cached. Every job has a timeout.
+  The release workflow never cancels itself. The pricing-drift schedule stays
+  weekly (one short Linux job) and no longer runs in forks.
+- README: rewritten top with a quickstart, positioning against other tools, a
+  data-flow diagram and a roadmap. **Removed the light-theme screenshot from the
+  README.** Why: one capture is enough above the fold. The file stays in
+  `docs/images/`. The ccburn rename note moved to its own section.
+- Added a new-provider issue form, CODEOWNERS, a Discussions link and a
+  stricter PR template that asks for verification and AI-use review.
+- PyPI metadata names every provider and links the changelog. It takes effect
+  with the next release.
+
 ## 9. Non-goals
 
 Stated so they do not creep in:

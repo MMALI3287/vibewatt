@@ -4,54 +4,85 @@
 [![CI](https://github.com/MMALI3287/vibewatt/actions/workflows/ci.yml/badge.svg)](https://github.com/MMALI3287/vibewatt/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-Token usage, cost and plan utilization for **Claude Code** and **Claude Cowork**,
-plus **Codex**, **GitHub Copilot Chat** and **Google Antigravity**, read from data
-already on your machine. No account, no API key, no telemetry.
+**What your AI coding agents really cost, counted once, kept for good and never
+uploaded.**
+
+vibewatt reads the logs Claude Code, Cowork, Codex, GitHub Copilot Chat and Google
+Antigravity already leave on your machine. It turns them into a terminal report,
+JSON for scripts and agents plus a local dashboard. No account, no API key, no
+telemetry, no leaderboard.
+
+![vibewatt dashboard overview, dark theme, synthetic demo data](docs/images/overview-dark.png)
+
+## Quickstart (30 seconds)
+
+You need [uv](https://docs.astral.sh/uv/) or pipx and Python 3.11 or newer, on
+Windows, macOS or Linux.
 
 ```bash
-uv tool install vibewatt      # or: pipx install vibewatt / pip install vibewatt
-
-vibewatt                      # terminal report
-vibewatt serve                # dashboard in your browser
-vibewatt json | jq .          # machine readable
+uvx vibewatt              # terminal report, nothing installed permanently
+uvx vibewatt serve        # dashboard at http://127.0.0.1:8777
+uvx vibewatt doctor       # what it can and cannot see on this machine
 ```
 
-Works on Windows, macOS and Linux with Python 3.11 or newer.
+To keep it: `uv tool install vibewatt` (or `pipx install vibewatt`). The first run
+reads your logs into a local SQLite store. Later runs only read what changed.
 
-> **Renamed from ccburn.** The first run copies an existing ccburn data directory
-> and store to the vibewatt location and leaves the old one in place. `CCBURN_*`
-> variables and `ccburn.json` files still work for one release, with a warning.
+## Why vibewatt
 
-## Dashboard preview
+There are bigger tools in this space. vibewatt is narrower on purpose.
 
-Synthetic demo data from `scripts/demo_server.py`. No personal usage is shown.
+- **Correct before broad.** Claude Code logs one line per content block and
+  repeats the usage on each. vibewatt keeps one row per response with the largest
+  value seen per field, prices 5-minute and 1-hour cache writes separately and
+  prices each response at the rate in effect that day. An unknown model shows as
+  unpriced, never as $0. Every rule has a test and a written reason in
+  [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md).
+- **History that outlives the logs.** Claude Code deletes transcripts after 30
+  days by default. vibewatt's store keeps every response it has seen, so last
+  quarter stays answerable.
+- **Plan utilization from official sources only.** Your 5-hour and 7-day
+  allowance comes from Claude Code's status line, the desktop app's history or
+  the usage endpoint. It is never guessed from token totals. Local-only
+  figures are labelled as local-only.
+- **Small and local.** A 354 KB wheel with four runtime dependencies. The
+  dashboard is prebuilt, so you do not need Node. It listens on 127.0.0.1 only and
+  refuses other hosts and cross-site requests.
+- **Built for agents too.** `vibewatt status --json` and `quota --json` follow a
+  [versioned contract](docs/AGENT-JSON.md) with stable exit codes and never touch
+  the network.
 
-![Overview in the light theme](docs/images/overview-light.png)
-![Overview in the dark theme](docs/images/overview-dark.png)
+### When to use something else
 
-## Build and install from source
+| You want | Try |
+|---|---|
+| The fastest one-off `npx` report | [ccusage](https://github.com/ccusage/ccusage) |
+| A live terminal monitor of the current window | [Claude Code Usage Monitor](https://github.com/Maciek-roboblog/Claude-Code-Usage-Monitor) |
+| Coverage of dozens of agents and editors | [codeburn](https://github.com/getagentseal/codeburn) |
+| A public leaderboard | [tokscale](https://github.com/junhoyeo/tokscale) |
+| A desktop tray widget | [claude-usage-widget](https://github.com/bozdemir/claude-usage-widget) |
 
-Only needed to work on vibewatt itself. Use Python 3.11+ and Node 22.12+
-(Node 24 is used in CI).
+Pick vibewatt when you need numbers you can defend: a Claude-heavy workflow,
+months of history, Cowork and web sessions in the same view and a dashboard that
+never leaves your machine.
 
-```bash
-uv sync
-cd web
-npm ci
-npm run build
-cd ..
-uv build
-pip install dist/vibewatt-*.whl
-vibewatt serve
+## How it works
+
+Local logs and two optional Claude endpoints feed one SQLite store. Every report,
+the API and the dashboard read only from that store.
+
+```mermaid
+flowchart LR
+    A["Local logs<br/>Claude Code, Cowork, Codex,<br/>Copilot Chat, Antigravity"] --> S["vibewatt sync<br/>parse, dedupe, price"]
+    B["Cloud sessions<br/>vibewatt harvest"] --> S
+    Q["Plan utilization<br/>status line, desktop history,<br/>usage endpoint"] --> D
+    S --> D[("SQLite store<br/>responses, rollups,<br/>quota samples")]
+    D --> T["Terminal, JSON, CSV"]
+    D --> API["FastAPI on 127.0.0.1"] --> UI["React dashboard"]
 ```
 
-The wheel and source archive include the built dashboard. Installed users do not
-need Node. Deep links such as `/sessions/<id>` work on reload. For frontend
-iteration, run `npm run dev` in `web/` alongside the API.
-
-The old `html` command and `/api/usage` and `/api/dataset` endpoints have been
-retired. Use the dashboard, `vibewatt json`/`csv` or the typed `/api/summary` and
-`/api/export` endpoints. See [deferred work and prerequisites](docs/DEFERRED.md).
+Each provider is one module in `vibewatt/ingest/` with `discover()` and `parse()`.
+A new provider is usually that module plus its rates in `vibewatt/pricing.py`.
 
 ## Keep your history first
 
@@ -115,8 +146,8 @@ covers. Anything vibewatt cannot see, it says so rather than reporting zero.
 - **Each response is counted once.** Claude Code writes one log line per content
   block and repeats the whole response's usage on each. Summing lines inflates
   input and output about 2.8x. vibewatt keeps one row per response with the
-  largest value seen for each field: the first line carries a placeholder output
-  count; keeping it would undercount output by about 24%.
+  largest value seen for each field. The first line carries a placeholder output
+  count, so keeping it would undercount output by up to 24%.
 - **Cache writes are priced by TTL.** A 1-hour write costs 2x base input and a
   5-minute write 1.25x; one flat multiplier was 38% off on a real session.
 - **Unknown models are never free.** Rates come from Anthropic's published pricing,
@@ -252,12 +283,60 @@ every view and export.
 - Heatmap intensity follows the metric you pick; total tokens are dominated by
   cache reads.
 
+## Roadmap
+
+Shipped in [0.4.0](CHANGELOG.md): Claude Code, Cowork, web and remote sessions,
+Codex, Copilot Chat and Antigravity, plan meters, analysis findings, Wrapped and
+machine-to-machine export.
+
+Next, in rough order:
+
+- **Contributor issues** labelled
+  [good first issue](https://github.com/MMALI3287/vibewatt/labels/good%20first%20issue)
+  and [help wanted](https://github.com/MMALI3287/vibewatt/labels/help%20wanted).
+- **Gemini CLI**, once someone can share a sanitized session file. The parser is
+  not written blind.
+- **Copilot CLI** usage, if a later CLI version logs token counts locally.
+- **Antigravity plan quotas**, if a local copy ever appears.
+
+Not planned: hosting, accounts, uploads, a tray app or an MCP server. Section 9
+of [docs/PLAN.md](docs/PLAN.md) explains why. Open work and its prerequisites
+are in [docs/DEFERRED.md](docs/DEFERRED.md).
+
+## Build from source
+
+Only needed to work on vibewatt itself. Use Python 3.11+ and Node 22.12+
+(Node 24 is used in CI).
+
+```bash
+uv sync
+cd web
+npm ci
+npm run build
+cd ..
+uv build
+pip install dist/vibewatt-*.whl
+vibewatt serve
+```
+
+The wheel and source archive include the built dashboard. Installed users do not
+need Node. Deep links such as `/sessions/<id>` work on reload. For frontend
+iteration, run `npm run dev` in `web/` alongside the API.
+
+The old `html` command and `/api/usage` and `/api/dataset` endpoints have been
+retired. Use the dashboard, `vibewatt json`/`csv` or the typed `/api/summary` and
+`/api/export` endpoints. See [deferred work and prerequisites](docs/DEFERRED.md).
+
+## Upgrading from ccburn
+
+vibewatt was called ccburn. The first run copies an existing ccburn data directory
+and store to the vibewatt location and leaves the old one in place. `CCBURN_*`
+variables and `ccburn.json` files still work for one release, with a warning.
+
 ## Contributing
 
 Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md)
-and the rules in [AGENTS.md](AGENTS.md). Open work that needs someone with the
-right data, such as Gemini CLI sessions, is listed in
-[docs/DEFERRED.md](docs/DEFERRED.md). Report security problems privately as
+and the rules in [AGENTS.md](AGENTS.md). Report security problems privately as
 described in [SECURITY.md](SECURITY.md). Everyone taking part follows the
 [code of conduct](CODE_OF_CONDUCT.md).
 
