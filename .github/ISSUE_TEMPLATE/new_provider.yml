@@ -25,7 +25,7 @@ body:
     id: sample
     attributes:
       label: Sanitized sample
-      description: A few records with prompt text, file contents and ids replaced. Never paste tokens or real conversations.
+      description: Follow docs/PROVIDER-FIXTURES.md. Submit a wholly synthetic sample; never paste tokens, real conversations or private metadata.
       render: text
   - type: dropdown
     id: build
