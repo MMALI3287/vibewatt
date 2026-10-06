@@ -3,6 +3,19 @@
 Each release lists what changed for people who use vibewatt. The reasons behind
 each change and every removal are recorded in [docs/PLAN.md](docs/PLAN.md).
 
+## 0.4.1 (2026-10-06)
+
+A maintenance release. Usage numbers and stored data do not change.
+
+- The PyPI page now shows the README's screenshot and working links. Its
+  summary names every supported provider.
+- The bundled dashboard is built with Vite 8.3.2 and TanStack Query 5.104.
+  Tests now run against FastAPI 0.142 and uvicorn 0.54.
+- The source archive lists its contents explicitly, so a local build can no
+  longer pick up stray files.
+- New `SECURITY.md` with private vulnerability reporting, a code of conduct and
+  contributor issue forms.
+
 ## 0.4.0 (2026-10-06)
 
 The first full release on PyPI. The earlier 0.0.1 upload only reserved the name.
