@@ -19,8 +19,9 @@ Setting `VIBEWATT_CONFIG` does **not** disable the user or project file. Project
 configuration is not searched for in parent directories. Relative explicit file
 paths are relative to the current working directory; `~` is expanded.
 
-Unreadable/missing files, invalid JSON and JSON values that are not objects are
-ignored. A present key with JSON `null` still replaces the lower-priority value;
+Missing files, I/O errors, invalid JSON and JSON values that are not objects are
+ignored. Files with invalid UTF-8 can make `load()` raise `UnicodeDecodeError`.
+A present key with JSON `null` still replaces the lower-priority value;
 it does not mean "inherit". The loader does not validate a configuration schema:
 unknown keys can be loaded without having any effect in a consumer.
 
