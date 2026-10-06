@@ -37,6 +37,45 @@ cd web && npm ci && cd ..   # frontend
 Build once with `npm run build` in `web/`. Run the dashboard against your own logs with `uv run vibewatt serve`, or develop
 the frontend with `cd web && npm run dev` next to it.
 
+## Try the dashboard with synthetic data
+
+No agent account, subscription, credentials or personal logs are needed for this
+route. Use a clean checkout and a shell without personal `VIBEWATT_CONFIG`,
+`CCBURN_CONFIG`, `CODEX_HOME`, `VIBEWATT_VSCODE_USER_DIRS`,
+`VIBEWATT_COPILOT_CACHE` or `ANTIGRAVITY_DATA_DIR` overrides: the current demo
+isolation helper does not clear those inherited variables. After the setup above,
+run these commands from the repository root:
+
+```bash
+cd web
+npm run build
+cd ..
+uv run python scripts/demo_server.py
+```
+
+Open <http://127.0.0.1:8779> in your browser. Keep the command running while you
+explore the dashboard; press **Ctrl+C** in that terminal to stop it. To use a
+different port, pass it as the only argument, for example
+`uv run python scripts/demo_server.py 8780`, and open that port instead.
+
+The demo generates six weeks of made-up **Claude Code** transcripts. It isolates
+the standard configuration/provider paths and the SQLite store in a new temporary directory,
+turns on offline mode and disables quota fetching. Its displayed usage is
+synthetic, not activity from your accounts. Each launch seeds a fresh temporary
+store; the script does not remove that directory on exit. Do not use the demo
+store to retain real usage history.
+
+These servers have different purposes:
+
+| Command (from the repository root) | Default address | Data |
+| --- | --- | --- |
+| `uv run python scripts/demo_server.py` | `http://127.0.0.1:8779` | Synthetic contributor demo |
+| `uv run python web/e2e/fixture_server.py` | `http://127.0.0.1:8778` | Isolated end-to-end test fixtures |
+| `uv run vibewatt serve` | `http://127.0.0.1:8777` | Your local usage store; ordinary startup can sync your logs |
+
+Use the demo command for this quickstart. The fixture server belongs to browser
+tests; the normal `serve` command is for your own usage data.
+
 ## Checks
 
 Every PR must pass these.
