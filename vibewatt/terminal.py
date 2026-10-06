@@ -31,6 +31,8 @@ def _fg(hex_color: str) -> str:
 def use_color() -> bool:
     if os.environ.get("NO_COLOR"):
         return False
+    if os.environ.get("FORCE_COLOR"):
+        return True
     return sys.stdout.isatty()
 
 

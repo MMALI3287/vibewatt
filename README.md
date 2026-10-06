@@ -189,6 +189,11 @@ Shared flags: `--source {all,claude,claude-code,cowork,codex,copilot,antigravity
 `--plan 20`, `--no-sidechains`, `--by-project`, `--mask-projects`, `--no-quota`,
 `--offline`, `--no-color`.
 
+Set `FORCE_COLOR=1` to keep terminal colours when piping output, for example
+`FORCE_COLOR=1 vibewatt | less -R`. A non-empty `NO_COLOR` or `--no-color` still
+disables colours, even when `FORCE_COLOR` is set. An empty `FORCE_COLOR` leaves
+automatic terminal detection unchanged.
+
 ### If a number looks wrong
 
 | Symptom | Cause |
