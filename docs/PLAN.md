@@ -1614,6 +1614,19 @@ Launch preparation (2026-10-06, Claude Code).
   without the repository, so relative links and the screenshot were broken on
   the 0.4.0 project page.
 
+Release 0.4.1 outcome (2026-10-06).
+
+- PR #49 merged as `22b6e7f`. Tag `v0.4.1` published to PyPI through trusted
+  publishing and created the GitHub release. This was the first run with
+  upload-artifact v7 and download-artifact v8; every job passed. SHA-256:
+  `9d8ed657d00787386380205105b370f55af93c08385e20edf2c468bcce05df7a` (wheel),
+  `42018f776d612ec9d6856b98d4a636c80fc139c82fb43157c0fa122085e4eaf2` (sdist).
+- The owner yanked the 0.0.1 name reservation on PyPI.
+- A second Release run for `v0.4.0` failed in its `pypi` and `github-release`
+  jobs. Why: force-pushing the moved tag during the history rewrite triggered
+  the workflow again; PyPI refuses to re-upload a version and the release already
+  existed. Nothing was published or changed by it.
+
 ## 9. Non-goals
 
 Stated so they do not creep in:
