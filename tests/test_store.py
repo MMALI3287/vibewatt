@@ -5,6 +5,7 @@ import shutil
 import sqlite3
 from datetime import UTC, datetime, timedelta, timezone
 
+import pytest
 from conftest import JST
 
 from vibewatt import ingest, quota, store
@@ -36,6 +37,41 @@ def test_fresh_store_is_at_current_schema(tmp_path):
         "tool_reads",
         "tool_read_files",
     } <= tables
+
+
+def test_future_store_is_rejected_without_writes_or_backup(future_store, monkeypatch):
+    before = future_store.read_bytes()
+    files_before = set(future_store.parent.iterdir())
+    entered = False
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("must not migrate an unsupported schema")
+
+    monkeypatch.setattr(store, "migrate", forbidden)
+    with (
+        pytest.raises(ValueError, match="newer than supported schema"),
+        store.connect(future_store) as conn,
+    ):
+        entered = True
+        conn.execute("UPDATE future_usage SET value = 'overwritten'")
+
+    assert not entered
+    assert future_store.read_bytes() == before
+    assert set(future_store.parent.iterdir()) == files_before
+
+
+def test_current_store_remains_writable_without_migration_backup(tmp_path):
+    path = tmp_path / "current.db"
+    with store.connect(path) as conn:
+        conn.execute("INSERT INTO meta VALUES ('sentinel', 'original')")
+    with store.connect(path) as conn:
+        conn.execute("UPDATE meta SET value = 'updated' WHERE key = 'sentinel'")
+    with store.connect(path) as conn:
+        assert (
+            conn.execute("SELECT value FROM meta WHERE key = 'sentinel'").fetchone()[0]
+            == "updated"
+        )
+    assert not list(tmp_path.glob("*.bak"))
 
 
 def test_v1_store_migrates_forward_without_losing_rows(tmp_path):

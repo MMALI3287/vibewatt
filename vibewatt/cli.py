@@ -10,8 +10,8 @@ import sys
 from datetime import UTC, date, datetime, timedelta, tzinfo
 from pathlib import Path
 
+from . import __version__, pricing, quota, terminal
 from . import config as configmod
-from . import pricing, quota, terminal
 from .aggregate import cost_of, from_store
 from .ingest import discover
 from .sources import ANTIGRAVITY, CLAUDE_CODE, CODEX, COPILOT, COWORK
@@ -435,6 +435,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="vibewatt",
         description="Token usage, cost and plan utilization for Claude Code, Cowork and other agents.",
     )
+    p.add_argument("--version", action="version", version=f"vibewatt {__version__}")
     p.add_argument(
         "command",
         nargs="?",
@@ -534,12 +535,18 @@ def main(argv: list[str] | None = None) -> int:
     _utf8_streams()
     args = build_parser().parse_args(argv)
     cfg = configmod.load()
-    from . import identity
+    from . import identity, store
 
     if args.archive and args.command != "import":
         raise SystemExit("An archive path is accepted only by import")
-    with identity.scope(args.account or cfg.get("account") or identity.account_id()):
-        return _main(args, cfg)
+    try:
+        with identity.scope(
+            args.account or cfg.get("account") or identity.account_id()
+        ):
+            return _main(args, cfg)
+    except store.UnsupportedSchemaError as exc:
+        print(f"vibewatt: {exc}", file=sys.stderr)
+        return 2
 
 
 def _main(args, cfg) -> int:

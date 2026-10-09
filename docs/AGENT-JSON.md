@@ -46,6 +46,21 @@ the stored calendar buckets. Sync explicitly with that configuration before
 requesting the snapshot. The command never silently rebuckets data. If an
 `--out` file cannot be written, `output_failed` is emitted on stdout with exit 2.
 
+`schema_too_new` means a newer vibewatt installation wrote the database. The
+command exits 2 without opening it for application use, migrating it, or creating
+a migration backup. Upgrade to a vibewatt version that supports the schema named
+in the error and reopen the original store. Do not edit `meta.schema` to bypass
+the check; changing the version number does not downgrade the format.
+
+If you must use an older installation, stop vibewatt processes using the store
+and preserve the original data directory, including any SQLite `-wal` and `-shm`
+files. Restore a backup made by a compatible version into a **separate** data
+directory, keeping its relative database path, and point `VIBEWATT_DATA_DIR` at
+that directory. Pre-migration backups are named `*.pre-v<schema>-<timestamp>.bak`;
+restore one under the original database filename in the separate directory.
+The restored copy only contains data retained at backup time. Keep the newer
+original for reopening with a compatible version; do not delete or overwrite it.
+
 Invalid command arguments and invalid configuration resolved before snapshot
 generation use normal CLI errors on stderr; those errors are not a JSON
 snapshot. Consumers should check both exit status and whether stdout contains a

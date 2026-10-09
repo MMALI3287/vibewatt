@@ -131,6 +131,9 @@ covers. Anything vibewatt cannot see, it says so rather than reporting zero.
 - **Wrapped:** a year in review with a shareable image card.
 - **Filters** by date, provider, surface, project and model, kept in the URL.
   "All providers" splits every figure by source.
+- **Account selection** keeps each account's cached dashboard data separate. If
+  browser storage is blocked, switching and Reset account still work for the
+  current tab; a notice explains that the preference lasts only until reload.
 - **Report-date presets**, header session search (`/`) and visible-tab refresh
   every 60 seconds. Usage figures show their provenance and freshness.
 - **Plan comparison:** current month-to-date local API-equivalent cost against
@@ -189,6 +192,11 @@ Shared flags: `--source {all,claude,claude-code,cowork,codex,copilot,antigravity
 `--plan 20`, `--no-sidechains`, `--by-project`, `--mask-projects`, `--no-quota`,
 `--offline`, `--no-color`.
 
+Set `FORCE_COLOR=1` to keep terminal colours when piping output, for example
+`FORCE_COLOR=1 vibewatt | less -R`. A non-empty `NO_COLOR` or `--no-color` still
+disables colours, even when `FORCE_COLOR` is set. An empty `FORCE_COLOR` leaves
+automatic terminal detection unchanged.
+
 ### If a number looks wrong
 
 | Symptom | Cause |
@@ -219,6 +227,9 @@ Optional JSON in `%APPDATA%\vibewatt\vibewatt.json` (Windows),
 `~/Library/Application Support/vibewatt/vibewatt.json` (macOS),
 `${XDG_CONFIG_HOME:-~/.config}/vibewatt/vibewatt.json` (Linux) or
 `./.vibewatt/vibewatt.json` per project. `VIBEWATT_CONFIG` points at another file.
+
+See the [configuration reference](https://github.com/MMALI3287/vibewatt/blob/master/docs/CONFIGURATION.md) for precedence,
+worked examples, defaults and command-specific limits.
 
 ```json
 {

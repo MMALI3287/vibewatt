@@ -23,6 +23,8 @@ not build the same thing. Questions go to
 review it, run the checks and be ready to explain it. Pull requests that look
 generated and unreviewed, or that skip the template, are closed without review.
 
+When adding another usage provider, follow the [provider integration checklist](docs/PROVIDER-INTEGRATION.md) so source discovery, response identity, reporting, filters and archive handling are reviewed together.
+
 ## Set up
 
 You need [uv](https://docs.astral.sh/uv/) and Python 3.11+ and Node.js 22.12+ (CI uses Node 24).
@@ -36,6 +38,45 @@ cd web && npm ci && cd ..   # frontend
 
 Build once with `npm run build` in `web/`. Run the dashboard against your own logs with `uv run vibewatt serve`, or develop
 the frontend with `cd web && npm run dev` next to it.
+
+## Try the dashboard with synthetic data
+
+No agent account, subscription, credentials or personal logs are needed for this
+route. Use a clean checkout and a shell without personal `VIBEWATT_CONFIG`,
+`CCBURN_CONFIG`, `CODEX_HOME`, `VIBEWATT_VSCODE_USER_DIRS`,
+`VIBEWATT_COPILOT_CACHE` or `ANTIGRAVITY_DATA_DIR` overrides: the current demo
+isolation helper does not clear those inherited variables. After the setup above,
+run these commands from the repository root:
+
+```bash
+cd web
+npm run build
+cd ..
+uv run python scripts/demo_server.py
+```
+
+Open <http://127.0.0.1:8779> in your browser. Keep the command running while you
+explore the dashboard; press **Ctrl+C** in that terminal to stop it. To use a
+different port, pass it as the only argument, for example
+`uv run python scripts/demo_server.py 8780`, and open that port instead.
+
+The demo generates six weeks of made-up **Claude Code** transcripts. It isolates
+the standard configuration/provider paths and the SQLite store in a new temporary directory,
+turns on offline mode and disables quota fetching. Its displayed usage is
+synthetic, not activity from your accounts. Each launch seeds a fresh temporary
+store; the script does not remove that directory on exit. Do not use the demo
+store to retain real usage history.
+
+These servers have different purposes:
+
+| Command (from the repository root) | Default address | Data |
+| --- | --- | --- |
+| `uv run python scripts/demo_server.py` | `http://127.0.0.1:8779` | Synthetic contributor demo |
+| `uv run python web/e2e/fixture_server.py` | `http://127.0.0.1:8778` | Isolated end-to-end test fixtures |
+| `uv run vibewatt serve` | `http://127.0.0.1:8777` | Your local usage store; ordinary startup can sync your logs |
+
+Use the demo command for this quickstart. The fixture server belongs to browser
+tests; the normal `serve` command is for your own usage data.
 
 ## Checks
 
@@ -63,10 +104,26 @@ requests with synthetic fixture responses, patching the narrow request method at
 the service boundary. Loopback traffic is reserved for tests that genuinely need
 an in-process server or subprocess listener.
 
+### Supported Python compatibility gate
+
+The required Linux baseline remains Python 3.11. CI additionally runs the
+offline Python pytest suite and installed-project import/CLI-help smokes
+on stable CPython 3.12, 3.13, and 3.14. Frontend and platform checks stay
+on the existing baseline; skipped code jobs still count as success through
+the unchanged `ci-ok` aggregator. Update the extra matrix only when a
+Python release is stable and dependency support has been independently checked.
+Do not advertise support for a version whose hosted checks fail.
+
+Per-run times are recorded by the GitHub Actions `python-compat` jobs;
+the duration of this change's first run is **pending hosted CI**, not
+an independently measured local result.
+
 ## Making a change
 
 - **Bug fixes start with a failing test** that reproduces the bug. Fixtures go in
   `tests/fixtures/`.
+- **Provider fixtures are wholly synthetic.** Follow the
+  [safe provider-fixture guide](docs/PROVIDER-FIXTURES.md); real logs stay local.
 - **Removals are recorded.** If you delete a file, table, flag or dependency, say
   why in the same PR, under the relevant phase in `docs/PLAN.md`.
 - **New dependencies need a reason** in the PR description. The standard library

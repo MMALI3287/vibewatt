@@ -1,6 +1,45 @@
+import json
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from vibewatt import cli, quota, store
+
+
+@pytest.mark.parametrize("command", ["status", "quota"])
+def test_future_schema_is_a_structured_error(
+    command, future_store, monkeypatch, capsys
+):
+    monkeypatch.setattr(store, "db_path", lambda: future_store)
+    before = future_store.read_bytes()
+
+    assert cli.main([command, "--json", "--tz", "utc"]) == 2
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert not captured.err
+    assert payload["state"] == "error"
+    assert payload["usage"] is None
+    assert payload["error"]["code"] == "schema_too_new"
+    assert f"schema {store.SCHEMA_VERSION + 1}" in payload["error"]["message"]
+    assert "Upgrade vibewatt" in payload["error"]["message"]
+    assert "backup" in payload["error"]["message"]
+    assert future_store.read_bytes() == before
+    assert not list(future_store.parent.glob("*.bak"))
+
+
+def test_future_schema_is_an_actionable_cli_error(future_store, monkeypatch, capsys):
+    monkeypatch.setattr(store, "db_path", lambda: future_store)
+    before = future_store.read_bytes()
+
+    assert cli.main(["sessions", "--offline", "--tz", "utc"]) == 2
+
+    captured = capsys.readouterr()
+    assert not captured.out
+    assert "Upgrade vibewatt" in captured.err
+    assert "backup" in captured.err
+    assert "Traceback" not in captured.err
+    assert future_store.read_bytes() == before
 
 
 def test_status_json_is_store_only(monkeypatch, capsys):
@@ -149,3 +188,20 @@ def test_status_json_prices_history_from_the_cached_remote_table(monkeypatch, ca
     report = json.loads(capsys.readouterr().out)["usage"]["report"]
     assert "claude-3-7-sonnet" not in report.get("unknown_models", [])
     assert report["total"]["cost_usd"] == 3
+
+
+def test_version_flag_prints_version_without_syncing(monkeypatch, capsys):
+    import pytest
+
+    from vibewatt import __version__
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("must not discover logs or access network")
+
+    monkeypatch.setattr(cli, "discover", forbidden)
+    monkeypatch.setattr(cli.pricing, "_fetch_remote", forbidden)
+    monkeypatch.setattr(quota, "read", forbidden)
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["--version"])
+    assert exc.value.code == 0
+    assert capsys.readouterr().out.strip() == f"vibewatt {__version__}"
