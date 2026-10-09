@@ -36,7 +36,9 @@ def test_since_uses_report_zone_across_utc_month_boundary(expression, expected):
 )
 def test_since_uses_ahead_of_utc_report_zone(expression, expected):
     now = datetime(2026, 3, 1, 1, 0, tzinfo=UTC)
-    assert cli._parse_since_date(expression, ZoneInfo("Asia/Tokyo"), now=now) == expected
+    assert (
+        cli._parse_since_date(expression, ZoneInfo("Asia/Tokyo"), now=now) == expected
+    )
 
 
 def test_since_keeps_iso_date_and_crosses_year_boundary():
@@ -47,7 +49,17 @@ def test_since_keeps_iso_date_and_crosses_year_boundary():
 
 @pytest.mark.parametrize(
     "invalid",
-    ["0d", "0w", "-7d", "7x", "this-week", "last-year", "2026-02-30", "01d", "9" * 5000],
+    [
+        "0d",
+        "0w",
+        "-7d",
+        "7x",
+        "this-week",
+        "last-year",
+        "2026-02-30",
+        "01d",
+        "9" * 5000,
+    ],
 )
 def test_since_rejects_unsupported_forms_with_cli_error(invalid):
     with pytest.raises(ValueError, match="--since expects YYYY-MM-DD"):
@@ -87,7 +99,9 @@ def test_invalid_since_exits_before_report(monkeypatch):
         "build_report",
         lambda *_args, **_kwargs: pytest.fail("must not build report"),
     )
-    args = cli.build_parser().parse_args(["json", "--since", "not-a-date", "--tz", "utc"])
+    args = cli.build_parser().parse_args(
+        ["json", "--since", "not-a-date", "--tz", "utc"]
+    )
     with pytest.raises(SystemExit, match="--since expects YYYY-MM-DD"):
         cli._main(args, {"offline": True})
 
