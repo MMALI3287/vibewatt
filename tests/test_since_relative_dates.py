@@ -90,3 +90,13 @@ def test_invalid_since_exits_before_report(monkeypatch):
     args = cli.build_parser().parse_args(["json", "--since", "not-a-date", "--tz", "utc"])
     with pytest.raises(SystemExit, match="--since expects YYYY-MM-DD"):
         cli._main(args, {"offline": True})
+
+
+def test_since_respects_custom_report_day_start():
+    from vibewatt.config import day_zone
+
+    # March 1 at 05:00 New York time still belongs to February with a 06:00 boundary.
+    zone = day_zone(ZoneInfo("America/New_York"), 6)
+    now = datetime(2026, 3, 1, 10, 0, tzinfo=UTC)
+    assert cli._parse_since_date("this-month", zone, now=now) == date(2026, 2, 1)
+    assert cli._parse_since_date("last-month", zone, now=now) == date(2026, 1, 1)
