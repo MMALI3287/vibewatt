@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import ipaddress
 import shutil
+import socket
 from datetime import timedelta, timezone
 from pathlib import Path
 
@@ -73,3 +75,53 @@ def logs(tmp_path, monkeypatch):
         dst.parent.mkdir(parents=True)
         shutil.copyfile(src, dst)
     return {"claude-code": cc, "cowork": cw}
+
+@pytest.fixture(autouse=True)
+def forbid_external_network(monkeypatch, request):
+    """Reject external socket destinations; loopback and Unix sockets are test-local."""
+    original_connect = socket.socket.connect
+    original_connect_ex = socket.socket.connect_ex
+    original_sendto = socket.socket.sendto
+    original_getaddrinfo = socket.getaddrinfo
+
+    def ensure_local(address, family=None):
+        if family == getattr(socket, "AF_UNIX", None):
+            return
+        host = address[0] if isinstance(address, tuple) else address
+        if isinstance(host, bytes):
+            host = host.decode("ascii", errors="replace")
+        if isinstance(host, str):
+            if host.rstrip(".").casefold() == "localhost":
+                return
+            try:
+                if ipaddress.ip_address(host.split("%", 1)[0]).is_loopback:
+                    return
+            except ValueError:
+                pass
+        raise AssertionError(
+            f"external network blocked in {request.node.nodeid}: {host!r}; "
+            "mock the provider/client request instead"
+        )
+
+    def checked_connect(sock, address):
+        ensure_local(address, sock.family)
+        return original_connect(sock, address)
+
+    def checked_connect_ex(sock, address):
+        ensure_local(address, sock.family)
+        return original_connect_ex(sock, address)
+
+    def checked_sendto(sock, payload, *args):
+        if args:
+            ensure_local(args[-1], sock.family)
+        return original_sendto(sock, payload, *args)
+
+    def checked_getaddrinfo(host, *args, **kwargs):
+        if host is not None:
+            ensure_local(host)
+        return original_getaddrinfo(host, *args, **kwargs)
+
+    monkeypatch.setattr(socket.socket, "connect", checked_connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", checked_connect_ex)
+    monkeypatch.setattr(socket.socket, "sendto", checked_sendto)
+    monkeypatch.setattr(socket, "getaddrinfo", checked_getaddrinfo)
