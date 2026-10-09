@@ -131,6 +131,9 @@ covers. Anything vibewatt cannot see, it says so rather than reporting zero.
 - **Wrapped:** a year in review with a shareable image card.
 - **Filters** by date, provider, surface, project and model, kept in the URL.
   "All providers" splits every figure by source.
+- **Account selection** keeps each account's cached dashboard data separate. If
+  browser storage is blocked, switching and Reset account still work for the
+  current tab; a notice explains that the preference lasts only until reload.
 - **Report-date presets**, header session search (`/`) and visible-tab refresh
   every 60 seconds. Usage figures show their provenance and freshness.
 - **Plan comparison:** current month-to-date local API-equivalent cost against
