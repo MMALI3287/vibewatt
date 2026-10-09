@@ -1,6 +1,45 @@
+import json
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from vibewatt import cli, quota, store
+
+
+@pytest.mark.parametrize("command", ["status", "quota"])
+def test_future_schema_is_a_structured_error(
+    command, future_store, monkeypatch, capsys
+):
+    monkeypatch.setattr(store, "db_path", lambda: future_store)
+    before = future_store.read_bytes()
+
+    assert cli.main([command, "--json", "--tz", "utc"]) == 2
+
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert not captured.err
+    assert payload["state"] == "error"
+    assert payload["usage"] is None
+    assert payload["error"]["code"] == "schema_too_new"
+    assert f"schema {store.SCHEMA_VERSION + 1}" in payload["error"]["message"]
+    assert "Upgrade vibewatt" in payload["error"]["message"]
+    assert "backup" in payload["error"]["message"]
+    assert future_store.read_bytes() == before
+    assert not list(future_store.parent.glob("*.bak"))
+
+
+def test_future_schema_is_an_actionable_cli_error(future_store, monkeypatch, capsys):
+    monkeypatch.setattr(store, "db_path", lambda: future_store)
+    before = future_store.read_bytes()
+
+    assert cli.main(["sessions", "--offline", "--tz", "utc"]) == 2
+
+    captured = capsys.readouterr()
+    assert not captured.out
+    assert "Upgrade vibewatt" in captured.err
+    assert "backup" in captured.err
+    assert "Traceback" not in captured.err
+    assert future_store.read_bytes() == before
 
 
 def test_status_json_is_store_only(monkeypatch, capsys):
