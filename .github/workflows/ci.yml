@@ -21,6 +21,7 @@ jobs:
     outputs:
       code: ${{ steps.filter.outputs.code }}
       deps: ${{ steps.filter.outputs.deps }}
+      docs: ${{ steps.filter.outputs.docs }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -37,19 +38,21 @@ jobs:
           fi
           files=$(git diff --name-only "$BASE" HEAD)
           echo "$files"
-          code=false; deps=false
+          code=false; deps=false; docs=false
           while IFS= read -r f; do
             case "$f" in
               "") ;;
               # tests/test_analysis_wrapped.py reads docs/PLAN.md.
-              docs/PLAN.md) code=true ;;
-              docs/*|*.md|LICENSE|.github/ISSUE_TEMPLATE/*|.github/dependabot.yml) ;;
+              docs/PLAN.md) code=true; docs=true ;;
+              docs/*|*.md) docs=true ;;
+              LICENSE|.github/ISSUE_TEMPLATE/*|.github/dependabot.yml) ;;
               *) code=true ;;
             esac
             case "$f" in pyproject.toml|uv.lock) deps=true ;; esac
           done <<< "$files"
           [ "$EVENT" = push ] && deps=$code
-          echo "code=$code" >> "$GITHUB_OUTPUT"; echo "deps=$deps" >> "$GITHUB_OUTPUT"
+          [ "$EVENT" = workflow_dispatch ] && docs=true
+          echo "code=$code" >> "$GITHUB_OUTPUT"; echo "deps=$deps" >> "$GITHUB_OUTPUT"; echo "docs=$docs" >> "$GITHUB_OUTPUT"
 
   # Everything that is not platform specific runs once, on Linux.
   full:
@@ -156,10 +159,36 @@ jobs:
           uv build
           uv run python scripts/check_wheel.py dist/vibewatt-*-py3-none-any.whl --browser
 
+
+  docs-links:
+    needs: changes
+    if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked --no-dev
+        continue-on-error: true
+      - name: Check Markdown links
+        run: python scripts/check_markdown_links.py
+      - name: Fixture self-check
+        run: |
+          python scripts/check_markdown_links.py tests/fixtures/markdown_links/valid
+          if python scripts/check_markdown_links.py tests/fixtures/markdown_links/broken; then
+            echo "expected broken fixture to fail" >&2
+            exit 1
+          fi
+
   # The one check branch protection requires. It passes when the code jobs pass
   # or were skipped because only documentation changed.
   ci-ok:
-    needs: [changes, full, platform]
+    needs: [changes, full, platform, docs-links]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 2
