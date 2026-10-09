@@ -54,6 +54,20 @@ Tests never read your real `~/.claude` and never touch the network. If you chang
 the API, run `npm run gen:api` in `web/` and commit `web/openapi.json` and
 `web/src/api/schema.d.ts`; a test fails when they drift.
 
+### Supported Python compatibility gate
+
+The required Linux baseline remains Python 3.11. CI additionally runs the
+offline Python pytest suite and installed-project import/CLI-help smokes
+on stable CPython 3.12, 3.13, and 3.14. Frontend and platform checks stay
+on the existing baseline; skipped code jobs still count as success through
+the unchanged `ci-ok` aggregator. Update the extra matrix only when a
+Python release is stable and dependency support has been independently checked.
+Do not advertise support for a version whose hosted checks fail.
+
+Per-run times are recorded by the GitHub Actions `python-compat` jobs;
+the duration of this change's first run is **pending hosted CI**, not
+an independently measured local result.
+
 ## Making a change
 
 - **Bug fixes start with a failing test** that reproduces the bug. Fixtures go in
