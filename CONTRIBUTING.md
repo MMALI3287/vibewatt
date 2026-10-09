@@ -23,6 +23,8 @@ not build the same thing. Questions go to
 review it, run the checks and be ready to explain it. Pull requests that look
 generated and unreviewed, or that skip the template, are closed without review.
 
+When adding another usage provider, follow the [provider integration checklist](docs/PROVIDER-INTEGRATION.md) so source discovery, response identity, reporting, filters and archive handling are reviewed together.
+
 ## Set up
 
 You need [uv](https://docs.astral.sh/uv/) and Python 3.11+ and Node.js 22.12+ (CI uses Node 24).
