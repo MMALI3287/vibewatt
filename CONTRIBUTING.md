@@ -99,6 +99,8 @@ the API, run `npm run gen:api` in `web/` and commit `web/openapi.json` and
 
 - **Bug fixes start with a failing test** that reproduces the bug. Fixtures go in
   `tests/fixtures/`.
+- **Provider fixtures are wholly synthetic.** Follow the
+  [safe provider-fixture guide](docs/PROVIDER-FIXTURES.md); real logs stay local.
 - **Removals are recorded.** If you delete a file, table, flag or dependency, say
   why in the same PR, under the relevant phase in `docs/PLAN.md`.
 - **New dependencies need a reason** in the PR description. The standard library
