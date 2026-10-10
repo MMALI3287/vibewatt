@@ -600,6 +600,13 @@ def _bind_listeners(host: str, port: int) -> list[socket.socket] | None:
         sock = socket.socket(family, socktype, proto)
         # uvicorn's own option, so this is the claim the server would have made.
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        # asyncio's create_server — the path uvicorn took before the socket was
+        # supplied — turns dual-stack off for IPv6 sockets, which is why
+        # `--host ::` never answered IPv4-mapped connections. create_server(sock=)
+        # keeps whatever the socket already carries, so without this the handover
+        # would quietly widen the interfaces a given host serves (PR #134 review).
+        if family == socket.AF_INET6 and hasattr(socket, "IPPROTO_IPV6"):
+            sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
         try:
             sock.bind(sockaddr)
         except OSError as exc:

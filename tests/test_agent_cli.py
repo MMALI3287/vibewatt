@@ -1,4 +1,6 @@
 import json
+import socket
+import sys
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -281,7 +283,7 @@ def test_the_port_check_is_the_bind_the_server_would_do():
     """The claim and the server are one bind, so the answer cannot differ.
 
     Also pins that a socket which is merely claimed is not "in use" until it
-    listens, and that a second claim is refused rather than raised."""
+    listens."""
     listeners = cli._bind_listeners("127.0.0.1", 0)
     assert listeners
     try:
@@ -289,7 +291,46 @@ def test_the_port_check_is_the_bind_the_server_would_do():
         assert cli._port_in_use("127.0.0.1", port) is False
         listeners[0].listen(1)
         assert cli._port_in_use("127.0.0.1", port) is True
+    finally:
+        for listener in listeners:
+            listener.close()
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="Windows SO_REUSEADDR allows a second bind"
+)
+def test_a_listening_socket_is_refused_by_the_bind_on_posix():
+    """On POSIX the bind refuses a live listener, which is what makes it the check.
+
+    Windows is the exception the connect probe exists for: there SO_REUSEADDR lets a
+    second bind succeed over a listening socket, so on Windows the bind can never be
+    the authority and `_port_in_use` answers from a connection instead."""
+    listeners = cli._bind_listeners("127.0.0.1", 0)
+    assert listeners
+    try:
+        port = listeners[0].getsockname()[1]
+        listeners[0].listen(1)
         assert cli._bind_listeners("127.0.0.1", port) is None
+    finally:
+        for listener in listeners:
+            listener.close()
+
+
+@pytest.mark.skipif(not socket.has_ipv6, reason="no IPv6 on this host")
+def test_an_ipv6_socket_stays_ipv6_only():
+    """`--host ::` must keep serving exactly what it served before the handover.
+
+    asyncio's create_server turns dual-stack off on IPv6 sockets, and
+    create_server(sock=) keeps whatever the socket carries, so the claim has to set
+    it too: otherwise `::` starts answering IPv4-mapped connections and collides
+    with an existing IPv4 listener that used to coexist (PR #134 review)."""
+    listeners = cli._bind_listeners("::", 0)
+    if not listeners:
+        pytest.skip("the IPv6 wildcard is unavailable on this host")
+    try:
+        assert listeners[0].family == socket.AF_INET6
+        option = listeners[0].getsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY)
+        assert option == 1
     finally:
         for listener in listeners:
             listener.close()
