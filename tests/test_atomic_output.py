@@ -1,6 +1,7 @@
 """Atomic report output must not truncate an existing destination."""
 
 import errno
+import json
 import os
 import stat
 
@@ -95,7 +96,10 @@ def test_report_commands_keep_previous_file_on_replace_failure(
         raise PermissionError("simulated locked report")
 
     monkeypatch.setattr(os, "replace", denied_replace)
-    assert cli.main([command, "--offline", "--tz", "utc", "--out", str(destination)]) == 2
+    assert (
+        cli.main([command, "--offline", "--tz", "utc", "--out", str(destination)])
+        == 2
+    )
     output = capsys.readouterr()
     assert not output.out
     assert "output_failed" in output.err
@@ -145,3 +149,49 @@ def test_unwritable_parent_preserves_previous_output(tmp_path, monkeypatch):
 
     assert destination.read_bytes() == b"old verified report"
     assert sorted(p.name for p in tmp_path.iterdir()) == ["report.json"]
+
+
+@pytest.mark.parametrize("command", ["status", "quota"])
+@pytest.mark.parametrize("failure_mode", ["replace", "partial_write"])
+def test_agent_snapshot_output_failure_preserves_existing_file(
+    command, failure_mode, tmp_path, monkeypatch, capsys
+):
+    """Verify the complete versioned CLI error contract, not just the helper."""
+    destination = tmp_path / "snapshot.json"
+    original = b"existing verified snapshot"
+    destination.write_bytes(original)
+
+    if failure_mode == "replace":
+
+        def denied_replace(source, target):
+            raise PermissionError("simulated locked snapshot")
+
+        monkeypatch.setattr(os, "replace", denied_replace)
+    else:
+        real_write = os.write
+        attempts = 0
+
+        def partial_then_fail(fd, data):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                return real_write(fd, data[:4])
+            raise OSError(errno.ENOSPC, "simulated snapshot disk full")
+
+        monkeypatch.setattr(os, "write", partial_then_fail)
+
+    assert (
+        cli.main(
+            [command, "--offline", "--json", "--tz", "utc", "--out", str(destination)]
+        )
+        == 2
+    )
+    captured = capsys.readouterr()
+    assert not captured.err
+    payload = json.loads(captured.out)
+    assert payload["schema_version"] == 1
+    assert payload["command"] == command
+    assert payload["state"] == "error"
+    assert payload["error"]["code"] == "output_failed"
+    assert destination.read_bytes() == original
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["snapshot.json"]
