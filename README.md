@@ -28,6 +28,24 @@ uvx vibewatt doctor       # what it can and cannot see on this machine
 To keep it: `uv tool install vibewatt` (or `pipx install vibewatt`). The first run
 reads your logs into a local SQLite store. Later runs only read what changed.
 
+## Upgrading
+
+For a persistent installation:
+
+```bash
+uv tool upgrade vibewatt
+# or
+pipx upgrade vibewatt
+```
+
+`uvx vibewatt` is a one-off execution that always uses the latest published
+version; it does not create or update a persistent install.
+
+After upgrading, or to check the version of a one-off run, execute
+`vibewatt --version` in the same environment you use. Release notes are at
+<https://github.com/MMALI3287/vibewatt/releases>. Python 3.11 or newer is
+required.
+
 ## Why vibewatt
 
 There are bigger tools in this space. vibewatt is narrower on purpose.
