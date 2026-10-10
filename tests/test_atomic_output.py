@@ -109,3 +109,39 @@ def test_new_atomic_output_is_private_on_posix(tmp_path):
     assert destination.read_text(encoding="utf-8") == "one,two\n"
     if os.name != "nt":
         assert stat.S_IMODE(destination.stat().st_mode) == 0o600
+
+
+def test_symlink_destination_is_replaced_without_following_target(tmp_path):
+    referent = tmp_path / "referent.txt"
+    referent.write_text("previous referent", encoding="utf-8")
+    destination = tmp_path / "linked-report.txt"
+    try:
+        destination.symlink_to(referent)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks not supported by this platform")
+
+    atomic_write_text(destination, "new file")
+
+    assert destination.read_text(encoding="utf-8") == "new file"
+    assert not destination.is_symlink()
+    assert referent.read_text(encoding="utf-8") == "previous referent"
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "linked-report.txt", "referent.txt"
+    ]
+
+
+def test_unwritable_parent_preserves_previous_output(tmp_path, monkeypatch):
+    from vibewatt import atomic_output
+
+    destination = tmp_path / "report.json"
+    destination.write_bytes(b"old verified report")
+
+    def denied_temp_creation(**kwargs):
+        raise PermissionError("synthetic unwritable parent")
+
+    monkeypatch.setattr(atomic_output.tempfile, "mkstemp", denied_temp_creation)
+    with pytest.raises(PermissionError, match="unwritable parent"):
+        atomic_write_text(destination, "new content")
+
+    assert destination.read_bytes() == b"old verified report"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["report.json"]
