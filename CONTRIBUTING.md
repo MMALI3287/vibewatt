@@ -132,8 +132,9 @@ an independently measured local result.
 ## Reporting problems
 
 Open an issue with the output of `vibewatt doctor`, your OS and what you expected
-to see. `--mask-projects` hides project names if you share a screenshot. Never
-paste your `~/.claude/.credentials.json` or an API key.
+to see. Run `vibewatt --version` in the same environment as the failing command
+and include its output. `--mask-projects` hides project names if you share a
+screenshot. Never paste your `~/.claude/.credentials.json`, an API key or raw logs.
 
 ## License
 
