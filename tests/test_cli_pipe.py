@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import errno
+import io
 import os
 import shutil
 import subprocess
@@ -239,3 +241,91 @@ def test_snapshot_errors_keep_exit_two(tmp_path, child_env, failure):
     )
     assert done.returncode == 2
     assert b'"code": "snapshot_failed"' in done.stdout
+
+
+@pytest.mark.parametrize("unbuffered", [False, True])
+@pytest.mark.parametrize("failure", ["date", "store", "file"])
+def test_real_error_precedes_closed_stdout(
+    tmp_path, child_env, entrypoint, failure, unbuffered
+):
+    if unbuffered:
+        child_env["PYTHONUNBUFFERED"] = "1"
+    else:
+        child_env.pop("PYTHONUNBUFFERED", None)
+    args = ["status", "--json", "--offline", "--tz", "utc"]
+    if failure == "date":
+        args += ["--since", "not-a-date"]
+    elif failure == "file":
+        args += ["--out", str(tmp_path)]
+    else:
+        database = Path(child_env["VIBEWATT_DATA_DIR"]) / "vibewatt.db"
+        database.parent.mkdir(parents=True)
+        database.write_bytes(b"not a SQLite database")
+    read_fd, write_fd = os.pipe()
+    os.close(read_fd)
+    try:
+        done = subprocess.run(
+            [*entrypoint, *args],
+            stdout=write_fd,
+            stderr=subprocess.PIPE,
+            cwd=tmp_path,
+            env=child_env,
+            timeout=20,
+            check=False,
+        )
+    finally:
+        os.close(write_fd)
+    assert done.returncode == 2
+    assert done.stderr == b""
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+@pytest.mark.parametrize("destination", ["pipe", "file", "unavailable"])
+@pytest.mark.parametrize("operation", ["write", "flush"])
+@pytest.mark.parametrize("error_number", [errno.EINVAL, errno.EIO])
+def test_other_stdout_oserrors_are_not_silenced(
+    tmp_path, monkeypatch, platform, destination, operation, error_number
+):
+    from vibewatt._cli_output import PipeOutput, StdoutClosed
+
+    read_fd = None
+    if destination == "pipe":
+        read_fd, write_fd = os.pipe()
+        stream = os.fdopen(write_fd, "w")
+    elif destination == "unavailable":
+        stream = io.StringIO()
+    else:
+        stream = (tmp_path / "output.txt").open("w")
+    error = OSError(error_number, "synthetic write failure")
+
+    class FailingStream:
+        def fileno(self):
+            return stream.fileno()
+
+        def write(self, text):
+            raise error
+
+        def flush(self):
+            raise error
+
+    try:
+        with stream, monkeypatch.context() as patch:
+            patch.setattr(sys, "platform", platform)
+            output = PipeOutput(FailingStream())
+            expected = (
+                StdoutClosed
+                if platform == "win32"
+                and destination == "pipe"
+                and error_number == errno.EINVAL
+                else OSError
+            )
+            with pytest.raises(expected) as raised:
+                if operation == "write":
+                    output.write("text")
+                else:
+                    output.flush()
+            if expected is OSError:
+                assert raised.value is error
+    finally:
+        if read_fd is not None:
+            os.close(read_fd)

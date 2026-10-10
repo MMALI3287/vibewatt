@@ -187,10 +187,11 @@ vibewatt import        merge a .vwx archive from another machine
 See [the versioned agent contract and exit codes](https://github.com/MMALI3287/vibewatt/blob/master/docs/AGENT-JSON.md).
 Open work and its prerequisites are in [docs/DEFERRED.md](https://github.com/MMALI3287/vibewatt/blob/master/docs/DEFERRED.md).
 
-When a pipe reader stops early (for example, `vibewatt report | head -n 5`),
-vibewatt exits with status 1 without a traceback. This includes buffered output
-flushed at exit. With shell `pipefail` enabled, the pipeline therefore reports a
-failure. Other file, parsing and store errors keep their normal behavior.
+If a stdout write or flush observes that a pipe reader has closed, vibewatt exits
+quietly with status 1, or preserves an already detected command error's status
+(such as 2 for a failed snapshot). With shell `pipefail` enabled, that nonzero
+status makes the pipeline fail. A short report may finish writing before a reader
+such as `head -n 5` closes, in which case its normal exit status is unchanged.
 
 Shared flags: `--source {all,claude,claude-code,cowork,codex,copilot,antigravity}`, `--since YYYY-MM-DD|7d|2w|this-month|last-month`, `--days N`,
 `--tz Asia/Tokyo`, `--day-start-hour H`, `--weeks N`, `--session-hours N`,

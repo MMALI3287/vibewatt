@@ -6,15 +6,14 @@ import argparse
 import csv
 import io
 import json
-import os
 import re
 import sys
 from datetime import UTC, date, datetime, timedelta, tzinfo
 from pathlib import Path
-from typing import NoReturn, TextIO
 
 from . import __version__, pricing, quota, terminal
 from . import config as configmod
+from ._cli_output import PipeOutput, StdoutClosed
 from .aggregate import cost_of, from_store
 from .ingest import discover
 from .sources import ANTIGRAVITY, CLAUDE_CODE, CODEX, COPILOT, COWORK
@@ -563,51 +562,20 @@ def _utf8_streams() -> None:
             reconfigure(encoding="utf-8", errors="replace")
 
 
-class _StdoutClosed(Exception):
-    """Keep stdout closure separate from file and store OSError handlers."""
-
-
-class _PipeOutput:
-    def __init__(self, stream: TextIO) -> None:
-        self.stream = stream
-
-    def __getattr__(self, name: str):
-        return getattr(self.stream, name)
-
-    def _closed(self) -> NoReturn:
-        # The interpreter flushes stdout again at shutdown. Redirect its actual
-        # descriptor so buffered bytes cannot produce a second broken-pipe error.
-        with open(os.devnull, "w") as sink:
-            os.dup2(sink.fileno(), self.stream.fileno())
-        raise _StdoutClosed from None
-
-    def write(self, text: str) -> int:
-        try:
-            return self.stream.write(text)
-        except BrokenPipeError:
-            self._closed()
-
-    def flush(self) -> None:
-        try:
-            self.stream.flush()
-        except BrokenPipeError:
-            self._closed()
-
-
 def main(argv: list[str] | None = None) -> int:
     _utf8_streams()
     original = sys.stdout
-    output = _PipeOutput(original)
+    output = PipeOutput(original)
     sys.stdout = output
     try:
         try:
             code = _run_cli(argv)
-        except _StdoutClosed:
-            return 1
+        except StdoutClosed as exc:
+            return exc.code
         except BaseException as exc:
             try:
                 output.flush()
-            except _StdoutClosed:
+            except StdoutClosed:
                 # Help/version exit through argparse; actual errors keep their
                 # original exception and exit status even when stdout is closed.
                 if isinstance(exc, SystemExit) and exc.code in (None, 0):
@@ -615,8 +583,8 @@ def main(argv: list[str] | None = None) -> int:
             raise
         try:
             output.flush()
-        except _StdoutClosed:
-            return 1
+        except StdoutClosed:
+            return code or 1
         return code
     finally:
         sys.stdout = original
