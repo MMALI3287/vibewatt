@@ -205,3 +205,41 @@ def test_version_flag_prints_version_without_syncing(monkeypatch, capsys):
         cli.main(["--version"])
     assert exc.value.code == 0
     assert capsys.readouterr().out.strip() == f"vibewatt {__version__}"
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "::1"])
+def test_serve_reports_an_occupied_port(host, capsys):
+    """An occupied port must fail with an actionable --port hint (issue #120)."""
+    import socket
+
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    sock = socket.socket(family, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind((host, 0))
+    except OSError:
+        sock.close()
+        pytest.skip(f"{host} is unavailable on this host")
+    port = sock.getsockname()[1]
+    sock.listen(1)
+    try:
+        code = cli.main(
+            [
+                "serve",
+                "--host",
+                host,
+                "--port",
+                str(port),
+                "--no-browser",
+                "--offline",
+                "--tz",
+                "utc",
+            ]
+        )
+    finally:
+        sock.close()
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "--port" in err
+    assert "dashboard" not in err

@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import csv
+import errno
 import io
 import json
 import re
+import socket
 import sys
 from datetime import UTC, date, datetime, timedelta, tzinfo
 from pathlib import Path
@@ -548,6 +550,29 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _port_in_use(host: str, port: int) -> bool:
+    """True when something already listens on host:port (issue #120).
+
+    Only EADDRINUSE counts as "in use": any other bind error is re-raised, so a
+    genuine startup failure is never reported as a port conflict. Every resolved
+    address (IPv4 and IPv6) is probed.
+    """
+    in_use = False
+    for family, socktype, proto, _, sockaddr in socket.getaddrinfo(
+        host, port, type=socket.SOCK_STREAM
+    ):
+        with socket.socket(family, socktype, proto) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind(sockaddr)
+            except OSError as exc:
+                if exc.errno == errno.EADDRINUSE:
+                    in_use = True
+                    continue
+                raise
+    return in_use
+
+
 def _utf8_streams() -> None:
     # Windows gives a redirected stdout the ANSI code page, which cannot encode
     # the heatmap's block glyph, so every `vibewatt > file` crashed (A-057).
@@ -628,6 +653,14 @@ def _main(args, cfg) -> int:
 
         from .api import create_app
         from .api.security import is_loopback
+
+        if _port_in_use(args.host, args.port):
+            print(
+                f"vibewatt: {args.host}:{args.port} is already in use; "
+                "choose another port with --port.",
+                file=sys.stderr,
+            )
+            return 1
 
         local = is_loopback(args.host)
         from . import identity
