@@ -6,7 +6,7 @@ import argparse
 import json
 import sqlite3
 from datetime import UTC, date, datetime, timedelta, tzinfo
-from pathlib import Path
+from .atomic_output import atomic_write_text
 
 from . import pricing, quota, store
 from .config import zone_id
@@ -135,7 +135,7 @@ def run(args: argparse.Namespace, cfg: dict, tz: tzinfo) -> int:
     )
     if args.out:
         try:
-            Path(args.out).write_text(text + "\n", encoding="utf-8")
+            atomic_write_text(args.out, text + "\n")
         except OSError as exc:
             payload["state"] = "error"
             payload["error"] = {"code": "output_failed", "message": str(exc)}
