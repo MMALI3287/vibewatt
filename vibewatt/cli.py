@@ -12,8 +12,8 @@ from pathlib import Path
 
 from . import __version__, pricing, quota, terminal
 from . import config as configmod
-from .atomic_output import atomic_write_text
 from .aggregate import cost_of, from_store
+from .atomic_output import atomic_write_text
 from .ingest import discover
 from .sources import ANTIGRAVITY, CLAUDE_CODE, CODEX, COPILOT, COWORK
 
