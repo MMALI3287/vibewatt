@@ -100,8 +100,7 @@ def test_report_commands_keep_previous_file_on_replace_failure(
     assert not output.out
     assert "output_failed" in output.err
     assert destination.read_bytes() == b"previous output"
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["report.txt"
-    ]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["report.txt"]
 
 
 def test_new_atomic_output_is_private_on_posix(tmp_path):
