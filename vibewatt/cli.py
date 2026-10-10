@@ -6,6 +6,7 @@ import argparse
 import csv
 import io
 import json
+import re
 import sys
 from datetime import UTC, date, datetime, timedelta, tzinfo
 from pathlib import Path
@@ -65,6 +66,31 @@ def report_zone(cfg: dict):
         )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
+
+
+def _parse_since_date(value: str, tz: tzinfo, *, now: datetime | None = None) -> date:
+    """Resolve --since using the report's time zone, not the host's local date."""
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        pass
+
+    today = (now if now is not None else datetime.now(tz)).astimezone(tz).date()
+    if value == "this-month":
+        return today.replace(day=1)
+    if value == "last-month":
+        return (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+
+    span = re.fullmatch(r"([1-9]\d*)([dw])", value)
+    if span and len(span.group(1)) <= 6:
+        days = int(span.group(1)) * (7 if span.group(2) == "w" else 1)
+        try:
+            return today - timedelta(days=days)
+        except (OverflowError, ValueError):
+            pass
+    raise ValueError(
+        f"--since expects YYYY-MM-DD, 7d, 2w, this-month or last-month, got {value!r}"
+    )
 
 
 def _bucket_dict(b) -> dict:
@@ -473,7 +499,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="all",
         help="all: every provider; claude: every Claude surface",
     )
-    p.add_argument("--since", metavar="YYYY-MM-DD")
+    p.add_argument(
+        "--since",
+        metavar="DATE",
+        help="YYYY-MM-DD, 7d, 2w, this-month or last-month (report timezone)",
+    )
     p.add_argument("--days", type=int, metavar="N")
     p.add_argument("--tz", help="timezone for day buckets (default: local)")
     p.add_argument(
@@ -657,9 +687,9 @@ def _main(args, cfg) -> int:
         cutoff = (datetime.now(tz) - timedelta(days=args.days)).date()
     if args.since:
         try:
-            cutoff = date.fromisoformat(args.since)
-        except ValueError:
-            raise SystemExit(f"--since expects YYYY-MM-DD, got {args.since!r}")
+            cutoff = _parse_since_date(args.since, tz)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
 
     report, q, quota_note, duplicates, files = build_report(
         cfg, tz, source=args.source, date_from=cutoff, refresh=True
