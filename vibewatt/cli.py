@@ -550,27 +550,75 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _port_in_use(host: str, port: int) -> bool:
-    """True when something already listens on host:port (issue #120).
+def _probe_host(host: str) -> str:
+    """A connectable spelling of `host`: a wildcard bind answers on loopback, and
+    0.0.0.0 is not a valid connect target on Windows."""
+    if host in ("", "0.0.0.0"):
+        return "127.0.0.1"
+    if host == "::":
+        return "::1"
+    return host
 
-    Only EADDRINUSE counts as "in use": any other bind error is re-raised, so a
-    genuine startup failure is never reported as a port conflict. Every resolved
-    address (IPv4 and IPv6) is probed.
+
+def _port_in_use(host: str, port: int) -> bool:
+    """True when something already answers on host:port (issue #120).
+
+    A connect, deliberately, not a bind probe. uvicorn binds with SO_REUSEADDR on
+    every platform, and on Windows that option can be granted over an address
+    another process is already listening on. A probe that set it therefore called a
+    busy port free: `serve` carried on and the real bind then died with WinError
+    10048, with no --port hint (PR #134 review). A completed connect is evidence on
+    every platform, IPv4 and IPv6 alike.
     """
-    in_use = False
+    for family, socktype, proto, _, sockaddr in socket.getaddrinfo(
+        _probe_host(host), port, type=socket.SOCK_STREAM
+    ):
+        sock = socket.socket(family, socktype, proto)
+        try:
+            sock.settimeout(0.25)
+            if sock.connect_ex(sockaddr) == 0:
+                return True
+        except OSError:
+            continue  # an address we cannot reach is not evidence of a listener
+        finally:
+            sock.close()
+    return False
+
+
+def _bind_listeners(host: str, port: int) -> list[socket.socket] | None:
+    """Claim the listening sockets, or None when the port is already taken.
+
+    Bound here and handed to uvicorn so the check and the server are ONE bind with
+    the same options, that option included. Only EADDRINUSE means "taken": every
+    other bind error is re-raised, because a genuine startup failure must not be
+    dressed up as a port conflict (PR #134 review).
+    """
+    listeners: list[socket.socket] = []
     for family, socktype, proto, _, sockaddr in socket.getaddrinfo(
         host, port, type=socket.SOCK_STREAM
     ):
-        with socket.socket(family, socktype, proto) as sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            try:
-                sock.bind(sockaddr)
-            except OSError as exc:
-                if exc.errno == errno.EADDRINUSE:
-                    in_use = True
-                    continue
-                raise
-    return in_use
+        sock = socket.socket(family, socktype, proto)
+        # uvicorn's own option, so this is the claim the server would have made.
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(sockaddr)
+        except OSError as exc:
+            sock.close()
+            for opened in listeners:
+                opened.close()
+            if exc.errno == errno.EADDRINUSE:
+                return None
+            raise
+        listeners.append(sock)
+    return listeners
+
+
+def _port_conflict_exit(host: str, port: int) -> int:
+    print(
+        f"vibewatt: {host}:{port} is already in use; choose another port with --port.",
+        file=sys.stderr,
+    )
+    return 1
 
 
 def _utf8_streams() -> None:
@@ -650,17 +698,16 @@ def _main(args, cfg) -> int:
         import webbrowser
 
         import uvicorn
+        from uvicorn.config import STARTUP_FAILURE
 
         from .api import create_app
         from .api.security import is_loopback
 
         if _port_in_use(args.host, args.port):
-            print(
-                f"vibewatt: {args.host}:{args.port} is already in use; "
-                "choose another port with --port.",
-                file=sys.stderr,
-            )
-            return 1
+            return _port_conflict_exit(args.host, args.port)
+        listeners = _bind_listeners(args.host, args.port)
+        if listeners is None:
+            return _port_conflict_exit(args.host, args.port)
 
         local = is_loopback(args.host)
         from . import identity
@@ -680,7 +727,22 @@ def _main(args, cfg) -> int:
         print("  ctrl-c to stop")
         if not args.no_browser:
             threading.Timer(0.5, lambda: webbrowser.open(url)).start()
-        uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+        # Serve on the sockets claimed above, so the server cannot bind differently
+        # from the check, and no bind failure can land after the browser is told to
+        # open (PR #134 review).
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        try:
+            server.run(sockets=listeners)
+        except KeyboardInterrupt:
+            # uvicorn re-raises the signal it captured once it has shut down
+            # gracefully, and uvicorn.run() swallows it. Serving through Server
+            # directly loses that courtesy unless it is repeated here: ctrl-c
+            # printed a traceback instead of stopping quietly.
+            pass
+        if not server.started:
+            # uvicorn.run() exits with the same code when the server never came up,
+            # so a startup failure stays loud instead of looking like a clean stop.
+            return STARTUP_FAILURE
         return 0
 
     tz = report_zone(cfg)

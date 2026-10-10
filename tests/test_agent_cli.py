@@ -243,3 +243,87 @@ def test_serve_reports_an_occupied_port(host, capsys):
     err = capsys.readouterr().err
     assert "--port" in err
     assert "dashboard" not in err
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "::1"])
+def test_an_occupied_port_never_reaches_the_banner_or_the_browser(host, capsys):
+    """A failed start must not announce a dashboard, nor open a browser at it.
+
+    The banner and the browser timer both sit after the port check, so their
+    absence is the guarantee (PR #134 review). Running without --no-browser keeps
+    the browser in play rather than testing around it."""
+    import socket
+
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    sock = socket.socket(family, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind((host, 0))
+    except OSError:
+        sock.close()
+        pytest.skip(f"{host} is unavailable on this host")
+    port = sock.getsockname()[1]
+    sock.listen(1)
+    try:
+        code = cli.main(
+            ["serve", "--host", host, "--port", str(port), "--offline", "--tz", "utc"]
+        )
+    finally:
+        sock.close()
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "already in use" in err
+    assert "dashboard" not in err
+
+
+def test_the_port_check_is_the_bind_the_server_would_do():
+    """The claim and the server are one bind, so the answer cannot differ.
+
+    Also pins that a socket which is merely claimed is not "in use" until it
+    listens, and that a second claim is refused rather than raised."""
+    listeners = cli._bind_listeners("127.0.0.1", 0)
+    assert listeners
+    try:
+        port = listeners[0].getsockname()[1]
+        assert cli._port_in_use("127.0.0.1", port) is False
+        listeners[0].listen(1)
+        assert cli._port_in_use("127.0.0.1", port) is True
+        assert cli._bind_listeners("127.0.0.1", port) is None
+    finally:
+        for listener in listeners:
+            listener.close()
+
+
+def test_a_bind_error_that_is_not_in_use_is_not_a_port_conflict(monkeypatch):
+    """A genuine startup failure must not be reported as a busy port (PR #134 review).
+
+    Only EADDRINUSE means "taken": a permission error or any other bind failure has
+    to surface as itself, or the user is sent to --port for a problem --port cannot
+    fix."""
+    import errno
+    import socket
+
+    monkeypatch.setattr(cli, "_port_in_use", lambda host, port: False)
+
+    class Denied(socket.socket):
+        def bind(self, address):
+            raise OSError(errno.EACCES, "permission denied")
+
+    monkeypatch.setattr(cli.socket, "socket", Denied)
+
+    with pytest.raises(OSError) as raised:
+        cli.main(
+            [
+                "serve",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8777",
+                "--no-browser",
+                "--offline",
+                "--tz",
+                "utc",
+            ]
+        )
+    assert raised.value.errno == errno.EACCES
