@@ -12,6 +12,7 @@ from pathlib import Path
 
 from . import __version__, pricing, quota, terminal
 from . import config as configmod
+from .atomic_output import atomic_write_text
 from .aggregate import cost_of, from_store
 from .ingest import discover
 from .sources import ANTIGRAVITY, CLAUDE_CODE, CODEX, COPILOT, COWORK
@@ -669,7 +670,11 @@ def _main(args, cfg) -> int:
         payload = serialize(report)
         text = json.dumps(payload, indent=2)
         if args.out:
-            Path(args.out).write_text(text + "\n", encoding="utf-8")
+            try:
+                atomic_write_text(args.out, text + "\n")
+            except OSError as exc:
+                print(f"json: output_failed: {exc}", file=sys.stderr)
+                return 2
             print(f"wrote {args.out}")
         else:
             print(text)
@@ -678,7 +683,11 @@ def _main(args, cfg) -> int:
     if args.command == "csv":
         text = to_csv(report)
         if args.out:
-            Path(args.out).write_text(text, encoding="utf-8")
+            try:
+                atomic_write_text(args.out, text)
+            except OSError as exc:
+                print(f"csv: output_failed: {exc}", file=sys.stderr)
+                return 2
             print(f"wrote {args.out}")
         else:
             sys.stdout.write(text)
