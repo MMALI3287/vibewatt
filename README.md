@@ -28,6 +28,24 @@ uvx vibewatt doctor       # what it can and cannot see on this machine
 To keep it: `uv tool install vibewatt` (or `pipx install vibewatt`). The first run
 reads your logs into a local SQLite store. Later runs only read what changed.
 
+## Upgrading
+
+For a persistent installation:
+
+```bash
+uv tool upgrade vibewatt
+# or
+pipx upgrade vibewatt
+```
+
+`uvx vibewatt` is a one-off execution that always uses the latest published
+version; it does not create or update a persistent install.
+
+After upgrading, or to check the version of a one-off run, execute
+`vibewatt --version` in the same environment you use. Release notes are at
+<https://github.com/MMALI3287/vibewatt/releases>. Python 3.11 or newer is
+required.
+
 ## Why vibewatt
 
 There are bigger tools in this space. vibewatt is narrower on purpose.
@@ -68,7 +86,8 @@ never leaves your machine.
 
 ## How it works
 
-Local logs and two optional Claude endpoints feed one SQLite store. Every report,
+Local logs and two optional Claude endpoints feed one SQLite
+store. Every report,
 the API and the dashboard read only from that store.
 
 ```mermaid
@@ -76,7 +95,7 @@ flowchart LR
     A["Local logs<br/>Claude Code, Cowork, Codex,<br/>Copilot Chat, Antigravity"] --> S["vibewatt sync<br/>parse, dedupe, price"]
     B["Cloud sessions<br/>vibewatt harvest"] --> S
     Q["Plan utilization<br/>status line, desktop history,<br/>usage endpoint"] --> D
-    S --> D[("SQLite store<br/>responses, rollups,<br/>quota samples")]
+    S --> D["SQLite store<br/>responses, rollups,<br/>quota samples"]
     D --> T["Terminal, JSON, CSV"]
     D --> API["FastAPI on 127.0.0.1"] --> UI["React dashboard"]
 ```
@@ -89,7 +108,7 @@ A new provider is usually that module plus its rates in `vibewatt/pricing.py`.
 Claude Code deletes session transcripts older than `cleanupPeriodDays`, **30 days**
 by default, at every startup. Nothing can recover them afterwards.
 
-```jsonc
+```json
 // ~/.claude/settings.json   (%USERPROFILE%\.claude\settings.json on Windows)
 { "cleanupPeriodDays": 3650 }
 ```
@@ -167,28 +186,28 @@ call. [docs/ANALYSIS.md](https://github.com/MMALI3287/vibewatt/blob/master/docs/
 ## Commands
 
 ```
-vibewatt report        terminal report (default)
-vibewatt serve         dashboard                       --host --port --no-browser
-vibewatt doctor        what vibewatt can and cannot see and why
-vibewatt sync          read changed local logs into the store
-vibewatt harvest       ingest cloud session usage      --file sessions.json
-vibewatt sessions      sessions across every surface, with titles
-vibewatt json          full data as JSON               --out
-vibewatt csv           per day per model               --out
-vibewatt blocks        recent rate-limit windows
-vibewatt statusline    Claude Code status line: records plan utilization
-vibewatt status        retained local usage and quota snapshot     --json --out
-vibewatt quota         retained current quota snapshot              --json --out
-vibewatt export        archive the store for another machine          --include-titles
-vibewatt import        merge a .vwx archive from another machine
+vibewatt report       terminal report (default)
+vibewatt serve        dashboard                       --host --port --no-browser
+vibewatt doctor       what vibewatt can and cannot see and why
+vibewatt sync         read changed local logs into the store
+vibewatt harvest      ingest cloud session usage      --file sessions.json
+vibewatt sessions     sessions across every surface, with titles
+vibewatt json         full data as JSON               --out
+vibewatt csv          per day per model               --out
+vibewatt blocks       recent rate-limit windows
+vibewatt statusline   Claude Code status line: records plan utilization
+vibewatt status       retained local usage and quota snapshot     --json --out
+vibewatt quota        retained current quota snapshot             --json --out
+vibewatt export       archive the store for another machine       --include-titles
+vibewatt import       merge a .vwx archive from another machine
 ```
 
 `status --json` and `quota --json` never sync logs or fetch network data.
 See [the versioned agent contract and exit codes](https://github.com/MMALI3287/vibewatt/blob/master/docs/AGENT-JSON.md).
 Open work and its prerequisites are in [docs/DEFERRED.md](https://github.com/MMALI3287/vibewatt/blob/master/docs/DEFERRED.md).
 
-Shared flags: `--source {all,claude,claude-code,cowork,codex,copilot,antigravity}`, `--since YYYY-MM-DD|7d|2w|this-month|last-month`, `--days N`,
-`--tz Asia/Tokyo`, `--day-start-hour H`, `--weeks N`, `--session-hours N`,
+Shared flags: `--source {all,claude,claude-code,cowork,codex,copilot,antigravity}`, `--since YYYY-MM-DD|7d|2w|this-month|last-month`,
+`--days N`, `--tz Asia/Tokyo`, `--day-start-hour H`, `--weeks N`, `--session-hours N`,
 `--plan 20`, `--no-sidechains`, `--by-project`, `--mask-projects`, `--no-quota`,
 `--offline`, `--no-color`.
 
@@ -251,7 +270,7 @@ Where it reads from:
 | Claude Code | `~/.claude/projects/**/*.jsonl` | `CLAUDE_CONFIG_DIR` |
 | Cowork | `<desktop data dir>/{local-agent-mode-sessions,claude-code-sessions}/**/audit.jsonl` | `VIBEWATT_COWORK_DIR` |
 | Codex | `~/.codex/{sessions,archived_sessions}/**/rollout-*.jsonl` | `CODEX_HOME` |
-| Copilot Chat | `<VS Code User dir>/{workspaceStorage/*/chatSessions,globalStorage/emptyWindowChatSessions}/*.jsonl` | `VIBEWATT_VSCODE_USER_DIRS` |
+| Copilot Chat | `<VS Code User dir>/{workspaceStorage/*/chatSessions,globalStorage/emptyWindowChatSessions}/*.jsonl` | `VIBEWATT_VSCODE_USER_DIR` |
 | Antigravity | `~/.gemini/antigravity*/conversations/*.db`, read only | `ANTIGRAVITY_DATA_DIR` |
 | Store | `%LOCALAPPDATA%\vibewatt`, `~/Library/Application Support/vibewatt`, `~/.local/share/vibewatt` | `VIBEWATT_DATA_DIR` |
 
@@ -274,83 +293,14 @@ Network calls, all optional:
 
 | Call | Sends | When | Off switch |
 |---|---|---|---|
-| Pricing table (LiteLLM, GitHub) | nothing | at most once a day | `--offline` |
-| `api.anthropic.com/api/oauth/usage` | your Claude Code OAuth token | plan utilization fallback, at most every 10 min | `--no-quota` |
-| `status.claude.com` | nothing | dashboard status banner, cached 5 min | `--offline` |
-| Anthropic Messages API | your `ANTHROPIC_API_KEY` and weekly totals | only when you ask for an AI weekly summary | off by default |
+| Plan utilization | account cookie or OAuth token | statusline, desktop history or usage endpoint | `--no-quota` or omit the sources |
+| Harvest | nothing local | you run `vibewatt harvest` | do not run it |
+| Pricing refresh | nothing | once a day if online | `--offline` |
+| Telemetry | nothing | never | n/a |
 
-`--mask-projects` replaces project names with `project 1`, `project 2` and so on in
-every view and export.
+No account is created, no key is stored and no data leaves the machine unless you
+explicitly harvest or the optional plan reading is enabled.
 
-## Caveats
+## Development
 
-- **Codex and Antigravity costs are API-equivalent estimates; Copilot uses the
-  credits GitHub logs.** Each provider's sources and rates are in
-  [docs/DATA-SOURCES.md](https://github.com/MMALI3287/vibewatt/blob/master/docs/DATA-SOURCES.md).
-- **Cost is an estimate at list API rates.** On a Pro or Max subscription it is what
-  the same tokens would have cost pay-as-you-go, not what you were billed.
-- The usage endpoint and the cloud session API are undocumented and can change.
-  vibewatt falls back to local data when they do.
-- Heatmap intensity follows the metric you pick; total tokens are dominated by
-  cache reads.
-
-## Roadmap
-
-Shipped in [0.4.0](https://github.com/MMALI3287/vibewatt/blob/master/CHANGELOG.md): Claude Code, Cowork, web and remote sessions,
-Codex, Copilot Chat and Antigravity, plan meters, analysis findings, Wrapped and
-machine-to-machine export.
-
-Next, in rough order:
-
-- **Contributor issues** labelled
-  [good first issue](https://github.com/MMALI3287/vibewatt/labels/good%20first%20issue)
-  and [help wanted](https://github.com/MMALI3287/vibewatt/labels/help%20wanted).
-- **Gemini CLI**, once someone can share a sanitized session file. The parser is
-  not written blind.
-- **Copilot CLI** usage, if a later CLI version logs token counts locally.
-- **Antigravity plan quotas**, if a local copy ever appears.
-
-Not planned: hosting, accounts, uploads, a tray app or an MCP server. Section 9
-of [docs/PLAN.md](https://github.com/MMALI3287/vibewatt/blob/master/docs/PLAN.md) explains why. Open work and its prerequisites
-are in [docs/DEFERRED.md](https://github.com/MMALI3287/vibewatt/blob/master/docs/DEFERRED.md).
-
-## Build from source
-
-Only needed to work on vibewatt itself. Use Python 3.11+ and Node 22.12+
-(Node 24 is used in CI).
-
-```bash
-uv sync
-cd web
-npm ci
-npm run build
-cd ..
-uv build
-pip install dist/vibewatt-*.whl
-vibewatt serve
-```
-
-The wheel and source archive include the built dashboard. Installed users do not
-need Node. Deep links such as `/sessions/<id>` work on reload. For frontend
-iteration, run `npm run dev` in `web/` alongside the API.
-
-The old `html` command and `/api/usage` and `/api/dataset` endpoints have been
-retired. Use the dashboard, `vibewatt json`/`csv` or the typed `/api/summary` and
-`/api/export` endpoints. See [deferred work and prerequisites](https://github.com/MMALI3287/vibewatt/blob/master/docs/DEFERRED.md).
-
-## Upgrading from ccburn
-
-vibewatt was called ccburn. The first run copies an existing ccburn data directory
-and store to the vibewatt location and leaves the old one in place. `CCBURN_*`
-variables and `ccburn.json` files still work for one release, with a warning.
-
-## Contributing
-
-Issues and pull requests are welcome. Start with [CONTRIBUTING.md](https://github.com/MMALI3287/vibewatt/blob/master/CONTRIBUTING.md)
-and the rules in [AGENTS.md](https://github.com/MMALI3287/vibewatt/blob/master/AGENTS.md). Report security problems privately as
-described in [SECURITY.md](https://github.com/MMALI3287/vibewatt/blob/master/SECURITY.md). Everyone taking part follows the
-[code of conduct](https://github.com/MMALI3287/vibewatt/blob/master/CODE_OF_CONDUCT.md).
-
-## License
-
-[MIT](https://github.com/MMALI3287/vibewatt/blob/master/LICENSE)
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md).
