@@ -95,6 +95,15 @@ Tests never read your real `~/.claude` and never touch the network. If you chang
 the API, run `npm run gen:api` in `web/` and commit `web/openapi.json` and
 `web/src/api/schema.d.ts`; a test fails when they drift.
 
+### No-network test contract
+
+The Python suite rejects outbound socket and DNS calls before they reach the
+network. A failure names the test and reports `external network blocked`; do not
+disable the guard or add an allow-network marker. Replace provider and client
+requests with synthetic fixture responses, patching the narrow request method at
+the service boundary. Loopback traffic is reserved for tests that genuinely need
+an in-process server or subprocess listener.
+
 ### Supported Python compatibility gate
 
 The required Linux baseline remains Python 3.11. CI additionally runs the
