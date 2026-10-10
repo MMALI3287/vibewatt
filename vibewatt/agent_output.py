@@ -9,6 +9,7 @@ from datetime import UTC, date, datetime, timedelta, tzinfo
 from pathlib import Path
 
 from . import pricing, quota, store
+from ._cli_output import print_result
 from .config import zone_id
 
 
@@ -139,10 +140,13 @@ def run(args: argparse.Namespace, cfg: dict, tz: tzinfo) -> int:
         except OSError as exc:
             payload["state"] = "error"
             payload["error"] = {"code": "output_failed", "message": str(exc)}
-            print(
-                json.dumps(payload, indent=2) if args.json else f"{args.command}: {exc}"
+            print_result(
+                json.dumps(payload, indent=2)
+                if args.json
+                else f"{args.command}: {exc}",
+                2,
             )
             return 2
     else:
-        print(text)
+        print_result(text, code)
     return code

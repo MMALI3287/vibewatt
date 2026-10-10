@@ -13,6 +13,7 @@ from pathlib import Path
 
 from . import __version__, pricing, quota, terminal
 from . import config as configmod
+from ._cli_output import PipeOutput, StdoutClosed
 from .aggregate import cost_of, from_store
 from .ingest import discover
 from .sources import ANTIGRAVITY, CLAUDE_CODE, CODEX, COPILOT, COWORK
@@ -563,6 +564,33 @@ def _utf8_streams() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     _utf8_streams()
+    original = sys.stdout
+    output = PipeOutput(original)
+    sys.stdout = output
+    try:
+        try:
+            code = _run_cli(argv)
+        except StdoutClosed as exc:
+            return exc.code
+        except BaseException as exc:
+            try:
+                output.flush()
+            except StdoutClosed:
+                # Help/version exit through argparse; actual errors keep their
+                # original exception and exit status even when stdout is closed.
+                if isinstance(exc, SystemExit) and exc.code in (None, 0):
+                    return 1
+            raise
+        try:
+            output.flush()
+        except StdoutClosed:
+            return code or 1
+        return code
+    finally:
+        sys.stdout = original
+
+
+def _run_cli(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     cfg = configmod.load()
     from . import identity, store
