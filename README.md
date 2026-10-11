@@ -288,6 +288,9 @@ Network calls, all optional:
 `--mask-projects` replaces project names with `project 1`, `project 2` and so on in
 every view and export.
 
+For a command-by-command walkthrough that turns each call off and says what each
+step proves, see [docs/OFFLINE.md](https://github.com/MMALI3287/vibewatt/blob/master/docs/OFFLINE.md).
+
 ## Caveats
 
 - **Codex and Antigravity costs are API-equivalent estimates; Copilot uses the
