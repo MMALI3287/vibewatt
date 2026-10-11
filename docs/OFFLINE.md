@@ -22,8 +22,10 @@ That is stated in [CONFIGURATION.md](CONFIGURATION.md#nested-objects-are-replace
 and repeated here because "offline" is easy to read as "isolated".
 
 Both are one-way file overrides, like every boolean CLI switch: omitting the
-flag does **not** turn off a `true` in a config file. To turn `offline` back on
-after it is in a file you must edit the file — there is no `--no-offline`.
+flag does **not** clear a `true` already in a config file. If a file has
+`"offline": true`, running without `--offline` stays offline; to fetch again
+you must edit that file to `"offline": false` — there is no `--no-offline` to
+turn it off.
 
 ## Checklist
 
@@ -64,15 +66,24 @@ vibewatt status --offline --no-quota
 Pass: it prints the stored reading, no banner is fetched from
 `status.claude.com`.
 
-### 4. Confirm `sync` still only reads local files
+### 4. Confirm `sync` does not fetch pricing
+
+`sync` refreshes pricing itself, before it reads any log —
+`sync()` calls `pricing.refresh(offline=cfg.get("offline", False))` before it
+discovers files. The `--offline` you passed to `report` in step 1 lives only in
+that command's config, so it does **not** reach a separate `sync` invocation.
+Pass the flag to `sync` itself:
 
 ```sh
-vibewatt sync
+vibewatt sync --offline
 ```
 
-`sync` reads the configured log roots and SQLite; it does not fetch pricing or
-status on its own. Pricing is loaded (and refreshed) at report/`serve` startup,
-not during the file walk, so step 1 is what governs the request.
+Pass: it prints its read progress and makes no pricing request. Run plain
+`vibewatt sync` and it may refresh the table regardless of any earlier
+`report --offline`.
+
+`sync` reads the configured log roots and writes SQLite; it makes no status or
+quota request.
 
 ### 5. Confirm the dashboard inherits the flags
 
@@ -91,6 +102,57 @@ The weekly summary is off by default (`ai_summary.enabled: false`) and only
 fires on a button click. Leave it false for an offline run; it is a POST to
 `api.anthropic.com/v1/messages` and is the only call that sends prompt-adjacent
 text.
+
+## What an offline run can and cannot show
+
+Offline does not mean blank. The store is the source of truth for everything a
+report prints, and it survives an offline run unchanged.
+
+- **A report reads stored rollups.** `report` reads the store's aggregate rows,
+  refreshing only the local logs that changed since the last sync. What a figure
+  shows is what a previous `sync` stored, not a live recomputation from the
+  network. So an offline report against a populated store shows real numbers.
+- **`sync` seeds the store.** The first thing to do on a fresh install is a
+  sync of the local logs: `vibewatt sync` (add `--offline` to keep it free of
+  network too). After it, `report --offline` has data to print.
+- **An empty store is the exception.** With no prior sync there is nothing to
+  show, and an offline run cannot invent it — the numbers come from logs the
+  local machine already has, not from a fetch. Run one sync first.
+- **Prices can be stale.** With `--offline` the report uses the built-in table
+  and the last cached community table. A model priced only in the community
+  table and never fetched on this machine is unpriced here, and `doctor` warns
+  when the cached table is more than 7 days old. That is the intended trade for
+  making no request.
+- **Quota is the one figure that needs the network.** Plan utilization comes
+  from `api.anthropic.com/api/oauth/usage`; under `--no-quota` (or `--offline`
+  on the fallback path) it is simply absent, and no stored series is shown either
+  when `quota: false`. Everything else — token counts, costs, activity, context
+  — is local and unaffected.
+- **The scope stays local.** Nothing above reads another machine or another
+  account. Offline is about the four calls in the table, not about reach.
+
+### A fully synthetic run, with no personal data
+
+To exercise all of this without touching real logs, `scripts/demo_server.py`
+seeds synthetic transcripts into a temporary data directory, syncs them into a
+fresh store and serves the dashboard from it — the developer's own config and
+paths are never read ([CONTRIBUTING.md](../CONTRIBUTING.md)).
+
+```sh
+uv run python scripts/demo_server.py     # serves http://127.0.0.1:8779
+```
+
+The same idea, from the CLI, against a throwaway store:
+
+```sh
+# A store of its own, so nothing real is touched (`VIBEWATT_DATA_DIR`).
+export VIBEWATT_DATA_DIR="$(mktemp -d)/vibewatt"
+vibewatt sync --offline        # seeds the store from whatever logs exist
+vibewatt report --offline --no-quota --no-color
+```
+
+An empty `VIBEWATT_DATA_DIR` with no logs prints an empty report — that is "no
+data synced yet", not a broken offline mode; run the `sync` line first.
 
 ## Where the one-line help is narrower than the behaviour
 
