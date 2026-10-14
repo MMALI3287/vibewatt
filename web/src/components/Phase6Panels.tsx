@@ -49,25 +49,33 @@ function WeeklySummary() {
 function Concierge() {
   const [filters] = useFilters();
   const project = filters.project;
-  const [copied, setCopied] = useState(false);
-  const [copyError, setCopyError] = useState(false);
+  const [preparation, setPreparation] = useState(0);
   const result = useQuery({ queryKey: ["concierge", project], queryFn: () => getConcierge(project!), enabled: false });
-  async function copy() {
-    if (!result.data) return;
-    try { await navigator.clipboard.writeText(result.data.text); setCopied(true); setCopyError(false); }
-    catch { setCopyError(true); }
-  }
   return <details className="card phase6-panel">
     <summary>Project resume brief</summary>
     <p>Copy a brief with the latest session, working-tree changes and unfinished todos. Nothing is sent to a running session.</p>
     {!project ? <p>Select a project in the filter bar to prepare its brief.</p> : <>
-      <button disabled={result.isFetching} onClick={() => { setCopied(false); void result.refetch(); }}>{result.isFetching ? "Preparing…" : `Prepare brief for ${project}`}</button>
+      <button disabled={result.isFetching} onClick={() => { setPreparation(value => value + 1); void result.refetch(); }}>{result.isFetching ? "Preparing…" : `Prepare brief for ${project}`}</button>
       {result.isError && <p role="alert">Could not prepare brief: {result.error.message}</p>}
-      {result.data && <><textarea aria-label="Project resume brief" readOnly value={result.data.text} />
-        <button onClick={() => void copy()}>{copied ? "Copied" : "Copy brief"}</button>
-        {copyError && <p role="status">Select the brief text to copy it.</p>}
-        {result.data.notes.map(note => <p key={note}>{note}</p>)}
-      </>}
+      {result.data && !result.isFetching && !result.isError && <BriefCopy
+        key={JSON.stringify([project, preparation, result.data.text])}
+        text={result.data.text} notes={result.data.notes}
+      />}
     </>}
   </details>;
+}
+
+// Remount for a new project, preparation or text so late clipboard results stay
+// with the brief that initiated them, even when returning to cached text.
+function BriefCopy({ text, notes }: { text: string; notes: string[] }) {
+  const [feedback, setFeedback] = useState<"idle" | "copied" | "error">("idle");
+  async function copy() {
+    try { await navigator.clipboard.writeText(text); setFeedback("copied"); }
+    catch { setFeedback("error"); }
+  }
+  return <><textarea aria-label="Project resume brief" readOnly value={text} />
+    <button onClick={() => void copy()}>{feedback === "copied" ? "Copied" : "Copy brief"}</button>
+    {feedback === "error" && <p role="status">Select the brief text to copy it.</p>}
+    {notes.map(note => <p key={note}>{note}</p>)}
+  </>;
 }
