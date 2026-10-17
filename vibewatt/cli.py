@@ -585,30 +585,55 @@ def _port_in_use(host: str, port: int) -> bool:
     return False
 
 
+def _claim_socket(family: int, socktype: int, proto: int) -> socket.socket:
+    """A socket for the claim that will own the port, not share it with a later one.
+
+    Windows' SO_REUSEADDR — the option uvicorn sets — lets another process bind and
+    even listen over a live socket, so a claim carrying only it could be shadowed
+    after the check had passed. SO_EXCLUSIVEADDRUSE is the option that refuses that,
+    and the port check cannot mean anything on that platform without it. POSIX has no
+    such switch: there, a bind followed by listen() is what owns the address, which
+    is why every claim listens before it is announced.
+    """
+    sock = socket.socket(family, socktype, proto)
+    if sys.platform == "win32" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    else:
+        # uvicorn's own option, so this is the claim the server would have made.
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    # asyncio's create_server — the path uvicorn took before the socket was
+    # supplied — turns dual-stack off for IPv6 sockets, which is why
+    # `--host ::` never answered IPv4-mapped connections. create_server(sock=)
+    # keeps whatever the socket already carries, so without this the handover
+    # would quietly widen the interfaces a given host serves (PR #134 review).
+    if family == socket.AF_INET6 and hasattr(socket, "IPPROTO_IPV6"):
+        sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+    return sock
+
+
 def _bind_listeners(host: str, port: int) -> list[socket.socket] | None:
-    """Claim the listening sockets, or None when the port is already taken.
+    """Claim and LISTEN on the sockets, or None when the port is already taken.
 
     Bound here and handed to uvicorn so the check and the server are ONE bind with
-    the same options, that option included. Only EADDRINUSE means "taken": every
-    other bind error is re-raised, because a genuine startup failure must not be
-    dressed up as a port conflict (PR #134 review).
+    the same options, that option included. Listening here, while the banner and the
+    browser are still unarmed, is what makes that claim own the port: a bound socket
+    owns nothing, so a competing socket that was merely bound while the probe and
+    this bind ran could start listening first, and the banner had already been
+    announced when asyncio's own sock.listen() then raised EADDRINUSE with a
+    traceback and no --port hint (PR #134 review). A competitor that wins this
+    listen ends the claim here instead, where the hint still helps; from the moment
+    this returns, the port is this process's and the server cannot lose it. Only
+    EADDRINUSE means "taken": every other bind or listen error is re-raised, because
+    a genuine startup failure must not be dressed up as a port conflict.
     """
     listeners: list[socket.socket] = []
     for family, socktype, proto, _, sockaddr in socket.getaddrinfo(
         host, port, type=socket.SOCK_STREAM
     ):
-        sock = socket.socket(family, socktype, proto)
-        # uvicorn's own option, so this is the claim the server would have made.
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        # asyncio's create_server — the path uvicorn took before the socket was
-        # supplied — turns dual-stack off for IPv6 sockets, which is why
-        # `--host ::` never answered IPv4-mapped connections. create_server(sock=)
-        # keeps whatever the socket already carries, so without this the handover
-        # would quietly widen the interfaces a given host serves (PR #134 review).
-        if family == socket.AF_INET6 and hasattr(socket, "IPPROTO_IPV6"):
-            sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+        sock = _claim_socket(family, socktype, proto)
         try:
             sock.bind(sockaddr)
+            sock.listen(socket.SOMAXCONN)
         except OSError as exc:
             sock.close()
             for opened in listeners:
@@ -734,12 +759,25 @@ def _main(args, cfg) -> int:
         print("  ctrl-c to stop")
         if not args.no_browser:
             threading.Timer(0.5, lambda: webbrowser.open(url)).start()
-        # Serve on the sockets claimed above, so the server cannot bind differently
-        # from the check, and no bind failure can land after the browser is told to
-        # open (PR #134 review).
+        # Serve on the sockets claimed above — claimed and listening — so the server
+        # cannot bind differently from the check and the port cannot be taken between
+        # the announcement and the server. The banner above is only reached once the
+        # claim owns the address (PR #134 review).
         server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
         try:
             server.run(sockets=listeners)
+        except OSError as exc:
+            for listener in listeners:
+                listener.close()
+            # The claim listens before the server is handed the socket, so this is as
+            # close to unreachable as the platform allows. If the address is taken at
+            # asyncio's own sock.listen() anyway, it has to read as the port conflict:
+            # MD's failure was raised exactly there, as a traceback with no --port
+            # hint (PR #134 review). Any other error is a real startup failure and
+            # stays one.
+            if exc.errno == errno.EADDRINUSE:
+                return _port_conflict_exit(args.host, args.port)
+            raise
         except KeyboardInterrupt:
             # uvicorn re-raises the signal it captured once it has shut down
             # gracefully, and uvicorn.run() swallows it. Serving through Server
