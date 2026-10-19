@@ -6,8 +6,6 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
-import pytest
-
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "check_markdown_links.py"
 FIXTURES = ROOT / "tests" / "fixtures" / "markdown_links"
@@ -20,16 +18,6 @@ def _load_checker() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
-
-
-# This module only shells out to the checker; skip heavy app autouse fixtures.
-pytestmark = pytest.mark.usefixtures()
-
-
-@pytest.fixture(autouse=True)
-def _no_app_fixtures(monkeypatch):
-    """Neutralize repo-wide autouse fixtures that need the full app stack."""
-    return
 
 
 def _run(*paths: Path) -> subprocess.CompletedProcess[str]:

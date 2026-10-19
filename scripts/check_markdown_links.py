@@ -2,7 +2,7 @@
 
 Supported:
   - [text](relative/path.md)
-  - [text](relative/path.md#Heading-Anchor)
+  - [text](relative/path.md#heading-anchor)
   - ![alt](images/foo.png)
   - bare directory links that resolve to an existing path
   - reference-style links, [text][label] and the collapsed [text][], resolved
@@ -21,7 +21,9 @@ remaining spaces become hyphens. Colliding slugs are resolved the
 way GitHub's own slugger does it: a repeat gets "-N" appended to the base
 slug, and if that candidate is itself already taken (for example a later
 heading literally titled "Foo-1"), the counter keeps advancing until it
-lands on a slug nothing else has claimed yet.
+lands on a slug nothing else has claimed yet. A link's fragment is
+percent-decoded and must equal one of those generated anchors exactly; it is
+never slugified itself, so "#A-B" and "#a-b" do not match "a--b".
 """
 
 from __future__ import annotations
@@ -112,7 +114,17 @@ def gather_ref_defs(path: Path) -> dict[str, str]:
 def iter_markdown_files(
     root: Path, *, skip_broken_fixtures: bool = False
 ) -> list[Path]:
-    skip = {".git", "node_modules", ".venv", "dist", "build", "__pycache__", ".tox"}
+    skip = {
+        ".git",
+        "node_modules",
+        ".venv",
+        "dist",
+        "build",
+        "__pycache__",
+        ".tox",
+        ".pytest_cache",
+        ".ruff_cache",
+    }
     files: list[Path] = []
     for path in root.rglob("*.md"):
         if any(part in skip for part in path.parts):
