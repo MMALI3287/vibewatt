@@ -9,6 +9,7 @@ are never read. The data is seeded, so captures are reproducible.
 
 from __future__ import annotations
 
+import argparse
 import json
 import random
 import sys
@@ -30,6 +31,41 @@ MODELS = [
     ("claude-sonnet-5", 0.35),
     ("claude-haiku-4-5", 0.10),
 ]
+
+
+DEFAULT_PORT = 8779
+
+
+def _port(value: str) -> int:
+    """Validate the demo port before any temp data is created (issue #111)."""
+    try:
+        port = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"port must be an integer, got {value!r}")
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError(
+            f"port must be between 1 and 65535, got {port}"
+        )
+    return port
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="demo_server.py",
+        description="Serve the dashboard over synthetic demo data.",
+    )
+    parser.add_argument(
+        "port",
+        nargs="?",
+        type=_port,
+        default=DEFAULT_PORT,
+        help=f"port to bind on 127.0.0.1 (default: {DEFAULT_PORT})",
+    )
+    return parser
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    return build_parser().parse_args(argv)
 
 
 def write_transcripts(root: Path, today: datetime) -> None:
@@ -86,7 +122,8 @@ def write_transcripts(root: Path, today: datetime) -> None:
 
 
 def main() -> None:
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8779
+    args = parse_args()
+    port = args.port
     tmp = Path(tempfile.mkdtemp(prefix="vibewatt-demo-"))
     isolate(tmp)
     today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)

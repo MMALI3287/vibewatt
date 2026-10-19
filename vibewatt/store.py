@@ -457,11 +457,25 @@ _migrate_lock = threading.Lock()
 BUSY_TIMEOUT_MS = 30_000
 
 
+class UnsupportedSchemaError(ValueError):
+    """The store was written by a newer, incompatible vibewatt installation."""
+
+    def __init__(self, version: int) -> None:
+        super().__init__(
+            f"Database schema {version} is newer than supported schema {SCHEMA_VERSION}. "
+            "Upgrade vibewatt to a compatible version, or restore a compatible backup "
+            "in a separate data directory. Keep the original database."
+        )
+
+
 def _current(conn) -> int:
     try:
-        return schema_version(conn)
+        current = schema_version(conn)
     except sqlite3.OperationalError:
         return 0  # a new file: no meta table yet
+    if current > SCHEMA_VERSION:
+        raise UnsupportedSchemaError(current)
+    return current
 
 
 @contextmanager

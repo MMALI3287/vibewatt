@@ -1,6 +1,7 @@
 import createClient from "openapi-fetch";
 import type { components, paths } from "./schema";
 import { toQuery, type Filters } from "../lib/filters";
+import { getAccountPreference } from "../lib/account";
 
 export type Summary = components["schemas"]["SummaryOut"];
 export type Bucket = components["schemas"]["BucketOut"];
@@ -8,8 +9,8 @@ export type Quota = components["schemas"]["QuotaOut"];
 export type Health = components["schemas"]["HealthOut"];
 
 export const api = createClient<paths>({ baseUrl: "" });
-const selectedAccount = localStorage.getItem("vibewatt-account");
 api.use({ onRequest({ request }) {
+  const selectedAccount = getAccountPreference().account;
   if (selectedAccount) request.headers.set("X-Vibewatt-Account", selectedAccount);
   return request;
 } });

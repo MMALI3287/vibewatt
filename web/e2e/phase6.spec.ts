@@ -67,3 +67,32 @@ test("Overview explains why numbers differ from Claude's Stats", async ({ page }
   await expect(table).toContainText("Input + output tokens");
   await expect(page.getByText("Session:", { exact: false })).toBeVisible();
 });
+
+test("project brief feedback follows the selected text and preserves keyboard fallback", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", { value: { writeText: async () => { throw new Error("denied"); } } });
+  });
+  let release: () => void = () => {};
+  let calls = 0;
+  await page.route("**/api/concierge?**", async route => {
+    calls++;
+    if (calls === 2) await new Promise<void>(resolve => { release = resolve; });
+    await route.fulfill({ json: { project: "synthetic", text: `Synthetic brief ${calls}`, notes: [] } });
+  });
+  await page.goto("/?project=synthetic");
+  await page.getByText("Project resume brief", { exact: true }).click();
+  const prepare = page.getByRole("button", { name: "Prepare brief for synthetic" });
+  await prepare.focus(); await page.keyboard.press("Enter");
+  const brief = page.getByRole("textbox", { name: "Project resume brief" });
+  await expect(brief).toHaveValue("Synthetic brief 1");
+  const copy = page.getByRole("button", { name: "Copy brief", exact: true });
+  await copy.focus(); await page.keyboard.press("Enter");
+  const fallback = page.getByText("Select the brief text to copy it.", { exact: true });
+  await expect(fallback).toBeVisible();
+  await brief.focus(); await page.keyboard.press("ControlOrMeta+A");
+  expect(await brief.evaluate((node: HTMLTextAreaElement) => node.value.slice(node.selectionStart, node.selectionEnd))).toBe("Synthetic brief 1");
+  await prepare.click(); await expect(page.getByRole("button", { name: "Preparing…" })).toBeDisabled();
+  await expect(brief).toHaveCount(0); await expect(fallback).toHaveCount(0);
+  await expect.poll(() => calls).toBe(2);
+  release(); await expect(brief).toHaveValue("Synthetic brief 2"); await expect(fallback).toHaveCount(0);
+});

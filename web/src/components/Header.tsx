@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import { getAccounts, postSync } from "../api/client";
 import { useTheme } from "../lib/theme";
+import { selectAccount, useAccountPreference } from "../lib/account";
 import { DashboardExport } from "./DashboardExport";
 import { BrowserNotifications } from "./BrowserNotifications";
 
@@ -33,6 +34,7 @@ export function Header() {
     return () => document.removeEventListener("keydown", shortcut);
   }, []);
   const [theme, cycleTheme] = useTheme();
+  const preference = useAccountPreference();
   const qc = useQueryClient();
   const sync = useMutation({ mutationFn: postSync, onSuccess: () => qc.invalidateQueries() });
   const accounts = useQuery({ queryKey: ["accounts"], queryFn: getAccounts });
@@ -63,10 +65,14 @@ export function Header() {
         <DashboardExport />
         <BrowserNotifications accountId={accounts.data?.selected} />
         {accounts.data && <select aria-label="Account" value={accounts.data.selected} style={{ maxWidth: "10rem" }}
-          onChange={event => { localStorage.setItem("vibewatt-account", event.target.value); window.location.reload(); }}>
+          onChange={event => selectAccount(event.target.value)}>
           {accounts.data.accounts.map(account => <option key={account} value={account}>{account === "unknown" ? "Unknown account" : account}</option>)}
         </select>}
-        {accounts.isError && <button type="button" onClick={() => { localStorage.removeItem("vibewatt-account"); window.location.reload(); }}>Reset account</button>}
+        {accounts.isError && <button type="button" onClick={() => {
+          selectAccount(null);
+          if (preference.account === null) void qc.invalidateQueries();
+        }}>Reset account</button>}
+        {!preference.persisted && <small role="status" className="muted">Storage unavailable: account selection lasts until reload.</small>}
         <button type="button" onClick={() => sync.mutate()} disabled={sync.isPending}>
           {sync.isPending ? "Syncing…" : sync.isError ? "Sync failed" : "Sync"}
         </button>

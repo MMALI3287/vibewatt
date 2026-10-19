@@ -9,6 +9,7 @@ from datetime import UTC, date, datetime, timedelta, tzinfo
 from pathlib import Path
 
 from . import pricing, quota, store
+from ._cli_output import print_result
 from .config import zone_id
 
 
@@ -117,10 +118,13 @@ def run(args: argparse.Namespace, cfg: dict, tz: tzinfo) -> int:
         code = 0 if payload["state"] == "available" else 1
     except (sqlite3.Error, OSError, ValueError) as exc:
         payload["state"] = "error"
+        error_code = "snapshot_failed"
+        if isinstance(exc, ResyncRequired):
+            error_code = "resync_required"
+        elif isinstance(exc, store.UnsupportedSchemaError):
+            error_code = "schema_too_new"
         payload["error"] = {
-            "code": "resync_required"
-            if isinstance(exc, ResyncRequired)
-            else "snapshot_failed",
+            "code": error_code,
             "message": str(exc),
         }
         code = 2
@@ -136,10 +140,13 @@ def run(args: argparse.Namespace, cfg: dict, tz: tzinfo) -> int:
         except OSError as exc:
             payload["state"] = "error"
             payload["error"] = {"code": "output_failed", "message": str(exc)}
-            print(
-                json.dumps(payload, indent=2) if args.json else f"{args.command}: {exc}"
+            print_result(
+                json.dumps(payload, indent=2)
+                if args.json
+                else f"{args.command}: {exc}",
+                2,
             )
             return 2
     else:
-        print(text)
+        print_result(text, code)
     return code

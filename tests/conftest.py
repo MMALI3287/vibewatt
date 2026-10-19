@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import shutil
+import sqlite3
 from datetime import timedelta, timezone
 from pathlib import Path
 
@@ -9,6 +10,23 @@ import pytest
 FIXTURES = Path(__file__).parent / "fixtures"
 # Fixed +9 rather than ZoneInfo so Windows needs no tzdata; 20:00Z is the next JST day.
 JST = timezone(timedelta(hours=9))
+
+
+@pytest.fixture
+def future_store(tmp_path):
+    from vibewatt import store
+
+    path = tmp_path / "future.db"
+    conn = sqlite3.connect(path)
+    with conn:
+        conn.execute("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)")
+        conn.execute(
+            "INSERT INTO meta VALUES ('schema', ?)", (str(store.SCHEMA_VERSION + 1),)
+        )
+        conn.execute("CREATE TABLE future_usage (value TEXT)")
+        conn.execute("INSERT INTO future_usage VALUES ('synthetic usage')")
+    conn.close()
+    return path
 
 
 @pytest.fixture(autouse=True)
