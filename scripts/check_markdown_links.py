@@ -15,8 +15,9 @@ Ignored (no network):
 
 Fenced code blocks and inline ``code`` spans are skipped so example URLs do
 not fail the check. Heading anchors follow GitHub's slug rules: lowercase,
-punctuation is dropped rather than replaced (so "A & B" becomes "a--b", not
-"a-b"), and remaining spaces become hyphens. Colliding slugs are resolved the
+punctuation other than "-" and "_" is dropped rather than replaced (so
+"A & B" becomes "a--b", not "a-b", and "api_key" stays "api_key"), and
+remaining spaces become hyphens. Colliding slugs are resolved the
 way GitHub's own slugger does it: a repeat gets "-N" appended to the base
 slug, and if that candidate is itself already taken (for example a later
 heading literally titled "Foo-1"), the counter keeps advancing until it
@@ -41,12 +42,13 @@ REF_DEF_RE = re.compile(r"^\s{0,3}\[([^\]]+)\]:\s*(\S+)")
 
 def github_slug(text: str) -> str:
     """Slugify heading text the way GitHub does: lowercase, drop punctuation
-    without substituting anything (so adjacent spaces survive as adjacent
-    hyphens instead of collapsing), and turn remaining spaces into hyphens."""
+    other than "-" and "_" without substituting anything (so adjacent spaces
+    survive as adjacent hyphens instead of collapsing), and turn remaining
+    spaces into hyphens."""
     text = text.strip().lower()
     out = []
     for ch in text:
-        if ch.isalnum() or ch in "- ":
+        if ch.isalnum() or ch in "-_ ":
             out.append("-" if ch == " " else ch)
         # other punctuation is dropped, not replaced with anything
     return "".join(out)

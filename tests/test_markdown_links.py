@@ -61,6 +61,11 @@ def test_github_slug_does_not_collapse_repeated_hyphens():
     assert checker.github_slug("A & B") == "a--b"
 
 
+def test_github_slug_keeps_underscores():
+    checker = _load_checker()
+    assert checker.github_slug("Set `api_key` first") == "set-api_key-first"
+
+
 def test_gather_headings_resolves_collision_chain(tmp_path: Path):
     checker = _load_checker()
     doc = tmp_path / "doc.md"

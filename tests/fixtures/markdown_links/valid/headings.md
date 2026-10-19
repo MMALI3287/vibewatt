@@ -12,5 +12,9 @@ Text.
 
 # A & B
 
-See [first](#foo), [second](#foo-1), [third](#foo-1-1) and
-[ampersand heading](#a--b).
+Text.
+
+# Set `api_key` first
+
+See [first](#foo), [second](#foo-1), [third](#foo-1-1),
+[ampersand heading](#a--b) and [underscore heading](#set-api_key-first).
