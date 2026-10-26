@@ -157,7 +157,9 @@ def test_agent_snapshot_output_failure_preserves_existing_file(
     command, failure_mode, tmp_path, monkeypatch, capsys
 ):
     """Verify the complete versioned CLI error contract, not just the helper."""
-    destination = tmp_path / "snapshot.json"
+    output_dir = tmp_path / "snapshot-output"
+    output_dir.mkdir()
+    destination = output_dir / "snapshot.json"
     original = b"existing verified snapshot"
     destination.write_bytes(original)
 
@@ -180,12 +182,8 @@ def test_agent_snapshot_output_failure_preserves_existing_file(
 
         monkeypatch.setattr(os, "write", partial_then_fail)
 
-    assert (
-        cli.main(
-            [command, "--offline", "--json", "--tz", "utc", "--out", str(destination)]
-        )
-        == 2
-    )
+    args = [command, "--offline", "--json", "--tz", "utc", "--out", str(destination)]
+    assert cli.main(args) == 2
     captured = capsys.readouterr()
     assert not captured.err
     payload = json.loads(captured.out)
@@ -194,4 +192,4 @@ def test_agent_snapshot_output_failure_preserves_existing_file(
     assert payload["state"] == "error"
     assert payload["error"]["code"] == "output_failed"
     assert destination.read_bytes() == original
-    assert sorted(path.name for path in tmp_path.iterdir()) == ["snapshot.json"]
+    assert sorted(path.name for path in output_dir.iterdir()) == ["snapshot.json"]
