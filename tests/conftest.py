@@ -96,7 +96,7 @@ def logs(tmp_path, monkeypatch):
 
 
 def _ensure_local_network_address(address, nodeid, family=None):
-    if family == getattr(socket, "AF_UNIX", None):
+    if family is not None and family == getattr(socket, "AF_UNIX", None):
         return
     host = address[0] if isinstance(address, tuple) else address
     if isinstance(host, bytes):
