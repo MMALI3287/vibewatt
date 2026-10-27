@@ -95,6 +95,17 @@ Tests never read your real `~/.claude` and never touch the network. If you chang
 the API, run `npm run gen:api` in `web/` and commit `web/openapi.json` and
 `web/src/api/schema.d.ts`; a test fails when they drift.
 
+### First PR from a fork? CI may wait for approval
+
+GitHub holds workflow runs on a first-time contributor's fork PR until a
+maintainer approves them. While it waits, the PR shows the checks as
+`action_required` (or "Waiting for approval") instead of running them. Nothing
+is wrong with your PR, and closing/reopening it does not help — a maintainer
+has to approve the run. Once approved, the jobs run and the required `ci-ok`
+aggregator check reports the combined result; later PRs from the same account
+run automatically. Running the checks above locally before you push is the
+best predictor of a green `ci-ok`.
+
 ### Supported Python compatibility gate
 
 The required Linux baseline remains Python 3.11. CI additionally runs the
