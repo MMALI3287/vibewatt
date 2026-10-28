@@ -15,20 +15,34 @@ FIXTURES = ROOT / "tests" / "fixtures"
 
 
 def isolate(tmp: Path, setenv=os.environ.__setitem__) -> None:
-    """Point every config, data and provider path into tmp."""
+    """Isolate this synthetic-server process, including its working directory."""
+    tmp = tmp.resolve()
+    tmp.mkdir(parents=True, exist_ok=True)
     for key, sub in (
         ("CLAUDE_CONFIG_DIR", "claude"),
+        ("VIBEWATT_CONFIG", "config.json"),
+        ("CCBURN_CONFIG", "config.json"),
+        ("CODEX_HOME", "codex"),
+        ("VIBEWATT_VSCODE_USER_DIRS", "vscode"),
+        ("VIBEWATT_COPILOT_CACHE", "copilot/cache.json"),
+        ("ANTIGRAVITY_DATA_DIR", "antigravity"),
         ("APPDATA", "appdata"),
         # Copilot's plan cache lives under LOCALAPPDATA on Windows.
         ("LOCALAPPDATA", "localappdata"),
         ("XDG_CONFIG_HOME", "appdata"),
+        ("XDG_DATA_HOME", "xdg-data"),
         # A separate root avoids duplicate native/override discovery on Windows and Linux.
         ("VIBEWATT_COWORK_DIR", "cowork"),
+        ("CCBURN_COWORK_DIR", "cowork"),
         ("VIBEWATT_DATA_DIR", "data"),
+        ("CCBURN_DATA_DIR", "data"),
         ("HOME", "home"),
         ("USERPROFILE", "home"),
     ):
         setenv(key, str(tmp / sub))
+    # Project configuration is loaded from cwd after environment-selected config.
+    # Both launchers use absolute fixture paths and need no caller project files.
+    os.chdir(tmp)
 
 
 def main() -> None:

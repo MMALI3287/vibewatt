@@ -28,6 +28,31 @@ uvx vibewatt doctor       # what it can and cannot see on this machine
 To keep it: `uv tool install vibewatt` (or `pipx install vibewatt`). The first run
 reads your logs into a local SQLite store. Later runs only read what changed.
 
+## Run the dashboard without opening a browser
+
+For a terminal or remote session, start the normal dashboard without automatic
+browser launch:
+
+```bash
+uvx vibewatt serve --no-browser
+# Open http://127.0.0.1:8777/ yourself.
+```
+
+To use another local port, pass `--port` and open the matching loopback URL:
+
+```bash
+uvx vibewatt serve --no-browser --port 8780
+# Open http://127.0.0.1:8780/ yourself.
+```
+
+Keep the command running while you use the dashboard; press **Ctrl+C** in that
+terminal to stop it. These commands serve your local usage store. For a safe
+synthetic contributor walkthrough, use the separate
+[`demo_server.py` instructions](https://github.com/MMALI3287/vibewatt/blob/master/CONTRIBUTING.md#try-the-dashboard-with-synthetic-data)
+instead. Leave the host at its loopback default; do not bind the dashboard
+publicly as a workaround. The [privacy and security notes](#privacy) explain
+the Host and cross-site request protections.
+
 ## Why vibewatt
 
 There are bigger tools in this space. vibewatt is narrower on purpose.
@@ -187,7 +212,13 @@ vibewatt import        merge a .vwx archive from another machine
 See [the versioned agent contract and exit codes](https://github.com/MMALI3287/vibewatt/blob/master/docs/AGENT-JSON.md).
 Open work and its prerequisites are in [docs/DEFERRED.md](https://github.com/MMALI3287/vibewatt/blob/master/docs/DEFERRED.md).
 
-Shared flags: `--source {all,claude,claude-code,cowork,codex,copilot,antigravity}`, `--since YYYY-MM-DD`, `--days N`,
+If a stdout write or flush observes that a pipe reader has closed, vibewatt exits
+quietly with status 1, or preserves an already detected command error's status
+(such as 2 for a failed snapshot). With shell `pipefail` enabled, that nonzero
+status makes the pipeline fail. A short report may finish writing before a reader
+such as `head -n 5` closes, in which case its normal exit status is unchanged.
+
+Shared flags: `--source {all,claude,claude-code,cowork,codex,copilot,antigravity}`, `--since YYYY-MM-DD|7d|2w|this-month|last-month`, `--days N`,
 `--tz Asia/Tokyo`, `--day-start-hour H`, `--weeks N`, `--session-hours N`,
 `--plan 20`, `--no-sidechains`, `--by-project`, `--mask-projects`, `--no-quota`,
 `--offline`, `--no-color`.

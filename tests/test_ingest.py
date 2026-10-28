@@ -58,7 +58,15 @@ def test_e2e_fixture_includes_cowork_on_darwin(tmp_path, monkeypatch):
 
     monkeypatch.setattr(uvicorn, "run", inspect_store)
     server = Path(__file__).parents[1] / "web/e2e/fixture_server.py"
-    runpy.run_path(str(server))["main"]()
+    monkeypatch.chdir(tmp_path)
+    namespace = runpy.run_path(str(server))
+    original = namespace["isolate"]
+    monkeypatch.setitem(
+        namespace["main"].__globals__,
+        "isolate",
+        lambda path: original(path, monkeypatch.setenv),
+    )
+    namespace["main"]()
 
 
 def test_discover_ignores_files_outside_source_roots(tmp_path, logs):

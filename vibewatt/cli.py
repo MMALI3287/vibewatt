@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import argparse
 import csv
+import errno
 import io
 import json
+import re
+import socket
 import sys
 from datetime import UTC, date, datetime, timedelta, tzinfo
 from pathlib import Path
 
 from . import __version__, pricing, quota, terminal
 from . import config as configmod
+from ._cli_output import PipeOutput, StdoutClosed
 from .aggregate import cost_of, from_store
 from .atomic_output import atomic_write_text
 from .ingest import discover
@@ -66,6 +70,31 @@ def report_zone(cfg: dict):
         )
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
+
+
+def _parse_since_date(value: str, tz: tzinfo, *, now: datetime | None = None) -> date:
+    """Resolve --since using the report's time zone, not the host's local date."""
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        pass
+
+    today = (now if now is not None else datetime.now(tz)).astimezone(tz).date()
+    if value == "this-month":
+        return today.replace(day=1)
+    if value == "last-month":
+        return (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+
+    span = re.fullmatch(r"([1-9]\d*)([dw])", value)
+    if span and len(span.group(1)) <= 6:
+        days = int(span.group(1)) * (7 if span.group(2) == "w" else 1)
+        try:
+            return today - timedelta(days=days)
+        except (OverflowError, ValueError):
+            pass
+    raise ValueError(
+        f"--since expects YYYY-MM-DD, 7d, 2w, this-month or last-month, got {value!r}"
+    )
 
 
 def _bucket_dict(b) -> dict:
@@ -474,7 +503,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="all",
         help="all: every provider; claude: every Claude surface",
     )
-    p.add_argument("--since", metavar="YYYY-MM-DD")
+    p.add_argument(
+        "--since",
+        metavar="DATE",
+        help="YYYY-MM-DD, 7d, 2w, this-month or last-month (report timezone)",
+    )
     p.add_argument("--days", type=int, metavar="N")
     p.add_argument("--tz", help="timezone for day buckets (default: local)")
     p.add_argument(
@@ -519,6 +552,109 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _probe_host(host: str) -> str:
+    """A connectable spelling of `host`: a wildcard bind answers on loopback, and
+    0.0.0.0 is not a valid connect target on Windows."""
+    if host in ("", "0.0.0.0"):
+        return "127.0.0.1"
+    if host == "::":
+        return "::1"
+    return host
+
+
+def _port_in_use(host: str, port: int) -> bool:
+    """True when something already answers on host:port (issue #120).
+
+    A connect, deliberately, not a bind probe. uvicorn binds with SO_REUSEADDR on
+    every platform, and on Windows that option can be granted over an address
+    another process is already listening on. A probe that set it therefore called a
+    busy port free: `serve` carried on and the real bind then died with WinError
+    10048, with no --port hint (PR #134 review). A completed connect is evidence on
+    every platform, IPv4 and IPv6 alike.
+    """
+    for family, socktype, proto, _, sockaddr in socket.getaddrinfo(
+        _probe_host(host), port, type=socket.SOCK_STREAM
+    ):
+        sock = socket.socket(family, socktype, proto)
+        try:
+            sock.settimeout(0.25)
+            if sock.connect_ex(sockaddr) == 0:
+                return True
+        except OSError:
+            continue  # an address we cannot reach is not evidence of a listener
+        finally:
+            sock.close()
+    return False
+
+
+def _claim_socket(family: int, socktype: int, proto: int) -> socket.socket:
+    """A socket for the claim that will own the port, not share it with a later one.
+
+    Windows' SO_REUSEADDR — the option uvicorn sets — lets another process bind and
+    even listen over a live socket, so a claim carrying only it could be shadowed
+    after the check had passed. SO_EXCLUSIVEADDRUSE is the option that refuses that,
+    and the port check cannot mean anything on that platform without it. POSIX has no
+    such switch: there, a bind followed by listen() is what owns the address, which
+    is why every claim listens before it is announced.
+    """
+    sock = socket.socket(family, socktype, proto)
+    if sys.platform == "win32" and hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    else:
+        # uvicorn's own option, so this is the claim the server would have made.
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    # asyncio's create_server — the path uvicorn took before the socket was
+    # supplied — turns dual-stack off for IPv6 sockets, which is why
+    # `--host ::` never answered IPv4-mapped connections. create_server(sock=)
+    # keeps whatever the socket already carries, so without this the handover
+    # would quietly widen the interfaces a given host serves (PR #134 review).
+    if family == socket.AF_INET6 and hasattr(socket, "IPPROTO_IPV6"):
+        sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+    return sock
+
+
+def _bind_listeners(host: str, port: int) -> list[socket.socket] | None:
+    """Claim and LISTEN on the sockets, or None when the port is already taken.
+
+    Bound here and handed to uvicorn so the check and the server are ONE bind with
+    the same options, that option included. Listening here, while the banner and the
+    browser are still unarmed, is what makes that claim own the port: a bound socket
+    owns nothing, so a competing socket that was merely bound while the probe and
+    this bind ran could start listening first, and the banner had already been
+    announced when asyncio's own sock.listen() then raised EADDRINUSE with a
+    traceback and no --port hint (PR #134 review). A competitor that wins this
+    listen ends the claim here instead, where the hint still helps; from the moment
+    this returns, the port is this process's and the server cannot lose it. Only
+    EADDRINUSE means "taken": every other bind or listen error is re-raised, because
+    a genuine startup failure must not be dressed up as a port conflict.
+    """
+    listeners: list[socket.socket] = []
+    for family, socktype, proto, _, sockaddr in socket.getaddrinfo(
+        host, port, type=socket.SOCK_STREAM
+    ):
+        sock = _claim_socket(family, socktype, proto)
+        try:
+            sock.bind(sockaddr)
+            sock.listen(socket.SOMAXCONN)
+        except OSError as exc:
+            sock.close()
+            for opened in listeners:
+                opened.close()
+            if exc.errno == errno.EADDRINUSE:
+                return None
+            raise
+        listeners.append(sock)
+    return listeners
+
+
+def _port_conflict_exit(host: str, port: int) -> int:
+    print(
+        f"vibewatt: {host}:{port} is already in use; choose another port with --port.",
+        file=sys.stderr,
+    )
+    return 1
+
+
 def _utf8_streams() -> None:
     # Windows gives a redirected stdout the ANSI code page, which cannot encode
     # the heatmap's block glyph, so every `vibewatt > file` crashed (A-057).
@@ -534,6 +670,33 @@ def _utf8_streams() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     _utf8_streams()
+    original = sys.stdout
+    output = PipeOutput(original)
+    sys.stdout = output
+    try:
+        try:
+            code = _run_cli(argv)
+        except StdoutClosed as exc:
+            return exc.code
+        except BaseException as exc:
+            try:
+                output.flush()
+            except StdoutClosed:
+                # Help/version exit through argparse; actual errors keep their
+                # original exception and exit status even when stdout is closed.
+                if isinstance(exc, SystemExit) and exc.code in (None, 0):
+                    return 1
+            raise
+        try:
+            output.flush()
+        except StdoutClosed:
+            return code or 1
+        return code
+    finally:
+        sys.stdout = original
+
+
+def _run_cli(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     cfg = configmod.load()
     from . import identity, store
@@ -596,9 +759,16 @@ def _main(args, cfg) -> int:
         import webbrowser
 
         import uvicorn
+        from uvicorn.config import STARTUP_FAILURE
 
         from .api import create_app
         from .api.security import is_loopback
+
+        if _port_in_use(args.host, args.port):
+            return _port_conflict_exit(args.host, args.port)
+        listeners = _bind_listeners(args.host, args.port)
+        if listeners is None:
+            return _port_conflict_exit(args.host, args.port)
 
         local = is_loopback(args.host)
         from . import identity
@@ -618,7 +788,35 @@ def _main(args, cfg) -> int:
         print("  ctrl-c to stop")
         if not args.no_browser:
             threading.Timer(0.5, lambda: webbrowser.open(url)).start()
-        uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+        # Serve on the sockets claimed above — claimed and listening — so the server
+        # cannot bind differently from the check and the port cannot be taken between
+        # the announcement and the server. The banner above is only reached once the
+        # claim owns the address (PR #134 review).
+        server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
+        try:
+            server.run(sockets=listeners)
+        except OSError as exc:
+            for listener in listeners:
+                listener.close()
+            # The claim listens before the server is handed the socket, so this is as
+            # close to unreachable as the platform allows. If the address is taken at
+            # asyncio's own sock.listen() anyway, it has to read as the port conflict:
+            # MD's failure was raised exactly there, as a traceback with no --port
+            # hint (PR #134 review). Any other error is a real startup failure and
+            # stays one.
+            if exc.errno == errno.EADDRINUSE:
+                return _port_conflict_exit(args.host, args.port)
+            raise
+        except KeyboardInterrupt:
+            # uvicorn re-raises the signal it captured once it has shut down
+            # gracefully, and uvicorn.run() swallows it. Serving through Server
+            # directly loses that courtesy unless it is repeated here: ctrl-c
+            # printed a traceback instead of stopping quietly.
+            pass
+        if not server.started:
+            # uvicorn.run() exits with the same code when the server never came up,
+            # so a startup failure stays loud instead of looking like a clean stop.
+            return STARTUP_FAILURE
         return 0
 
     tz = report_zone(cfg)
@@ -658,9 +856,9 @@ def _main(args, cfg) -> int:
         cutoff = (datetime.now(tz) - timedelta(days=args.days)).date()
     if args.since:
         try:
-            cutoff = date.fromisoformat(args.since)
-        except ValueError:
-            raise SystemExit(f"--since expects YYYY-MM-DD, got {args.since!r}")
+            cutoff = _parse_since_date(args.since, tz)
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
 
     report, q, quota_note, duplicates, files = build_report(
         cfg, tz, source=args.source, date_from=cutoff, refresh=True

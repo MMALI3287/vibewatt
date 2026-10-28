@@ -134,6 +134,69 @@ Command-specific details:
   log sync and pricing refresh. `statusline_chain` is a separate optional key
   used by `statusline`; it is not a built-in default or a CLI flag.
 
+## Worked example: a read-only project resume brief
+
+The dashboard's **Project resume brief** panel uses `project_paths` to find a
+selected project's directory. Suppose the synthetic project identifier selected
+in the filter is `demo-notes` and its directory is `/tmp/vibewatt-demo-notes`.
+Add this mapping to a configuration file loaded by the dashboard (see
+[precedence](#precedence-per-top-level-key)):
+
+```json
+{
+  "project_paths": {
+    "demo-notes": "/tmp/vibewatt-demo-notes"
+  }
+}
+```
+
+Use the selected project identifier as the key, not a display alias or a guessed
+directory name. The value must be an existing absolute directory. On Windows,
+an equivalent fabricated value is `"C:/vibewatt-demo/demo-notes"`. These paths
+are examples only; the mapping does not create the directory or a recorded
+project. Restart the dashboard after editing its configuration.
+
+For a disposable Git project at the example path, place this synthetic
+`TODO.md` directly in its root:
+
+```markdown
+# Demo notes
+
+- [ ] Add a sample heading
+- [ ] Review the synthetic example
+- [x] Create the demo directory
+```
+
+Select `demo-notes` in the dashboard's project filter, expand **Project resume
+brief**, and choose **Prepare brief for demo-notes**. The brief combines:
+
+- The latest recorded session title for that project from the local store, or
+  `No recorded session` if there is none. It is not a live agent conversation.
+- Read-only `git status --porcelain` output, including untracked files, or
+  `Working tree is clean.` when there are no changes. The Git command has a
+  3-second timeout and a 64 KiB output limit; failures produce
+  `Git status unavailable.` and do not prevent the TODO read.
+- Unfinished `- [ ]`, `* [ ]` or `+ [ ]` lines from the root `TODO.md`. The
+  file must be at most 64 KiB and cannot be a symlink or resolve outside the
+  project directory. Only the first 50 unfinished checkboxes are shown, with a
+  note if more exist. Completed checkboxes are omitted; an accessible file
+  without unfinished items gives `No unfinished checkboxes.`
+
+For the example TODO, the brief includes the two unfinished lines and omits the
+completed item. A missing mapping, relative path or unavailable directory adds
+`Project directory unavailable. Configure an absolute directory in project_paths.`
+while retaining the session-title portion. A missing, unreadable, unsafe or
+oversized TODO adds `TODO.md unavailable, unsafe or larger than 64 KiB.`
+
+Preparing the brief does not edit project files or expand its inputs beyond
+these sources. **Copy brief** copies the prepared text to your clipboard; it
+does not send it to an agent or a running session. If clipboard access fails,
+select the text to copy it manually. Inspect the text before sharing it.
+For isolated contributor data, follow the
+[synthetic dashboard guide](../CONTRIBUTING.md#try-the-dashboard-with-synthetic-data);
+ordinary dashboard startup can sync personal logs and is not an isolation step.
+The current input handling is in [concierge.py](../vibewatt/concierge.py).
+
 ## Environment variables are not arbitrary JSON overrides
 
 There is no general `VIBEWATT_<KEY>` mapping for configuration values:

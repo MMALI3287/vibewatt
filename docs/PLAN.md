@@ -482,6 +482,12 @@ correctness gaps. Coverage and bounds: `docs/ANALYSIS.md`.
 **Do:** 7.3, 7.5, 7.8, 7.12, 7.13.
 **Gate:** Wrapped snapshot test; alert fires once not per sample; AI summary makes no network call when disabled; dashboard renders with the status fetch stubbed to fail.
 
+Project brief feedback correction (#154): removed the panel-wide copied/error
+flags because they survived project and brief changes. Copy feedback now belongs
+to the displayed brief, resets on preparation, and cannot be changed by an older
+brief's delayed clipboard completion. Previous text is hidden during preparation
+and after preparation errors; the selectable textarea fallback is retained.
+
 ### Phase 6.5: Audit fixes and spec corrections (added 2026-09-22)
 **Why:** the phase 1-6 audit of 2026-09-22 (report removed in Phase 11) found 128 issues:
 1 critical, 6 high, 55 medium, 50 low, 16 info. The worst ones change headline
