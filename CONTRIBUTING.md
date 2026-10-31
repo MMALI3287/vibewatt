@@ -139,6 +139,22 @@ screenshot. Never paste your `~/.claude/.credentials.json`, an API key or raw lo
 By contributing you agree that your contribution is licensed under the
 [MIT License](LICENSE).
 
+## CI cost policy
+
+Routine PRs and pushes to `master` use one Linux job named `ci-ok`.
+Changed files select the checks. Documentation skips dependency setup;
+`docs/PLAN.md` still runs Python tests because a contract test reads it.
+Frontend changes run the build, unit tests and browser suite. Runtime backend
+changes also run browser tests. Dependency floors run when Python dependencies
+change. npm audit runs when frontend dependencies change. Unknown inputs run
+every Linux check. A missing Git comparison also runs every Linux check.
+
+Draft PRs wait for `ready_for_review`. New commits cancel older runs for that
+PR. Windows, macOS and Python 3.12 through 3.14 run before a version tag can
+publish. They can also be requested through CI's `full` dispatch input.
+Compatibility jobs wait for Linux to pass. The Windows wheel gate uses the
+same artifacts Linux checked instead of rebuilding the frontend.
+
 ## Release verification
 
 Run `uv build` after the frontend build. The build hook rejects missing hashed JS

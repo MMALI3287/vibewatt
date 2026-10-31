@@ -1588,6 +1588,34 @@ The changes below prepare the repository for outside contributors.
   outside the repository. None of the replaced strings granted access to
   anything.
 
+CI cost correction (2026-11-01, Codex).
+
+- October billing usage attributes 884 Linux minutes, 938 Windows minutes and
+  331 macOS minutes to vibewatt. Current repository visibility does not explain
+  that historical usage. Source: GitHub billing usage API for October 2026.
+- Removed the separate `changes` and result-aggregation runner jobs. Why:
+  classification and the required `ci-ok` check can share one Linux runner.
+- Removed automatic Windows, macOS and Python 3.12 through 3.14 matrix runs
+  from ordinary pushes and PRs. Why: those checks repeated for frontend and
+  documentation changes. They remain mandatory before tag publishing through
+  reusable CI and available through manual `full` dispatch.
+- Removed dependency-floor tests from every `master` push. Why: floors only
+  change with Python dependency files. Full release verification retains them.
+- Removed unconditional frontend builds, npm audits and package gates from
+  unrelated changes. Why: changed-file scopes can select their inputs. Runtime
+  backend changes still run browser tests. Unknown inputs or missing Git
+  comparisons select all Linux checks. `docs/PLAN.md` retains its Python gate.
+- Removed duplicate Windows frontend builds and release artifact rebuilds.
+  Why: both can use the exact wheel and sdist already checked on Linux.
+- Draft PRs wait for review readiness. Compatibility matrices wait for Linux
+  success and stop sibling jobs on failure. Browser tests use two workers.
+  CI artifact retention is one day; publish artifacts stay three days.
+- Kept the weekly pricing-drift check. Recent runs took 13 to 15 seconds and
+  rate freshness still matters. Its removal would save little compute.
+- Fixed the existing dependency-floor packaging failure instead of dropping
+  its test. Older Starlette URL objects re-encode backslashes. The traversal
+  guard now reads the decoded ASGI path so the floor gate still rejects them.
+
 Launch preparation (2026-10-06, Claude Code).
 
 - **CI no longer runs twice per PR.** `on: [push, pull_request]` started one run
