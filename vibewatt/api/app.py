@@ -130,7 +130,8 @@ def create_app(
 
     @app.middleware("http")
     async def frontend_headers(request: Request, call_next):
-        path = request.url.path
+        # ASGI's path is decoded. Older Starlette URL objects re-encode backslashes.
+        path = request.scope["path"]
         if "\\" in path or ".." in path.split("/"):
             from fastapi.responses import JSONResponse
 
