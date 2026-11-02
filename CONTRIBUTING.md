@@ -93,13 +93,47 @@ Tests never read your real `~/.claude` and never touch the network. If you chang
 the API, run `npm run gen:api` in `web/` and commit `web/openapi.json` and
 `web/src/api/schema.d.ts`; a test fails when they drift.
 
+### First PR from a fork? Three different gates
+
+A fork PR passes three separate decisions, and they are easy to confuse:
+
+1. **Execution approval.** GitHub holds workflow runs from a first-time
+   contributor's fork until a maintainer approves them. The PR shows the
+   checks as `action_required` (or "Waiting for approval") and no jobs have
+   run yet. Nothing is wrong with your PR, and closing/reopening it does not
+   help — a maintainer has to approve the run.
+2. **Code-review approval.** A maintainer approves the change itself. This
+   says the change looks right; it does not run anything.
+3. **Passing required CI.** The required `ci-ok` job — the required Linux
+   job itself — finishes green. Only this proves the checks actually ran
+   and passed. A review-bot status such as CodeRabbit's says the code was
+   reviewed; it is not evidence that any test ran.
+
+Whether later PRs from the same account run without execution approval
+depends on this repository's configured fork approval policy; it is not
+automatic in every case.
+
+**When a check fails:** open the PR's **Checks** tab, select the failed
+job and step, and read the exact error before changing anything. Run the
+same checks locally first — formatting is the common one:
+
+```bash
+uv run ruff format .
+uv run ruff check . && uv run ruff format --check .
+```
+
+Keep the actual local output in the PR (the commands you ran and what they
+showed). "Tests pass" without the results gives a reviewer nothing to
+verify. The full local checklist is the Checks section above.
+
 ### Supported Python compatibility gate
 
 The required Linux baseline remains Python 3.11. CI additionally runs the
 offline Python pytest suite and installed-project import/CLI-help smokes
 on stable CPython 3.12, 3.13, and 3.14. Frontend and platform checks stay
-on the existing baseline; skipped code jobs still count as success through
-the unchanged `ci-ok` aggregator. Update the extra matrix only when a
+on the existing baseline. The native compatibility jobs are release/manual
+gates — they run before releases or on explicit request, not on every PR;
+the required check on a PR is `ci-ok` itself. Update the extra matrix only when a
 Python release is stable and dependency support has been independently checked.
 Do not advertise support for a version whose hosted checks fail.
 
