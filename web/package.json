@@ -12,7 +12,7 @@
     "gen:api": "uv run --project .. python ../scripts/dump_openapi.py > openapi.json && openapi-typescript openapi.json -o src/api/schema.d.ts"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.105.0",
+    "@tanstack/react-query": "^5.106.1",
     "@tanstack/react-table": "^8.21.3",
     "html-to-image": "^1.11.13",
     "openapi-fetch": "0.17.0",
@@ -22,16 +22,16 @@
     "recharts": "^3.10.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.64.1",
+    "@playwright/test": "^1.65.0",
     "@types/node": "^22.20.5",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^6.1.2",
+    "@vitejs/plugin-react": "^6.2.1",
     "jsdom": "^25.0.1",
     "openapi-typescript": "^7.4.2",
     "typescript": "~5.9.3",
-    "vite": "^8.3.5",
-    "vitest": "^5.0.5"
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
   },
   "engines": {
     "node": ">=22.12.0"
