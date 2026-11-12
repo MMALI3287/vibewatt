@@ -46,6 +46,15 @@ the stored calendar buckets. Sync explicitly with that configuration before
 requesting the snapshot. The command never silently rebuckets data. If an
 `--out` file cannot be written, `output_failed` is emitted on stdout with exit 2.
 
+Report and snapshot `--out` writes use a sibling temporary file and atomic
+replacement. If writing or replacement fails (including a Windows file lock),
+the existing destination bytes are preserved and the temporary file is removed.
+JSON/CSV report commands return exit 2 and a readable `output_failed` error on
+stderr; status/quota retain their structured JSON error on stdout. Successful
+replacement keeps an existing regular file's permissions where supported; new
+files use private mode 0600 on POSIX. An existing symlink is replaced, not
+followed, leaving its referent untouched. Parent directories are not created.
+
 `schema_too_new` means a newer vibewatt installation wrote the database. The
 command exits 2 without opening it for application use, migrating it, or creating
 a migration backup. Upgrade to a vibewatt version that supports the schema named
