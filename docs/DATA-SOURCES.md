@@ -56,7 +56,9 @@ what was tried, what worked and what did not, so nobody re-derives it.
 ## Outbound calls
 
 Every request vibewatt makes. Each has a size cap and a timeout; none is made
-from a page request unless noted.
+from a page request unless noted. The runnable form of this table, with the
+order to turn each call off and what each command proves, is
+[offline mode](OFFLINE.md).
 
 | Call | Method, URL | Sends | Cap, timeout | When |
 |---|---|---|---|---|
